@@ -247,7 +247,6 @@
     }
 
 
-
     // ---------------------------
     // Helper: Get User Name
     // ---------------------------
@@ -260,42 +259,70 @@
     // ---------------------------
     // Process Account Data from Member API
     // ---------------------------
-    function prepareAccountData(data) {
-        const dataArray = [];
-        if (!data || !Array.isArray(data.accounts)) return dataArray;
-        let mainCounter = 1;
-        data.accounts.forEach(item => {
-            const mainCard = {
-                cardEnding: (item.account && item.account.display_account_number) || 'N/A',
-                userName: getUserName(item.profile),
-                relationship: (item.account && item.account.relationship) || 'N/A',
-                cardIndex: mainCounter.toString(),
-                accountSetupDate: (item.status && item.status.account_setup_date) || 'N/A',
-                accountToken: item.account_token || 'N/A',
-                eligibleOffers: 0,
-                enrolledOffers: 0
-            };
-            dataArray.push(mainCard);
-            if (Array.isArray(item.supplementary_accounts)) {
-                item.supplementary_accounts.forEach(supp => {
-                    const suppIndex = (supp.account && supp.account.supplementary_index) ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
-                    const suppCard = {
-                        cardEnding: (supp.account && supp.account.display_account_number) || 'N/A',
-                        userName: getUserName(supp.profile),
-                        relationship: (supp.account && supp.account.relationship) || 'N/A',
-                        cardIndex: mainCounter.toString() + "-" + suppIndex,
-                        accountSetupDate: (supp.status && supp.status.account_setup_date) || 'N/A',
-                        accountToken: supp.account_token || 'N/A',
-                        eligibleOffers: 0,
-                        enrolledOffers: 0
-                    };
-                    dataArray.push(suppCard);
-                });
+    async function fetchAndPrepareAccountData() {
+        try {
+            const res = await fetch('https://global.americanexpress.com/api/servicing/v1/member', {
+                method: 'GET',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!res.ok) throw new Error('Failed to fetch account data');
+
+            const data = await res.json();
+            if (!data || !Array.isArray(data.accounts)) {
+                throw new Error('Invalid account data received');
             }
-            mainCounter++;
-        });
-        return dataArray;
+
+            accountData = [];
+            let mainCounter = 1;
+
+            data.accounts.forEach(item => {
+                const mainCard = {
+                    cardEnding: item.account?.display_account_number || 'N/A',
+                    userName: getUserName(item.profile),
+                    relationship: item.account?.relationship || 'N/A',
+                    cardIndex: mainCounter.toString(),
+                    accountSetupDate: item.status?.account_setup_date || 'N/A',
+                    accountToken: item.account_token || 'N/A',
+                    eligibleOffers: 0,
+                    enrolledOffers: 0
+                };
+                accountData.push(mainCard);
+
+                if (Array.isArray(item.supplementary_accounts)) {
+                    item.supplementary_accounts.forEach(supp => {
+                        const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
+                        const suppCard = {
+                            cardEnding: supp.account?.display_account_number || 'N/A',
+                            userName: getUserName(supp.profile),
+                            relationship: supp.account?.relationship || 'N/A',
+                            cardIndex: `${mainCounter}-${suppIndex}`,
+                            accountSetupDate: supp.status?.account_setup_date || 'N/A',
+                            accountToken: supp.account_token || 'N/A',
+                            eligibleOffers: 0,
+                            enrolledOffers: 0
+                        };
+                        accountData.push(suppCard);
+                    });
+                }
+
+                mainCounter++;
+            });
+
+            // Set default view and refresh UI
+            currentView = 'summary';
+            btnSummary.style.fontWeight = 'bold';
+            renderCurrentView();
+
+        } catch (error) {
+            console.error('Error fetching card members:', error);
+            content.innerHTML = `<p style="color: red;">Error fetching card members: ${error.message}</p>`;
+        }
     }
+
+    // Call the function on page load
+    fetchAndPrepareAccountData();
 
     // ---------------------------
     // Update Account Offer Counts
@@ -519,7 +546,6 @@
         renderCurrentView();
     }
 
-
     function showCardsWindow(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
         win.style.position = 'fixed';
@@ -641,11 +667,6 @@
 
         document.body.appendChild(win);
     }
-
-
-
-
-
 
     // Render Offer Mapping Table.
     function renderOfferMappingTable(offerArray) {
@@ -805,7 +826,6 @@
         return table;
     }
 
-
     /**
  * Runs an array of async tasks in batches of "limit".
  * Each "task" is just an async function that returns a Promise.
@@ -820,7 +840,6 @@
             i += limit;
         }
     }
-
 
     // ---------------------------
     // Render Summary View
@@ -969,27 +988,8 @@
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-        try {
-            // Clear cookie at login to force complete sync.
-            //setCookie("offerMapping", "", -1);
-            const res = await fetch('https://global.americanexpress.com/api/servicing/v1/member', {
-                method: 'GET',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (!res.ok) throw new Error('Failed to fetch account data');
-            const data = await res.json();
-            accountData = prepareAccountData(data);
-            // Default view: Summary.
-            currentView = 'summary';
-            btnSummary.style.fontWeight = 'bold';
-            renderCurrentView();
-        } catch (error) {
-            console.error('Error fetching card members:', error);
-            content.innerHTML = 'Error fetching card members';
-        }
+        fetchAndPrepareAccountData();
     }
-
     init();
 
 })();
