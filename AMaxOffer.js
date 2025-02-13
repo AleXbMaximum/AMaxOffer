@@ -394,7 +394,7 @@
             { label: "Type", key: "relationship" },
             { label: "Index", key: "cardIndex" },
             { label: "Opening", key: "accountSetupDate" },
-            { label: "Account Token", key: "accountToken" },
+            // { label: "Account Token", key: "accountToken" },  // Removed Account Token column
             { label: "Eligible Offers", key: "eligibleOffers" },
             { label: "Enrolled Offers", key: "enrolledOffers" }
         ];
@@ -404,7 +404,7 @@
             relationship: "80px",
             cardIndex: "80px",
             accountSetupDate: "80px",
-            accountToken: "150px",
+            // accountToken: "150px",  // Removed Account Token column width
             eligibleOffers: "80px",
             enrolledOffers: "80px"
         };
@@ -448,7 +448,7 @@
                 item.relationship,
                 item.cardIndex,
                 item.accountSetupDate,
-                item.accountToken,
+                // item.accountToken,  // Removed Account Token cell
                 item.eligibleOffers,
                 item.enrolledOffers
             ];
@@ -464,6 +464,7 @@
         table.appendChild(tbody);
         return table;
     }
+
 
     // Sort function for Members view
     function sortData(key) {
@@ -992,3 +993,5 @@
 
     init();
 })();
+
+//terser AMaxOffer.js -o AMaxOffer_RLS0213.min.js --compress --mangle
