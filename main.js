@@ -169,6 +169,14 @@
     container.appendChild(content);
     document.body.appendChild(container);
 
+    // Set initial minimized state
+    if (isMinimized) {
+        content.style.display = 'none';
+        viewButtons.style.display = 'none';
+        toggleBtn.textContent = 'Expand';
+        container.style.width = '200px';
+    }
+
     // ---------------------------
     // Enrollment Function
     // ---------------------------
