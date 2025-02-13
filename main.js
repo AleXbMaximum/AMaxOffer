@@ -329,9 +329,6 @@
         }
     }
 
-    // Call the function on page load
-    fetchAndPrepareAccountData();
-
     // ---------------------------
     // Update Account Offer Counts
     // ---------------------------
@@ -890,10 +887,10 @@
         summaryDiv.style.borderRadius = '8px';
 
         summaryDiv.innerHTML = `
-            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${lastUpdate}</p>
-            <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
-            <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
-        `;
+                <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${lastUpdate}</p>
+                <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
+                <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
+            `;
 
         // Add enlarged Enroll All and Refresh buttons with extra spacing.
         const btnContainer = document.createElement('div');
@@ -917,10 +914,11 @@
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
-            // setCookie("offerMapping", "", -1);
-            offerData = [];
-            await renderCurrentView();
+            offerData = [];  // Force empty to trigger a rebuild
+            await loadOrBuildOfferData();  // This will fetch or load from cookie once
+            renderCurrentView();
         });
+
 
         btnContainer.appendChild(summaryEnrollAllBtn);
         btnContainer.appendChild(summaryRefreshBtn);
@@ -929,74 +927,64 @@
         return summaryDiv;
     }
 
+    async function loadOrBuildOfferData() {
+        // If offerData is already populated, no need to do anything
+        if (offerData && offerData.length > 0) {
+            return;
+        }
+
+        // Try to load from cookie
+        const cachedMapping = getCookie("offerMapping");
+        if (cachedMapping) {
+            try {
+                offerData = JSON.parse(cachedMapping);
+                console.log(`Loaded ${offerData.length} offers from cookie`);
+            } catch (e) {
+                console.log("Cookie parse error:", e, "Building from scratch...");
+                offerData = await buildOfferMapping();
+                setCookie("offerMapping", JSON.stringify(offerData), 1);
+            }
+        } else {
+            console.log("No cookie found, building new mapping...");
+            offerData = await buildOfferMapping();
+            setCookie("offerMapping", JSON.stringify(offerData), 1);
+        }
+        updateAccountOfferCounts();
+        renderCurrentView();
+    }
+
 
     // ---------------------------
     // Render Current View
     // ---------------------------
     async function renderCurrentView() {
-        if (currentView !== 'offers' || !offerData || offerData.length === 0) {
-            content.innerHTML = 'Loading...';
-        }
+
+        // The rest is purely view logic
         if (currentView === 'members') {
-            if (!offerData || offerData.length === 0) {
-                let cachedMapping = getCookie("offerMapping");
-                if (cachedMapping) {
-                    try {
-                        offerData = JSON.parse(cachedMapping);
-                    } catch (e) {
-                        offerData = await buildOfferMapping();
-                        setCookie("offerMapping", JSON.stringify(offerData), 1);
-                    }
-                } else {
-                    offerData = await buildOfferMapping();
-                    setCookie("offerMapping", JSON.stringify(offerData), 1);
-                }
-            }
-            updateAccountOfferCounts();
             content.innerHTML = '';
             content.appendChild(renderMembersTable());
         } else if (currentView === 'offers') {
-            if (!offerData || offerData.length === 0) {
-                let cachedMapping = getCookie("offerMapping");
-                if (cachedMapping) {
-                    try {
-                        offerData = JSON.parse(cachedMapping);
-                    } catch (e) {
-                        offerData = await buildOfferMapping();
-                        setCookie("offerMapping", JSON.stringify(offerData), 1);
-                    }
-                } else {
-                    offerData = await buildOfferMapping();
-                    setCookie("offerMapping", JSON.stringify(offerData), 1);
-                }
-            }
             content.innerHTML = '';
             content.appendChild(renderOfferMappingTable(offerData));
         } else if (currentView === 'summary') {
-            if (!offerData || offerData.length === 0) {
-                let cachedMapping = getCookie("offerMapping");
-                if (cachedMapping) {
-                    try {
-                        offerData = JSON.parse(cachedMapping);
-                    } catch (e) {
-                        offerData = await buildOfferMapping();
-                        setCookie("offerMapping", JSON.stringify(offerData), 1);
-                    }
-                } else {
-                    offerData = await buildOfferMapping();
-                    setCookie("offerMapping", JSON.stringify(offerData), 1);
-                }
-            }
             content.innerHTML = '';
             content.appendChild(renderSummaryView());
         }
     }
 
+
     // ---------------------------
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-        fetchAndPrepareAccountData();
+        try {
+            await fetchAndPrepareAccountData();  // This gets accountData
+            await loadOrBuildOfferData();        // This sets offerData from cookie or build
+
+        } catch (error) {
+            console.error('Error in init:', error);
+            content.innerHTML = `Error during init: ${error.message}`;
+        }
     }
 
     init();
