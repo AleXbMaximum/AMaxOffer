@@ -1,10 +1,35 @@
 // ==UserScript==
-// @name         Card Utility: Details, Offers & Summary
+// @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
 // @version      2.7
-// @description  Fetches card member data and displays a sortable Members table (with offer counts), an offer mapping view (with Offer ID, Exp Usage, etc.), and a summary view showing overall statistics. Summary is default, with local cookie caching and a manual refresh button that always shows the summary view. The floating window is moveable. Also includes an "Enroll All" button to enroll all eligible offers (skipping those with category "DEFAULT").
+// @description  None
 // @match        https://global.americanexpress.com/*
-// @grant        none
+// @connect    jsdelivr.net
+// @connect    uscardforum.com
+// @connect    cloudfunctions.net
+// @connect    yale.email
+// @grant      GM.addElement
+// @grant      GM.deleteValue
+// @grant      GM.getValue
+// @grant      GM.listValues
+// @grant      GM.notification
+// @grant      GM.openInTab
+// @grant      GM.setValue
+// @grant      GM.xmlHttpRequest
+// @grant      GM_addElement
+// @grant      GM_addStyle
+// @grant      GM_addValueChangeListener
+// @grant      GM_cookie
+// @grant      GM_deleteValue
+// @grant      GM_getTab
+// @grant      GM_getTabs
+// @grant      GM_getValue
+// @grant      GM_listValues
+// @grant      GM_notification
+// @grant      GM_openInTab
+// @grant      GM_setValue
+// @grant      GM_xmlhttpRequest
+// @grant      unsafeWindow
 // ==/UserScript==
 
 (function () {
@@ -13,6 +38,9 @@
     // ---------------------------
     // Cookie Helper Functions
     // ---------------------------
+
+
+
     function setCookie(name, value, days) {
         let expires = "";
         if (days) {
@@ -49,7 +77,7 @@
     container.id = 'card-utility-overlay';
     container.style.position = 'fixed';
     container.style.top = '5%';
-    container.style.right = '3%';
+    container.style.left = '5%';
     container.style.backgroundColor = '#fff';
     container.style.color = '#000';
     container.style.border = '1px solid #000';
@@ -205,6 +233,18 @@
             return { isEnrolled: false };
         }
     }
+
+    async function runInBatches(tasks, limit = 8) {
+        let i = 0;
+        while (i < tasks.length) {
+            // Take next chunk of size limit
+            const chunk = tasks.slice(i, i + limit);
+            // Run them in parallel
+            await Promise.all(chunk.map(fn => fn()));
+            i += limit;
+        }
+    }
+
 
     async function enrollAllEligibleOffers() {
         const cardMap = {};
@@ -534,12 +574,10 @@
         renderCurrentView();
     }
 
-    function showCardsWindow(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
+    function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
-        win.style.position = 'fixed';
-        win.style.top = clickX + 'px';
-        win.style.left = clickY + 'px';
-        win.style.transform = 'translate(-100%, 0)';
+
+        //win.style.transform = 'translate(100%, 0)';
         win.style.backgroundColor = '#fff';
         win.style.border = '2px solid #000';
         win.style.padding = '10px';
@@ -548,6 +586,12 @@
         win.style.maxWidth = '500px';
         win.style.maxHeight = '400px';
         win.style.overflowY = 'auto';
+
+        win.style.position = 'fixed';
+        // Use lowercase "left" here
+        win.style.top = clickY + 'px';
+        win.style.left = (clickX - 400) + 'px';
+
 
         const header = document.createElement('div');
         header.style.fontWeight = 'bold';
@@ -585,6 +629,7 @@
                             } else {
                                 alert(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
                             }
+
                         });
                     } else {
                         cardSpan.style.cursor = 'default';
@@ -647,7 +692,7 @@
             { label: "Type", key: "achievement_type" },
             { label: "Category", key: "category" },
             { label: "Exp Date", key: "expiry_date" },
-            { label: "Redemption", key: "redemption_types" },
+            { label: "Usage", key: "redemption_types" },
             { label: "Description", key: "short_description" },
             { label: "Eligible", key: "eligibleCards" },
             { label: "Enrolled", key: "enrolledCards" }
@@ -661,8 +706,8 @@
             expiry_date: "80px",
             redemption_types: "45px",
             short_description: "300px",
-            eligibleCards: "40px",
-            enrolledCards: "40px"
+            eligibleCards: "50px",
+            enrolledCards: "50px"
         };
         const table = document.createElement('table');
         table.style.width = '100%';
@@ -739,7 +784,7 @@
                     viewBtn.style.fontSize = '10px';
                     viewBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        showCardsWindow(
+                        WindowrRender_ViewCard(
                             cards,
                             item.offerId,
                             headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
@@ -775,32 +820,6 @@
         return table;
     }
 
-    async function loadOrBuildOfferData() {
-        // If offerData is already populated, no need to do anything
-        if (offerData && offerData.length > 0) {
-            return;
-        }
-
-        // Try to load from cookie
-        const cachedMapping = getCookie("offerMapping");
-        if (cachedMapping) {
-            try {
-                offerData = JSON.parse(cachedMapping);
-                console.log(`Loaded ${offerData.length} offers from cookie`);
-            } catch (e) {
-                console.log("Cookie parse error:", e, "Building from scratch...");
-                offerData = await buildOfferMapping();
-                setCookie("offerMapping", JSON.stringify(offerData), 1);
-            }
-        } else {
-            console.log("No cookie found, building new mapping...");
-            offerData = await buildOfferMapping();
-            setCookie("offerMapping", JSON.stringify(offerData), 1);
-        }
-
-        updateAccountOfferCounts();
-        renderCurrentView();
-    }
 
     // ---------------------------
     // Render Summary View
@@ -865,9 +884,9 @@
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
-            // Force empty to trigger a rebuild
-            offerData = [];
-            await loadOrBuildOfferData();
+
+            offerData = await buildOfferMapping();
+            await updateAccountOfferCounts();
             renderCurrentView();
         });
 
@@ -882,7 +901,6 @@
     // Render Current View
     // ---------------------------
     async function renderCurrentView() {
-        // No build or cookie logic here. Just pick the view.
         if (currentView === 'members') {
             content.innerHTML = '';
             content.appendChild(renderMembersTable());
@@ -895,17 +913,81 @@
         }
     }
 
+    async function getCurrentUserTrustLevel() {
+        return new Promise((resolve) => {
+            // 1. Get current session to extract username
+            GM.xmlHttpRequest({
+                method: "GET",
+                url: "https://www.uscardforum.com/session/current.json",
+                onload: function (response) {
+                    if (response.status !== 200) {
+                        console.log("Session request failed");
+                        return resolve(0);
+                    }
+                    try {
+                        const sessionData = JSON.parse(response.responseText);
+                        const username = sessionData?.current_user?.username;
+                        if (!username) {
+                            console.log("No current user found");
+                            return resolve(0);
+                        }
+                        // 2. Fetch user JSON to retrieve trust_level
+                        GM.xmlHttpRequest({
+                            method: "GET",
+                            url: "https://www.uscardforum.com/u/" + encodeURIComponent(username) + ".json",
+                            onload: function (resp) {
+                                if (resp.status !== 200) {
+                                    console.log(`User JSON fetch failed for ${username}`);
+                                    return resolve(0);
+                                }
+                                try {
+                                    const userData = JSON.parse(resp.responseText);
+                                    const trustLevel = userData?.user?.trust_level;
+                                    // Return the actual trust level number, or 0 if not found.
+                                    resolve(trustLevel ?? 0);
+                                } catch (e) {
+                                    console.error("Error parsing user JSON:", e);
+                                    resolve(0);
+                                }
+                            },
+                            onerror: function (err) {
+                                console.error("Error fetching user JSON:", err);
+                                resolve(0);
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Error parsing session JSON:", e);
+                        resolve(0);
+                    }
+                },
+                onerror: function (err) {
+                    console.error("Error fetching session:", err);
+                    resolve(0);
+                }
+            });
+        });
+    }
+
     // ---------------------------
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-        try {
-            await fetchAndPrepareAccountData();  // get account data
-            await loadOrBuildOfferData();        // load or build offers from cookie once
-        } catch (error) {
-            console.error('Error in init:', error);
-            content.innerHTML = `Error during init: ${error.message}`;
-        }
+
+
+        getCurrentUserTrustLevel().then(async (tl) => {
+            if (tl === null || tl < 4) {
+                console.log('No user logged in or invalid trust level');
+            } else {
+                await fetchAndPrepareAccountData();  // get account data
+            }
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        offerData = await buildOfferMapping(); // Process a load
+        await updateAccountOfferCounts();
+        await renderCurrentView();
+
     }
 
     init();
