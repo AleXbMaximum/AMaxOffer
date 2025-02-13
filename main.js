@@ -41,7 +41,7 @@
     let offerData = []; // Array of aggregated offers (from all accounts)
     let offerSortState = { key: "", direction: 1 }; // For offers view sorting
     let currentView = 'summary'; // "summary", "members", or "offers"
-    let isMinimized = false;
+    let isMinimized = true;
 
     // ---------------------------
     // Create Overlay Container & Header
@@ -990,6 +990,7 @@
     async function init() {
         fetchAndPrepareAccountData();
     }
+
     init();
 
 })();
