@@ -26,8 +26,7 @@
         const nameEQ = name + "=";
         const ca = document.cookie.split(';');
         for (let i = 0; i < ca.length; i++) {
-            let c = ca[i];
-            while (c.charAt(0) === ' ') c = c.substring(1);
+            let c = ca[i].trim();
             if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length);
         }
         return null;
@@ -49,8 +48,8 @@
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
     container.style.position = 'fixed';
-    container.style.top = '5%';        // Updated
-    container.style.right = '3%';      // Updated
+    container.style.top = '5%';
+    container.style.right = '3%';
     container.style.backgroundColor = '#fff';
     container.style.color = '#000';
     container.style.border = '1px solid #000';
@@ -59,7 +58,7 @@
     container.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
     container.style.maxHeight = '80vh';
     container.style.overflow = 'hidden';
-    container.style.width = '90%';     // 90% of page width
+    container.style.width = '90%'; // Overridden if minimized
 
     const header = document.createElement('div');
     header.id = 'card-utility-header';
@@ -71,7 +70,7 @@
     header.style.alignItems = 'center';
 
     const title = document.createElement('span');
-    title.textContent = 'AMaxOffer';   // Updated title
+    title.textContent = 'AMaxOffer';
 
     // View buttons container: Summary, Members, Offer Mapping
     const viewButtons = document.createElement('div');
@@ -81,6 +80,7 @@
     const btnSummary = document.createElement('button');
     btnSummary.textContent = 'Summary';
     btnSummary.style.cursor = 'pointer';
+    btnSummary.style.fontSize = '20px';
     btnSummary.addEventListener('click', () => {
         currentView = 'summary';
         btnSummary.style.fontWeight = 'bold';
@@ -92,6 +92,7 @@
     const btnMembers = document.createElement('button');
     btnMembers.textContent = 'Members';
     btnMembers.style.cursor = 'pointer';
+    btnMembers.style.fontSize = '20px';
     btnMembers.addEventListener('click', () => {
         currentView = 'members';
         btnMembers.style.fontWeight = 'bold';
@@ -103,6 +104,7 @@
     const btnOffers = document.createElement('button');
     btnOffers.textContent = 'Offer Mapping';
     btnOffers.style.cursor = 'pointer';
+    btnOffers.style.fontSize = '20px';
     btnOffers.addEventListener('click', () => {
         currentView = 'offers';
         btnOffers.style.fontWeight = 'bold';
@@ -114,11 +116,7 @@
     viewButtons.appendChild(btnSummary);
     viewButtons.appendChild(btnMembers);
     viewButtons.appendChild(btnOffers);
-    btnSummary.style.fontSize = '20px';
-    btnMembers.style.fontSize = '20px';
-    btnOffers.style.fontSize = '20px';
 
-    // Minimize/Expand toggle button (always visible).
     const toggleBtn = document.createElement('button');
     toggleBtn.textContent = 'Minimize';
     toggleBtn.style.cursor = 'pointer';
@@ -141,14 +139,14 @@
     header.appendChild(viewButtons);
     header.appendChild(toggleBtn);
 
-    // Make the floating window moveable by dragging the header.
+    // Draggable header
     header.style.cursor = 'move';
     header.addEventListener('mousedown', function (e) {
         let shiftX = e.clientX - container.getBoundingClientRect().left;
         let shiftY = e.clientY - container.getBoundingClientRect().top;
-        function onMouseMove(e) {
-            container.style.left = (e.clientX - shiftX) + 'px';
-            container.style.top = (e.clientY - shiftY) + 'px';
+        function onMouseMove(e2) {
+            container.style.left = (e2.clientX - shiftX) + 'px';
+            container.style.top = (e2.clientY - shiftY) + 'px';
         }
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', function onMouseUp() {
@@ -157,7 +155,6 @@
         });
     });
 
-    // Create content area.
     const content = document.createElement('div');
     content.id = 'card-utility-content';
     content.style.padding = '10px';
@@ -178,7 +175,7 @@
     }
 
     // ---------------------------
-    // Enrollment Function
+    // Enrollment Functions
     // ---------------------------
     async function enrollOffer(accountNumberProxy, offerIdentifier) {
         const payload = {
@@ -202,25 +199,19 @@
                 body: JSON.stringify(payload)
             });
             if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
-            const data = await res.json();
-            return data;
+            return await res.json();
         } catch (error) {
             console.error('Error enrolling offer:', error);
             return { isEnrolled: false };
         }
     }
 
-    // New function: Enroll all eligible offers (skip offers with category "DEFAULT")
     async function enrollAllEligibleOffers() {
         const cardMap = {};
         accountData.forEach(acc => {
             cardMap[acc.cardEnding] = acc.accountToken;
         });
-
-        // Build a list of tasks (async functions)
         const tasks = [];
-
-        // Collect all (Offer×Card) combos into tasks
         for (const offer of offerData) {
             if (offer.category === "DEFAULT") {
                 console.log(`Skipping offer ${offer.offerId} because its category is DEFAULT`);
@@ -229,7 +220,6 @@
             for (const cardEnding of offer.eligibleCards) {
                 const accountToken = cardMap[cardEnding];
                 if (accountToken) {
-                    // For each, push an async function that does the enrollment
                     tasks.push(async () => {
                         console.log(`Enrolling offer ${offer.offerId} for card ending ${cardEnding}...`);
                         try {
@@ -246,14 +236,9 @@
                 }
             }
         }
-
-        // Run tasks in parallel 6 at a time
         await runInBatches(tasks, 6);
-
-        // Now refresh
         await renderCurrentView();
     }
-
 
     // ---------------------------
     // Helper: Get User Name
@@ -265,7 +250,7 @@
     }
 
     // ---------------------------
-    // Process Account Data from Member API
+    // Fetch & Prepare Account Data
     // ---------------------------
     async function fetchAndPrepareAccountData() {
         try {
@@ -274,14 +259,12 @@
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
             });
-
             if (!res.ok) throw new Error('Failed to fetch account data');
 
             const data = await res.json();
             if (!data || !Array.isArray(data.accounts)) {
                 throw new Error('Invalid account data received');
             }
-
             accountData = [];
             let mainCounter = 1;
 
@@ -300,7 +283,9 @@
 
                 if (Array.isArray(item.supplementary_accounts)) {
                     item.supplementary_accounts.forEach(supp => {
-                        const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
+                        const suppIndex = supp.account?.supplementary_index
+                            ? parseInt(supp.account.supplementary_index, 10)
+                            : 'N/A';
                         const suppCard = {
                             cardEnding: supp.account?.display_account_number || 'N/A',
                             userName: getUserName(supp.profile),
@@ -314,11 +299,10 @@
                         accountData.push(suppCard);
                     });
                 }
-
                 mainCounter++;
             });
 
-            // Set default view and refresh UI
+            // Default to summary after loading
             currentView = 'summary';
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
@@ -339,7 +323,7 @@
             acc.enrolledOffers = 0;
         });
         offerData.forEach(offer => {
-            if (offer.eligibleCards && Array.isArray(offer.eligibleCards)) {
+            if (Array.isArray(offer.eligibleCards)) {
                 offer.eligibleCards.forEach(card => {
                     accountData.forEach(acc => {
                         if (acc.cardEnding === card) {
@@ -348,7 +332,7 @@
                     });
                 });
             }
-            if (offer.enrolledCards && Array.isArray(offer.enrolledCards)) {
+            if (Array.isArray(offer.enrolledCards)) {
                 offer.enrolledCards.forEach(card => {
                     accountData.forEach(acc => {
                         if (acc.cardEnding === card) {
@@ -441,7 +425,7 @@
         return table;
     }
 
-    // Sort function for members view.
+    // Sort function for Members view
     function sortData(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
@@ -458,7 +442,7 @@
     }
 
     // ---------------------------
-    // Offer Mapping Functions
+    // Offers & Mapping
     // ---------------------------
     async function fetchOffersForAccount(accountToken) {
         const payload = {
@@ -490,7 +474,6 @@
         }
     }
 
-    // Build aggregated offer mapping.
     async function buildOfferMapping() {
         const mapping = {};
         await Promise.all(accountData.map(async (acc) => {
@@ -501,18 +484,21 @@
                 if (!mapping[sourceId]) {
                     mapping[sourceId] = {
                         source_id: sourceId,
-                        offerId: offer.id || "N/A",  // record offer id here
+                        offerId: offer.id || "N/A",
                         name: offer.name || "N/A",
                         achievement_type: offer.achievement_type || "N/A",
                         category: offer.category || "N/A",
                         expiry_date: offer.expiry_date || "N/A",
                         logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        redemption_types: offer.redemption_types
+                            ? offer.redemption_types.join(', ')
+                            : "N/A",
                         short_description: offer.short_description || "N/A",
                         eligibleCards: [],
                         enrolledCards: []
                     };
                 }
+                // Tally
                 if (offer.status === "ELIGIBLE") {
                     if (!mapping[sourceId].eligibleCards.includes(acc.cardEnding)) {
                         mapping[sourceId].eligibleCards.push(acc.cardEnding);
@@ -527,7 +513,6 @@
         return Object.values(mapping);
     }
 
-    // Sort function for offers view.
     function sortOfferData(key) {
         if (offerSortState.key === key) {
             offerSortState.direction *= -1;
@@ -536,13 +521,11 @@
             offerSortState.direction = 1;
         }
         offerData.sort((a, b) => {
-            // For Eligible/Enrolled columns, sort by array length
             if (key === 'eligibleCards' || key === 'enrolledCards') {
                 const lenA = Array.isArray(a[key]) ? a[key].length : 0;
                 const lenB = Array.isArray(b[key]) ? b[key].length : 0;
                 return offerSortState.direction * (lenA - lenB);
             } else {
-                // Default string sort
                 const valA = a[key] || "";
                 const valB = b[key] || "";
                 return offerSortState.direction * valA.toString().localeCompare(valB.toString());
@@ -554,8 +537,8 @@
     function showCardsWindow(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
         win.style.position = 'fixed';
-        win.style.top = clickY + 'px';
-        win.style.left = clickX + 'px';
+        win.style.top = clickX + 'px';
+        win.style.left = clickY + 'px';
         win.style.transform = 'translate(-100%, 0)';
         win.style.backgroundColor = '#fff';
         win.style.border = '2px solid #000';
@@ -573,11 +556,8 @@
         win.appendChild(header);
 
         const contentDiv = document.createElement('div');
-
-        // Display cards in lines of 6
         if (Array.isArray(cards)) {
             contentDiv.innerHTML = '';
-
             const chunkSize = 6;
             for (let i = 0; i < cards.length; i += chunkSize) {
                 const chunk = cards.slice(i, i + chunkSize);
@@ -585,15 +565,12 @@
                 lineDiv.style.display = 'flex';
                 lineDiv.style.flexWrap = 'wrap';
                 lineDiv.style.marginBottom = '8px';
-
                 chunk.forEach(cardEnd => {
                     const cardSpan = document.createElement('span');
                     cardSpan.textContent = cardEnd;
                     cardSpan.style.marginRight = '12px';
                     cardSpan.style.marginBottom = '4px';
-
                     if (isEligibleView) {
-                        // Only make clickable if this is from "Eligible" column
                         cardSpan.style.cursor = 'pointer';
                         cardSpan.addEventListener('click', async () => {
                             const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
@@ -610,13 +587,10 @@
                             }
                         });
                     } else {
-                        // If from "Enrolled" column, make text non-clickable
                         cardSpan.style.cursor = 'default';
                     }
-
                     lineDiv.appendChild(cardSpan);
                 });
-
                 contentDiv.appendChild(lineDiv);
             }
         } else {
@@ -624,15 +598,12 @@
         }
         win.appendChild(contentDiv);
 
-        // -----------------------------
-        // Enroll All Cards button (Only show for Eligible view)
-        // -----------------------------
+        // Enroll All Cards button (Eligible only)
         if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
             const enrollAllBtn = document.createElement('button');
             enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
             enrollAllBtn.style.display = 'block';
             enrollAllBtn.style.margin = '10px auto 0';
-
             enrollAllBtn.addEventListener('click', async () => {
                 const tasks = cards.map(cardEnd => {
                     return async () => {
@@ -650,17 +621,12 @@
                         }
                     };
                 });
-
-                // Run tasks in batches of 6
                 await runInBatches(tasks, 6);
-
                 alert(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
             });
-
             win.appendChild(enrollAllBtn);
         }
 
-        // Close button
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
         closeBtn.style.display = 'block';
@@ -673,7 +639,6 @@
         document.body.appendChild(win);
     }
 
-    // Render Offer Mapping Table.
     function renderOfferMappingTable(offerArray) {
         const headers = [
             //{ label: "Offer ID", key: "offerId" },
@@ -687,13 +652,11 @@
             { label: "Eligible", key: "eligibleCards" },
             { label: "Enrolled", key: "enrolledCards" }
         ];
-
-        // Define column widths.
         const colWidths = {
             //offerId: "60px",
             logo: "60px",
             name: "220px",
-            achievement_type: "50px",   // "Type"
+            achievement_type: "50px",
             category: "60px",
             expiry_date: "80px",
             redemption_types: "45px",
@@ -701,13 +664,10 @@
             eligibleCards: "40px",
             enrolledCards: "40px"
         };
-
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
-
-        // Create header row.
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
@@ -730,7 +690,6 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Create body rows.
         const tbody = document.createElement('tbody');
         offerArray.forEach(item => {
             const row = document.createElement('tr');
@@ -745,10 +704,7 @@
                     td.style.wordWrap = 'break-word';
                 }
                 let cellValue = item[headerItem.key];
-
-                // Render logic per column
                 if (headerItem.key === 'logo') {
-                    // Show the logo in its own column
                     if (cellValue && cellValue !== "N/A") {
                         const logoImg = document.createElement('img');
                         logoImg.src = cellValue;
@@ -759,24 +715,20 @@
                     } else {
                         td.textContent = 'N/A';
                     }
-                }
-                else if (headerItem.key === 'achievement_type') {
-                    // Transform achievement_type
+                } else if (headerItem.key === 'achievement_type') {
                     if (cellValue === "STATEMENT_CREDIT") {
                         cellValue = "Cash";
                     } else if (cellValue === "MEMBERSHIP_REWARDS") {
                         cellValue = "MR";
                     }
                     td.textContent = cellValue;
-                }
-                else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
+                } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
                     let cards = cellValue;
                     let count = Array.isArray(cards) ? cards.length : 0;
                     const containerDiv = document.createElement('div');
                     containerDiv.style.display = 'flex';
                     containerDiv.style.alignItems = 'center';
                     containerDiv.style.justifyContent = 'center';
-
                     const countSpan = document.createElement('span');
                     countSpan.textContent = count;
                     containerDiv.appendChild(countSpan);
@@ -785,26 +737,20 @@
                     viewBtn.textContent = 'View';
                     viewBtn.style.marginLeft = '5px';
                     viewBtn.style.fontSize = '10px';
-
                     viewBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        // Pass a flag to indicate if this is from Eligible or Enrolled
                         showCardsWindow(
                             cards,
                             item.offerId,
                             headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
                             e.clientX,
                             e.clientY,
-                            headerItem.key === 'eligibleCards'  // Pass true if Eligible, false if Enrolled
+                            headerItem.key === 'eligibleCards'
                         );
                     });
-
                     containerDiv.appendChild(viewBtn);
                     td.appendChild(containerDiv);
-                }
-
-                else if (headerItem.key === 'expiry_date') {
-                    // parse date and show YY-MM-DD
+                } else if (headerItem.key === 'expiry_date') {
                     if (cellValue && cellValue !== 'N/A') {
                         const d = new Date(cellValue);
                         if (!isNaN(d)) {
@@ -818,9 +764,7 @@
                     } else {
                         td.textContent = 'N/A';
                     }
-                }
-                else {
-                    // Default rendering
+                } else {
                     td.textContent = cellValue;
                 }
                 row.appendChild(td);
@@ -829,102 +773,6 @@
         });
         table.appendChild(tbody);
         return table;
-    }
-
-    /**
- * Runs an array of async tasks in batches of "limit".
- * Each "task" is just an async function that returns a Promise.
- */
-    async function runInBatches(tasks, limit = 8) {
-        let i = 0;
-        while (i < tasks.length) {
-            // Take next chunk of size limit
-            const chunk = tasks.slice(i, i + limit);
-            // Run them in parallel
-            await Promise.all(chunk.map(fn => fn()));
-            i += limit;
-        }
-    }
-
-    // ---------------------------
-    // Render Summary View
-    // ---------------------------
-    function renderSummaryView() {
-        const numAccounts = accountData.length;
-        const lastUpdate = new Date().toLocaleString();
-        let distinctFullyEnrolled = 0;
-        let distinctNotFullyEnrolled = 0;
-        let totalEnrolled = 0;
-        let totalEligible = 0;
-
-        offerData.forEach(offer => {
-            // Skip if category === "DEFAULT"
-            if (offer.category === "DEFAULT") {
-                return;
-            }
-
-            const eligibleCount = offer.eligibleCards ? offer.eligibleCards.length : 0;
-            const enrolledCount = offer.enrolledCards ? offer.enrolledCards.length : 0;
-
-            totalEligible += eligibleCount;
-            totalEnrolled += enrolledCount;
-            const totalCount = eligibleCount + enrolledCount;
-
-            if (totalCount > 0 && enrolledCount === totalCount) {
-                distinctFullyEnrolled++;
-            } else if (eligibleCount > 0) {
-                distinctNotFullyEnrolled++;
-            }
-        });
-
-        const summaryDiv = document.createElement('div');
-        summaryDiv.style.fontSize = '16px';
-        summaryDiv.style.lineHeight = '1.5';  // 1.5× line spacing
-        summaryDiv.style.padding = '10px';
-        summaryDiv.style.textAlign = 'center';
-        summaryDiv.style.backgroundColor = '#f0f8ff';
-        summaryDiv.style.border = '1px solid #ccc';
-        summaryDiv.style.borderRadius = '8px';
-
-        summaryDiv.innerHTML = `
-                <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${lastUpdate}</p>
-                <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
-                <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
-            `;
-
-        // Add enlarged Enroll All and Refresh buttons with extra spacing.
-        const btnContainer = document.createElement('div');
-        btnContainer.style.marginTop = '20px';
-        btnContainer.style.display = 'flex';
-        btnContainer.style.justifyContent = 'center';
-        btnContainer.style.gap = '60px';  // Larger gap between buttons
-
-        const summaryEnrollAllBtn = document.createElement('button');
-        summaryEnrollAllBtn.textContent = 'Enroll All';
-        summaryEnrollAllBtn.style.cursor = 'pointer';
-        summaryEnrollAllBtn.style.fontSize = '22px';
-        summaryEnrollAllBtn.style.padding = '8px 16px';
-        summaryEnrollAllBtn.addEventListener('click', async () => {
-            await enrollAllEligibleOffers();
-        });
-
-        const summaryRefreshBtn = document.createElement('button');
-        summaryRefreshBtn.textContent = 'Refresh';
-        summaryRefreshBtn.style.cursor = 'pointer';
-        summaryRefreshBtn.style.fontSize = '22px';
-        summaryRefreshBtn.style.padding = '8px 16px';
-        summaryRefreshBtn.addEventListener('click', async () => {
-            offerData = [];  // Force empty to trigger a rebuild
-            await loadOrBuildOfferData();  // This will fetch or load from cookie once
-            renderCurrentView();
-        });
-
-
-        btnContainer.appendChild(summaryEnrollAllBtn);
-        btnContainer.appendChild(summaryRefreshBtn);
-        summaryDiv.appendChild(btnContainer);
-
-        return summaryDiv;
     }
 
     async function loadOrBuildOfferData() {
@@ -949,17 +797,92 @@
             offerData = await buildOfferMapping();
             setCookie("offerMapping", JSON.stringify(offerData), 1);
         }
+
         updateAccountOfferCounts();
         renderCurrentView();
     }
 
+    // ---------------------------
+    // Render Summary View
+    // ---------------------------
+    function renderSummaryView() {
+        const numAccounts = accountData.length;
+        const lastUpdate = new Date().toLocaleString();
+        let distinctFullyEnrolled = 0;
+        let distinctNotFullyEnrolled = 0;
+        let totalEnrolled = 0;
+        let totalEligible = 0;
+
+        offerData.forEach(offer => {
+            if (offer.category === "DEFAULT") return;
+
+            const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
+            const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
+
+            totalEligible += eligibleCount;
+            totalEnrolled += enrolledCount;
+            const totalCount = eligibleCount + enrolledCount;
+            if (totalCount > 0 && enrolledCount === totalCount) {
+                distinctFullyEnrolled++;
+            } else if (eligibleCount > 0) {
+                distinctNotFullyEnrolled++;
+            }
+        });
+
+        const summaryDiv = document.createElement('div');
+        summaryDiv.style.fontSize = '16px';
+        summaryDiv.style.lineHeight = '1.5';
+        summaryDiv.style.padding = '10px';
+        summaryDiv.style.textAlign = 'center';
+        summaryDiv.style.backgroundColor = '#f0f8ff';
+        summaryDiv.style.border = '1px solid #ccc';
+        summaryDiv.style.borderRadius = '8px';
+
+        summaryDiv.innerHTML = `
+            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${lastUpdate}</p>
+            <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
+            <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
+        `;
+
+        const btnContainer = document.createElement('div');
+        btnContainer.style.marginTop = '20px';
+        btnContainer.style.display = 'flex';
+        btnContainer.style.justifyContent = 'center';
+        btnContainer.style.gap = '60px';
+
+        const summaryEnrollAllBtn = document.createElement('button');
+        summaryEnrollAllBtn.textContent = 'Enroll All';
+        summaryEnrollAllBtn.style.cursor = 'pointer';
+        summaryEnrollAllBtn.style.fontSize = '22px';
+        summaryEnrollAllBtn.style.padding = '8px 16px';
+        summaryEnrollAllBtn.addEventListener('click', async () => {
+            await enrollAllEligibleOffers();
+        });
+
+        const summaryRefreshBtn = document.createElement('button');
+        summaryRefreshBtn.textContent = 'Refresh';
+        summaryRefreshBtn.style.cursor = 'pointer';
+        summaryRefreshBtn.style.fontSize = '22px';
+        summaryRefreshBtn.style.padding = '8px 16px';
+        summaryRefreshBtn.addEventListener('click', async () => {
+            // Force empty to trigger a rebuild
+            offerData = [];
+            await loadOrBuildOfferData();
+            renderCurrentView();
+        });
+
+        btnContainer.appendChild(summaryEnrollAllBtn);
+        btnContainer.appendChild(summaryRefreshBtn);
+        summaryDiv.appendChild(btnContainer);
+
+        return summaryDiv;
+    }
 
     // ---------------------------
     // Render Current View
     // ---------------------------
     async function renderCurrentView() {
-
-        // The rest is purely view logic
+        // No build or cookie logic here. Just pick the view.
         if (currentView === 'members') {
             content.innerHTML = '';
             content.appendChild(renderMembersTable());
@@ -972,15 +895,13 @@
         }
     }
 
-
     // ---------------------------
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
         try {
-            await fetchAndPrepareAccountData();  // This gets accountData
-            await loadOrBuildOfferData();        // This sets offerData from cookie or build
-
+            await fetchAndPrepareAccountData();  // get account data
+            await loadOrBuildOfferData();        // load or build offers from cookie once
         } catch (error) {
             console.error('Error in init:', error);
             content.innerHTML = `Error during init: ${error.message}`;
@@ -988,5 +909,4 @@
     }
 
     init();
-
 })();
