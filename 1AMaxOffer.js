@@ -966,6 +966,7 @@
     }
 
     init();
+
 })();
 
 //terser AMaxOffer.js -o AMaxOffer_RLS0213.min.js --compress --mangle

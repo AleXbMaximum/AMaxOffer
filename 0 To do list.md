@@ -4,7 +4,8 @@
 * 重写逻辑
 * page anti kick off of in active
 * Cookie management
-* Avoid add offer for cancelled card
+* Favourite Offer 
+
 
 ## Tier 2
 * 加完以后自动刷新当前offer eligible/enroll的数字
@@ -15,6 +16,8 @@
 * Only add main cards offer
 * 优先级list，先加的，第二批加的，不加的
 
+## Done
+* Avoid add offer (and add display filtering option) for cancelled card 
 
 
 https://functions.americanexpress.com/ReadLoyaltyTransactions.v1

@@ -543,14 +543,25 @@
     }
 
     async function buildOfferMapping() {
-        const mapping = {};
-        await Promise.all(accountData.map(async (acc) => {
+        // Initialization: Unique offer info keyed by source_id.
+        const offerInfoTable = {};
+
+        // Filter out non-active accounts before sending any requests.
+        const activeAccounts = accountData.filter(acc =>
+            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+        );
+
+        // Process all active accounts in parallel.
+        await Promise.all(activeAccounts.map(async (acc) => {
             const offers = await fetchOffersForAccount(acc.account_token);
+            // Iterate over offers.
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
-                if (!mapping[sourceId]) {
-                    mapping[sourceId] = {
+
+                // 3.1 Build the offer info table if not already present.
+                if (!offerInfoTable[sourceId]) {
+                    offerInfoTable[sourceId] = {
                         source_id: sourceId,
                         offerId: offer.id || "N/A",
                         name: offer.name || "N/A",
@@ -558,28 +569,46 @@
                         category: offer.category || "N/A",
                         expiry_date: offer.expiry_date || "N/A",
                         logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types
-                            ? offer.redemption_types.join(', ')
-                            : "N/A",
+                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
                         short_description: offer.short_description || "N/A",
                         eligibleCards: [],
                         enrolledCards: []
                     };
                 }
-                // Tally using display_account_number
-                if (offer.status === "ELIGIBLE") {
-                    if (!mapping[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        mapping[sourceId].eligibleCards.push(acc.display_account_number);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!mapping[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        mapping[sourceId].enrolledCards.push(acc.display_account_number);
+                // 3.2 Update enrollment status: add to eligibleCards or enrolledCards if status is ELIGIBLE or ENROLLED.
+                if (offer.status === "ELIGIBLE" || offer.status === "ENROLLED") {
+                    if (offer.status === "ELIGIBLE") {
+                        if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                            offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                        }
+                    } else if (offer.status === "ENROLLED") {
+                        if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                            offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                        }
                     }
                 }
             });
         }));
-        return Object.values(mapping);
+
+        return Object.values(offerInfoTable);
     }
+
+
+
+
+    function enrichOfferInfo(offerInfo, enrollmentStatus) {
+        return offerInfo.map(offer => {
+            // For each offer, compute eligible and enrolled cards based on the enrollmentStatus table
+            const eligibleCards = enrollmentStatus
+                .filter(enr => enr.offerId === offer.offerId && enr.status === "ELIGIBLE")
+                .map(enr => enr.display_account_number);
+            const enrolledCards = enrollmentStatus
+                .filter(enr => enr.offerId === offer.offerId && enr.status === "ENROLLED")
+                .map(enr => enr.display_account_number);
+            return { ...offer, eligibleCards, enrolledCards };
+        });
+    }
+
 
     function sortOfferData(key) {
         if (offerSortState.key === key) {
@@ -672,27 +701,40 @@
             enrollAllBtn.style.display = 'block';
             enrollAllBtn.style.margin = '10px auto 0';
             enrollAllBtn.addEventListener('click', async () => {
-                const tasks = cards.map(cardEnd => {
+                // Build a map for cards that are eligible:
+                // Only include if account status is "Active"
+                const activeMap = {};
+                cards.forEach(cardEnd => {
+                    const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
+                    if (
+                        matchingAcc &&
+                        matchingAcc.account_status &&
+                        matchingAcc.account_status.trim().toLowerCase() === "active"
+                    ) {
+                        activeMap[cardEnd] = matchingAcc.account_token;
+                    }
+                });
+                // Create enrollment tasks for each eligible card
+                const tasks = Object.keys(activeMap).map(cardEnd => {
                     return async () => {
-                        const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                        if (!matchingAcc) {
-                            console.log(`No matching account token for card ending ${cardEnd}`);
-                            return;
-                        }
-                        const accountToken = matchingAcc.account_token;
-                        const result = await enrollOffer(accountToken, offerId);
-                        if (result && result.isEnrolled) {
-                            console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
-                        } else {
-                            console.log(`Enrollment failed: card ${cardEnd}, offer ${offerId}`);
+                        try {
+                            const result = await enrollOffer(activeMap[cardEnd], offerId);
+                            if (result && result.isEnrolled) {
+                                console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
+                            } else {
+                                console.log(`Enrollment failed: card ${cardEnd}, offer ${offerId}`);
+                            }
+                        } catch (err) {
+                            console.error(`Error enrolling card ${cardEnd} for offer ${offerId}:`, err);
                         }
                     };
                 });
                 await runInBatches(tasks, 6);
-                console.log(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
+                await renderCurrentView();
             });
             win.appendChild(enrollAllBtn);
         }
+
 
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
@@ -733,6 +775,7 @@
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
+
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
@@ -771,12 +814,12 @@
                 let cellValue = item[headerItem.key];
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
-                        const logoImg = document.createElement('img');
-                        logoImg.src = cellValue;
-                        logoImg.alt = "Logo";
-                        logoImg.style.maxWidth = "60px";
-                        logoImg.style.maxHeight = "60px";
-                        td.appendChild(logoImg);
+                        const img = document.createElement('img');
+                        img.src = cellValue;
+                        img.alt = "Logo";
+                        img.style.maxWidth = "60px";
+                        img.style.maxHeight = "60px";
+                        td.appendChild(img);
                     } else {
                         td.textContent = 'N/A';
                     }
@@ -787,13 +830,23 @@
                         cellValue = "MR";
                     }
                     td.textContent = cellValue;
+                } else if (headerItem.key === 'category' || headerItem.key === 'redemption_types') {
+                    // Convert so that only the first letter is capitalized.
+                    if (cellValue && cellValue !== "N/A") {
+                        const str = cellValue.toString().toLowerCase();
+                        td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
+                    } else {
+                        td.textContent = 'N/A';
+                    }
                 } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
-                    let cards = cellValue;
-                    let count = Array.isArray(cards) ? cards.length : 0;
+                    // Instead of only count, create a container with count and a "View" button.
+                    const cards = Array.isArray(cellValue) ? cellValue : [];
+                    const count = cards.length;
                     const containerDiv = document.createElement('div');
                     containerDiv.style.display = 'flex';
                     containerDiv.style.alignItems = 'center';
                     containerDiv.style.justifyContent = 'center';
+
                     const countSpan = document.createElement('span');
                     countSpan.textContent = count;
                     containerDiv.appendChild(countSpan);
@@ -839,6 +892,8 @@
         table.appendChild(tbody);
         return table;
     }
+
+
 
 
     // ---------------------------
@@ -990,8 +1045,10 @@
         summaryRefreshBtn.style.cursor = 'pointer';
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
+        // Revised refresh: re-build and enrich offerData before re-rendering
         summaryRefreshBtn.addEventListener('click', async () => {
-            offerData = await buildOfferMapping();
+            const mappingResult = await buildOfferMapping();
+            offerData = enrichOfferInfo(mappingResult.offerInfo, mappingResult.enrollmentStatus);
             await updateAccountOfferCounts();
             renderCurrentView();
         });
@@ -1002,6 +1059,7 @@
 
         return summaryDiv;
     }
+
 
     // ---------------------------
     // Render Current View
@@ -1083,14 +1141,20 @@
             }
         });
 
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        offerData = await buildOfferMapping();
+        const mappingResult = await buildOfferMapping();
+        // Enrich offer info with enrollment details so that later functions remain unchanged
+        offerData = enrichOfferInfo(mappingResult.offerInfo, mappingResult.enrollmentStatus);
+
+        // Update account offer counts and render current view
         await updateAccountOfferCounts();
         await renderCurrentView();
     }
 
     init();
+
+
 })();
 
 //terser AMaxOffer.js -o AMaxOffer_RLS0213.min.js --compress --mangle
