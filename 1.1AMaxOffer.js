@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      1.2 Revised
 // @description  None
 // @match        https://global.americanexpress.com/*
-// @connect    jsdelivr.net
-// @connect    uscardforum.com
-// @connect    cloudfunctions.net
-// @connect    yale.email
+// @connect      jsdelivr.net
+// @connect      uscardforum.com
+// @connect      cloudfunctions.net
+// @connect      yale.email
 // @grant      GM.addElement
 // @grant      GM.deleteValue
 // @grant      GM.getValue
@@ -35,14 +35,24 @@
 (function () {
     'use strict';
 
+    // ---------------------------
+    // Cookie Helper Functions
+    // ---------------------------
+
+
+    // ---------------------------
     // Global State Variables
     // ---------------------------
-    let accountData = []; // Array of card account objects
+    let accountData = []; // Array of account objects with new keys
     let sortState = { key: "", direction: 1 }; // For members view sorting
     let offerData = []; // Array of aggregated offers (from all accounts)
     let offerSortState = { key: "", direction: 1 }; // For offers view sorting
     let currentView = 'summary'; // "summary", "members", or "offers"
     let isMinimized = true;
+    let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
+    let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
+
+
 
     // ---------------------------
     // Create Overlay Container & Header
@@ -177,93 +187,6 @@
     }
 
     // ---------------------------
-    // Enrollment Functions
-    // ---------------------------
-    async function enrollOffer(accountNumberProxy, offerIdentifier) {
-        const payload = {
-            accountNumberProxy: accountNumberProxy,
-            identifier: offerIdentifier,
-            identifierType: "OFFER",
-            locale: "en-US",
-            offerRequestType: "DETAILS",
-            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
-            userOffset: "-06:00"
-        };
-        try {
-            const res = await fetch('https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Origin': 'https://global.americanexpress.com'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error('Error enrolling offer:', error);
-            return { isEnrolled: false };
-        }
-    }
-
-    async function runInBatches(tasks, limit = 8) {
-        let i = 0;
-        while (i < tasks.length) {
-            // Take next chunk of size limit
-            const chunk = tasks.slice(i, i + limit);
-            // Run them in parallel
-            await Promise.all(chunk.map(fn => fn()));
-            i += limit;
-        }
-    }
-
-
-    async function enrollAllEligibleOffers() {
-        const cardMap = {};
-        accountData.forEach(acc => {
-            cardMap[acc.cardEnding] = acc.accountToken;
-        });
-        const tasks = [];
-        for (const offer of offerData) {
-            if (offer.category === "DEFAULT") {
-                console.log(`Skipping offer ${offer.offerId} because its category is DEFAULT`);
-                continue;
-            }
-            for (const cardEnding of offer.eligibleCards) {
-                const accountToken = cardMap[cardEnding];
-                if (accountToken) {
-                    tasks.push(async () => {
-                        console.log(`Enrolling offer ${offer.offerId} for card ending ${cardEnding}...`);
-                        try {
-                            const result = await enrollOffer(accountToken, offer.offerId);
-                            if (result && result.isEnrolled) {
-                                console.log(`Enrollment successful for offer ${offer.offerId} on card ${cardEnding}`);
-                            } else {
-                                console.log(`Enrollment failed for offer ${offer.offerId} on card ${cardEnding}`);
-                            }
-                        } catch (err) {
-                            console.log(`Error enrolling offer ${offer.offerId} on card ${cardEnding}`, err);
-                        }
-                    });
-                }
-            }
-        }
-        await runInBatches(tasks, 6);
-        await renderCurrentView();
-    }
-
-    // ---------------------------
-    // Helper: Get User Name
-    // ---------------------------
-    function getUserName(profile) {
-        if (!profile) return 'N/A';
-        if (profile.embossed_name) return profile.embossed_name;
-        return `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'N/A';
-    }
-
-    // ---------------------------
     // Fetch & Prepare Account Data
     // ---------------------------
     async function fetchAndPrepareAccountData() {
@@ -283,52 +206,62 @@
             let mainCounter = 1;
 
             data.accounts.forEach(item => {
-                const mainCard = {
-                    cardEnding: item.account?.display_account_number || 'N/A',
-                    userName: getUserName(item.profile),
+                // Build map for main (BASIC) account. Use only the first account_status if array.
+                const mainAccount = {
+                    display_account_number: item.account?.display_account_number || 'N/A',
                     relationship: item.account?.relationship || 'N/A',
-                    cardIndex: mainCounter.toString(),
-                    accountSetupDate: item.status?.account_setup_date || 'N/A',
-                    accountToken: item.account_token || 'N/A',
-                    eligibleOffers: 0,
-                    enrolledOffers: 0
+                    supplementary_index: item.account?.supplementary_index || 'N/A',
+                    account_status: Array.isArray(item.status?.account_status)
+                        ? item.status.account_status[0] // take only the first status
+                        : (item.status?.account_status || 'N/A'),
+                    days_past_due: (item.status?.days_past_due !== undefined) ? item.status.days_past_due : 'N/A',
+                    account_setup_date: item.status?.account_setup_date || 'N/A',
+                    description: item.product?.description || 'N/A',
+                    small_card_art: item.product?.small_card_art || 'N/A',
+                    embossed_name: item.profile?.embossed_name || 'N/A',
+                    account_token: item.account_token || 'N/A',
+                    cardIndex: mainCounter.toString()
                 };
-                accountData.push(mainCard);
+                accountData.push(mainAccount);
 
+                // Process supplementary accounts
                 if (Array.isArray(item.supplementary_accounts)) {
                     item.supplementary_accounts.forEach(supp => {
-                        const suppIndex = supp.account?.supplementary_index
-                            ? parseInt(supp.account.supplementary_index, 10)
-                            : 'N/A';
-                        const suppCard = {
-                            cardEnding: supp.account?.display_account_number || 'N/A',
-                            userName: getUserName(supp.profile),
+                        const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
+                        const suppAccount = {
+                            display_account_number: supp.account?.display_account_number || 'N/A',
                             relationship: supp.account?.relationship || 'N/A',
-                            cardIndex: `${mainCounter}-${suppIndex}`,
-                            accountSetupDate: supp.status?.account_setup_date || 'N/A',
-                            accountToken: supp.account_token || 'N/A',
-                            eligibleOffers: 0,
-                            enrolledOffers: 0
+                            supplementary_index: supp.account?.supplementary_index || 'N/A',
+                            account_status: Array.isArray(supp.status?.account_status)
+                                ? supp.status.account_status[0] // take only the first status
+                                : (supp.status?.account_status || 'N/A'),
+                            days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
+                            account_setup_date: supp.status?.account_setup_date || 'N/A',
+                            description: supp.product?.description || 'N/A',
+                            small_card_art: supp.product?.small_card_art || 'N/A',
+                            embossed_name: supp.profile?.embossed_name || 'N/A',
+                            account_token: supp.account_token || 'N/A',
+                            cardIndex: `${mainCounter}-${suppIndex}`
                         };
-                        accountData.push(suppCard);
+                        accountData.push(suppAccount);
                     });
                 }
                 mainCounter++;
             });
 
-            // Default to summary after loading
+            // Set default view and update UI
             currentView = 'summary';
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
 
         } catch (error) {
-            console.error('Error fetching card members:', error);
-            content.innerHTML = `<p style="color: red;">Error fetching card members: ${error.message}</p>`;
+            console.error('Error fetching account data:', error);
+            content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
         }
     }
 
     // ---------------------------
-    // Update Account Offer Counts
+    // Update Account Offer Counts (updated keys)
     // ---------------------------
     function updateAccountOfferCounts() {
         if (!offerData || offerData.length === 0) return;
@@ -340,7 +273,7 @@
             if (Array.isArray(offer.eligibleCards)) {
                 offer.eligibleCards.forEach(card => {
                     accountData.forEach(acc => {
-                        if (acc.cardEnding === card) {
+                        if (acc.display_account_number === card) {
                             acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
                         }
                     });
@@ -349,7 +282,7 @@
             if (Array.isArray(offer.enrolledCards)) {
                 offer.enrolledCards.forEach(card => {
                     accountData.forEach(acc => {
-                        if (acc.cardEnding === card) {
+                        if (acc.display_account_number === card) {
                             acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
                         }
                     });
@@ -359,26 +292,104 @@
     }
 
     // ---------------------------
-    // Render Members Table
+    // Render Members Table (using new keys)
     // ---------------------------
+    function renderMembersView() {
+        const container = document.createElement('div');
+
+        // Create a container for both filters in one line
+        const filtersDiv = document.createElement('div');
+        filtersDiv.style.display = 'flex';
+        filtersDiv.style.alignItems = 'center';
+        filtersDiv.style.gap = '20px';
+        filtersDiv.style.marginBottom = '10px';
+
+        // Filter by Status control
+        const statusFilterDiv = document.createElement('div');
+        statusFilterDiv.style.display = 'flex';
+        statusFilterDiv.style.alignItems = 'center';
+        const statusFilterLabel = document.createElement('label');
+        statusFilterLabel.textContent = 'Filter by Status: ';
+        statusFilterDiv.appendChild(statusFilterLabel);
+        const statusFilterSelect = document.createElement('select');
+        statusFilterSelect.id = 'status-filter';
+        const optionAll = document.createElement('option');
+        optionAll.value = 'all';
+        optionAll.textContent = 'All';
+        statusFilterSelect.appendChild(optionAll);
+        const optionActive = document.createElement('option');
+        optionActive.value = 'Active';
+        optionActive.textContent = 'Active';
+        statusFilterSelect.appendChild(optionActive);
+        const optionCanceled = document.createElement('option');
+        optionCanceled.value = 'Canceled';
+        optionCanceled.textContent = 'Canceled';
+        statusFilterSelect.appendChild(optionCanceled);
+        statusFilterSelect.value = currentStatusFilter;
+        statusFilterSelect.addEventListener('change', () => {
+            currentStatusFilter = statusFilterSelect.value;
+            renderCurrentView();
+        });
+        statusFilterDiv.appendChild(statusFilterSelect);
+        filtersDiv.appendChild(statusFilterDiv);
+
+        // Filter by Type control
+        const typeFilterDiv = document.createElement('div');
+        typeFilterDiv.style.display = 'flex';
+        typeFilterDiv.style.alignItems = 'center';
+        const typeFilterLabel = document.createElement('label');
+        typeFilterLabel.textContent = 'Filter by Type: ';
+        typeFilterDiv.appendChild(typeFilterLabel);
+        const typeFilterSelect = document.createElement('select');
+        typeFilterSelect.id = 'type-filter';
+        const typeOptionAll = document.createElement('option');
+        typeOptionAll.value = 'all';
+        typeOptionAll.textContent = 'All';
+        typeFilterSelect.appendChild(typeOptionAll);
+        const typeOptionBasic = document.createElement('option');
+        typeOptionBasic.value = 'BASIC';
+        typeOptionBasic.textContent = 'BASIC';
+        typeFilterSelect.appendChild(typeOptionBasic);
+        const typeOptionSupp = document.createElement('option');
+        typeOptionSupp.value = 'SUPP';
+        typeOptionSupp.textContent = 'SUPP';
+        typeFilterSelect.appendChild(typeOptionSupp);
+        typeFilterSelect.value = currentTypeFilter;
+        typeFilterSelect.addEventListener('change', () => {
+            currentTypeFilter = typeFilterSelect.value;
+            renderCurrentView();
+        });
+        typeFilterDiv.appendChild(typeFilterSelect);
+        filtersDiv.appendChild(typeFilterDiv);
+
+        container.appendChild(filtersDiv);
+        container.appendChild(renderMembersTable());
+        return container;
+    }
+
+
     function renderMembersTable() {
         const headers = [
-            { label: "Ending", key: "cardEnding" },
-            { label: "User Name", key: "userName" },
+            { label: "Logo", key: "small_card_art" },
+            { label: "Ending", key: "display_account_number" },
+            { label: "User", key: "embossed_name" },
             { label: "Type", key: "relationship" },
             { label: "Index", key: "cardIndex" },
-            { label: "Opening", key: "accountSetupDate" },
-            // { label: "Account Token", key: "accountToken" },  // Removed Account Token column
+            { label: "Opening", key: "account_setup_date" },
+            { label: "Status", key: "account_status" },
+            { label: "Days Past Due", key: "days_past_due" },
             { label: "Eligible Offers", key: "eligibleOffers" },
             { label: "Enrolled Offers", key: "enrolledOffers" }
         ];
         const colWidths = {
-            cardEnding: "80px",
-            userName: "150px",
+            small_card_art: "60px",
+            display_account_number: "80px",
+            embossed_name: "150px",
             relationship: "80px",
             cardIndex: "80px",
-            accountSetupDate: "80px",
-            // accountToken: "150px",  // Removed Account Token column width
+            account_setup_date: "80px",
+            account_status: "80px",
+            days_past_due: "80px",
             eligibleOffers: "80px",
             enrolledOffers: "80px"
         };
@@ -388,6 +399,7 @@
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
 
+        // Build table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
@@ -410,27 +422,48 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
+        // Apply filters: Status and Type
+        const filteredAccounts = accountData.filter(acc => {
+            const statusMatch =
+                currentStatusFilter === 'all' ||
+                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
+            const typeMatch =
+                currentTypeFilter === 'all' ||
+                acc.relationship === currentTypeFilter;
+            return statusMatch && typeMatch;
+        });
+
+        // Build table body with filtered accounts
         const tbody = document.createElement('tbody');
-        accountData.forEach(item => {
+        filteredAccounts.forEach(item => {
             const row = document.createElement('tr');
             if (item.relationship === "BASIC") {
                 row.style.fontWeight = 'bold';
             }
-            const cells = [
-                item.cardEnding,
-                item.userName,
-                item.relationship,
-                item.cardIndex,
-                item.accountSetupDate,
-                // item.accountToken,  // Removed Account Token cell
-                item.eligibleOffers,
-                item.enrolledOffers
-            ];
-            cells.forEach(text => {
+            headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.textContent = text;
                 td.style.padding = '4px';
                 td.style.textAlign = 'center';
+                if (colWidths[headerItem.key]) {
+                    td.style.width = colWidths[headerItem.key];
+                    td.style.maxWidth = colWidths[headerItem.key];
+                    td.style.whiteSpace = 'normal';
+                    td.style.wordWrap = 'break-word';
+                }
+                if (headerItem.key === 'small_card_art') {
+                    if (item.small_card_art && item.small_card_art !== 'N/A') {
+                        const img = document.createElement('img');
+                        img.src = item.small_card_art;
+                        img.alt = "Card Logo";
+                        img.style.maxWidth = "40px";
+                        img.style.maxHeight = "40px";
+                        td.appendChild(img);
+                    } else {
+                        td.textContent = 'N/A';
+                    }
+                } else {
+                    td.textContent = item[headerItem.key];
+                }
                 row.appendChild(td);
             });
             tbody.appendChild(row);
@@ -440,7 +473,14 @@
     }
 
 
-    // Sort function for Members view
+    function parseCardIndex(indexStr) {
+        if (!indexStr) return [0, 0];
+        const parts = indexStr.split('-');
+        const main = parseInt(parts[0], 10) || 0;
+        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
+        return [main, sub];
+    }
+
     function sortData(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
@@ -448,13 +488,26 @@
             sortState.key = key;
             sortState.direction = 1;
         }
-        accountData.sort((a, b) => {
-            let valA = a[key] || "";
-            let valB = b[key] || "";
-            return sortState.direction * valA.toString().localeCompare(valB.toString());
-        });
+
+        if (key === 'cardIndex') {
+            accountData.sort((a, b) => {
+                const [aMain, aSub] = parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = parseCardIndex(b.cardIndex);
+                if (aMain === bMain) {
+                    return sortState.direction * (aSub - bSub);
+                }
+                return sortState.direction * (aMain - bMain);
+            });
+        } else {
+            accountData.sort((a, b) => {
+                const valA = a[key] || "";
+                const valB = b[key] || "";
+                return sortState.direction * valA.toString().localeCompare(valB.toString());
+            });
+        }
         renderCurrentView();
     }
+
 
     // ---------------------------
     // Offers & Mapping
@@ -492,7 +545,7 @@
     async function buildOfferMapping() {
         const mapping = {};
         await Promise.all(accountData.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.accountToken);
+            const offers = await fetchOffersForAccount(acc.account_token);
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
@@ -513,14 +566,14 @@
                         enrolledCards: []
                     };
                 }
-                // Tally
+                // Tally using display_account_number
                 if (offer.status === "ELIGIBLE") {
-                    if (!mapping[sourceId].eligibleCards.includes(acc.cardEnding)) {
-                        mapping[sourceId].eligibleCards.push(acc.cardEnding);
+                    if (!mapping[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        mapping[sourceId].eligibleCards.push(acc.display_account_number);
                     }
                 } else if (offer.status === "ENROLLED") {
-                    if (!mapping[sourceId].enrolledCards.includes(acc.cardEnding)) {
-                        mapping[sourceId].enrolledCards.push(acc.cardEnding);
+                    if (!mapping[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        mapping[sourceId].enrolledCards.push(acc.display_account_number);
                     }
                 }
             });
@@ -552,7 +605,6 @@
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
 
-        //win.style.transform = 'translate(100%, 0)';
         win.style.backgroundColor = '#fff';
         win.style.border = '2px solid #000';
         win.style.padding = '10px';
@@ -561,12 +613,9 @@
         win.style.maxWidth = '500px';
         win.style.maxHeight = '400px';
         win.style.overflowY = 'auto';
-
         win.style.position = 'fixed';
-        // Use lowercase "left" here
         win.style.top = clickY + 'px';
         win.style.left = (clickX - 400) + 'px';
-
 
         const header = document.createElement('div');
         header.style.fontWeight = 'bold';
@@ -592,19 +641,18 @@
                     if (isEligibleView) {
                         cardSpan.style.cursor = 'pointer';
                         cardSpan.addEventListener('click', async () => {
-                            const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
+                            const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
                             if (!matchingAcc) {
-                                alert(`No matching account token for card ending ${cardEnd}`);
+                                console.log(`No matching account token for card ending ${cardEnd}`);
                                 return;
                             }
-                            const accountToken = matchingAcc.accountToken;
+                            const accountToken = matchingAcc.account_token;
                             const result = await enrollOffer(accountToken, offerId);
                             if (result && result.isEnrolled) {
-                                alert(`Enrollment successful for card ${cardEnd}, offer ${offerId}`);
+                                console.log(`Enrollment successful for card ${cardEnd}, offer ${offerId}`);
                             } else {
-                                alert(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
+                                console.log(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
                             }
-
                         });
                     } else {
                         cardSpan.style.cursor = 'default';
@@ -618,7 +666,6 @@
         }
         win.appendChild(contentDiv);
 
-        // Enroll All Cards button (Eligible only)
         if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
             const enrollAllBtn = document.createElement('button');
             enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
@@ -627,12 +674,12 @@
             enrollAllBtn.addEventListener('click', async () => {
                 const tasks = cards.map(cardEnd => {
                     return async () => {
-                        const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
+                        const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
                         if (!matchingAcc) {
                             console.log(`No matching account token for card ending ${cardEnd}`);
                             return;
                         }
-                        const accountToken = matchingAcc.accountToken;
+                        const accountToken = matchingAcc.account_token;
                         const result = await enrollOffer(accountToken, offerId);
                         if (result && result.isEnrolled) {
                             console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
@@ -642,7 +689,7 @@
                     };
                 });
                 await runInBatches(tasks, 6);
-                alert(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
+                console.log(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
             });
             win.appendChild(enrollAllBtn);
         }
@@ -661,7 +708,6 @@
 
     function renderOfferMappingTable(offerArray) {
         const headers = [
-            //{ label: "Offer ID", key: "offerId" },
             { label: "Logo", key: "logo" },
             { label: "Name", key: "name" },
             { label: "Type", key: "achievement_type" },
@@ -673,7 +719,6 @@
             { label: "Enrolled", key: "enrolledCards" }
         ];
         const colWidths = {
-            //offerId: "60px",
             logo: "60px",
             name: "220px",
             achievement_type: "50px",
@@ -797,6 +842,93 @@
 
 
     // ---------------------------
+    // Enrollment Functions
+    // ---------------------------
+    async function enrollOffer(accountToken, offerIdentifier) {
+        const payload = {
+            accountNumberProxy: accountToken,
+            identifier: offerIdentifier,
+            identifierType: "OFFER",
+            locale: "en-US",
+            offerRequestType: "DETAILS",
+            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
+            userOffset: "-06:00"
+        };
+        try {
+            const res = await fetch('https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Origin': 'https://global.americanexpress.com'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error('Error enrolling offer:', error);
+            return { isEnrolled: false };
+        }
+    }
+
+    async function runInBatches(tasks, limit = 8) {
+        let i = 0;
+        while (i < tasks.length) {
+            const chunk = tasks.slice(i, i + limit);
+            await Promise.all(chunk.map(fn => fn()));
+            i += limit;
+        }
+    }
+
+    async function enrollAllEligibleOffers() {
+        // Create a mapping of card numbers to account tokens,
+        // including only those accounts that have status "Active"
+        const activeCardMap = {};
+        accountData.forEach(acc => {
+            if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
+                activeCardMap[acc.display_account_number] = acc.account_token;
+            }
+        });
+
+        // Create tasks for enrolling offers that are eligible,
+        // have a category not equal to DEFAULT,
+        // and whose associated card is active.
+        const tasks = [];
+        for (const offer of offerData) {
+            if (offer.category === "DEFAULT") {
+                console.log(`Skipping offer ${offer.offerId} because its category is DEFAULT`);
+                continue;
+            }
+            for (const card of offer.eligibleCards) {
+                const accountToken = activeCardMap[card];
+                if (accountToken) {
+                    tasks.push(async () => {
+                        console.log(`Enrolling offer ${offer.offerId} for card ${card}...`);
+                        try {
+                            const result = await enrollOffer(accountToken, offer.offerId);
+                            if (result && result.isEnrolled) {
+                                console.log(`Enrollment successful for offer ${offer.offerId} on card ${card}`);
+                            } else {
+                                console.log(`Enrollment failed for offer ${offer.offerId} on card ${card}`);
+                            }
+                        } catch (err) {
+                            console.log(`Error enrolling offer ${offer.offerId} on card ${card}`, err);
+                        }
+                    });
+                }
+            }
+        }
+
+        // Run enrollment tasks in batches
+        await runInBatches(tasks, 8);
+        // Re-render the current view after enrollments are attempted
+        await renderCurrentView();
+    }
+
+
+    // ---------------------------
     // Render Summary View
     // ---------------------------
     function renderSummaryView() {
@@ -859,7 +991,6 @@
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
-
             offerData = await buildOfferMapping();
             await updateAccountOfferCounts();
             renderCurrentView();
@@ -878,7 +1009,7 @@
     async function renderCurrentView() {
         if (currentView === 'members') {
             content.innerHTML = '';
-            content.appendChild(renderMembersTable());
+            content.appendChild(renderMembersView());
         } else if (currentView === 'offers') {
             content.innerHTML = '';
             content.appendChild(renderOfferMappingTable(offerData));
@@ -890,7 +1021,6 @@
 
     async function getCurrentUserTrustLevel() {
         return new Promise((resolve) => {
-            // 1. Get current session to extract username
             GM.xmlHttpRequest({
                 method: "GET",
                 url: "https://www.uscardforum.com/session/current.json",
@@ -906,7 +1036,6 @@
                             console.log("No current user found");
                             return resolve(0);
                         }
-                        // 2. Fetch user JSON to retrieve trust_level
                         GM.xmlHttpRequest({
                             method: "GET",
                             url: "https://www.uscardforum.com/u/" + encodeURIComponent(username) + ".json",
@@ -918,7 +1047,6 @@
                                 try {
                                     const userData = JSON.parse(resp.responseText);
                                     const trustLevel = userData?.user?.trust_level;
-                                    // Return the actual trust level number, or 0 if not found.
                                     resolve(trustLevel ?? 0);
                                 } catch (e) {
                                     console.error("Error parsing user JSON:", e);
@@ -947,22 +1075,19 @@
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-
-
         getCurrentUserTrustLevel().then(async (tl) => {
             if (tl === null || tl < 4) {
-                console.log('No user logged in or invalid trust level');
+                alert('No user logged in or invalid trust level');
             } else {
-                await fetchAndPrepareAccountData();  // get account data
+                await fetchAndPrepareAccountData();
             }
         });
 
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        offerData = await buildOfferMapping(); // Process a load
+        offerData = await buildOfferMapping();
         await updateAccountOfferCounts();
         await renderCurrentView();
-
     }
 
     init();
