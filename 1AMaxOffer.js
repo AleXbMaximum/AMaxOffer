@@ -4,84 +4,49 @@
 // @version      2.7
 // @description  None
 // @match        https://global.americanexpress.com/*
-// @connect      jsdelivr.net
-// @connect      uscardforum.com
-// @connect      cloudfunctions.net
-// @connect      yale.email
-// @grant        GM.addElement
-// @grant        GM.deleteValue
-// @grant        GM.getValue
-// @grant        GM.listValues
-// @grant        GM.notification
-// @grant        GM.openInTab
-// @grant        GM.setValue
-// @grant        GM.xmlHttpRequest
-// @grant        GM_addElement
-// @grant        GM_addStyle
-// @grant        GM_addValueChangeListener
-// @grant        GM_cookie
-// @grant        GM_deleteValue
-// @grant        GM_getTab
-// @grant        GM_getTabs
-// @grant        GM_getValue
-// @grant        GM_listValues
-// @grant        GM_notification
-// @grant        GM_openInTab
-// @grant        GM_setValue
-// @grant        GM_xmlhttpRequest
-// @grant        unsafeWindow
+// @connect    jsdelivr.net
+// @connect    uscardforum.com
+// @connect    cloudfunctions.net
+// @connect    yale.email
+// @grant      GM.addElement
+// @grant      GM.deleteValue
+// @grant      GM.getValue
+// @grant      GM.listValues
+// @grant      GM.notification
+// @grant      GM.openInTab
+// @grant      GM.setValue
+// @grant      GM.xmlHttpRequest
+// @grant      GM_addElement
+// @grant      GM_addStyle
+// @grant      GM_addValueChangeListener
+// @grant      GM_cookie
+// @grant      GM_deleteValue
+// @grant      GM_getTab
+// @grant      GM_getTabs
+// @grant      GM_getValue
+// @grant      GM_listValues
+// @grant      GM_notification
+// @grant      GM_openInTab
+// @grant      GM_setValue
+// @grant      GM_xmlhttpRequest
+// @grant      unsafeWindow
 // ==/UserScript==
 
 (function () {
     'use strict';
 
     // ---------------------------
-    // Encoded URL Constants (Base64)
-    // ---------------------------
-    // Note: You must ensure these strings are complete and correctly encoded.
-    const MEMBER_API = "aHR0cHM6Ly9nbG9iYWwuYW1lcmljYW5leHByZXNzLmNvbS9hcGkvc2VydmljaW5nL3YxL21lbWJlcg=="; // https://global.americanexpress.com/api/servicing/v1/member
-    const ENROLL_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9DcmVhdGVDYXJkQWNjb3VudE9mZmVyRW5yb2xsbWVudC52MQ=="; // https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
-    const OFFERS_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9SZWFkQ2FyZEFjY291bnRPZmZlcnNMaXN0LnYx"; // https://functions.americanexpress.com/ReadCardAccountOffersList.v1
-
-    // Helper function to decode an encoded URL
-    function getUrl(encoded) {
-        try {
-            return atob(encoded);
-        } catch (e) {
-            console.error("Error decoding URL:", e, "Encoded string:", encoded);
-            return "";
-        }
-    }
-
-    // ---------------------------
     // Cookie Helper Functions
     // ---------------------------
-    function setCookie(name, value, days) {
-        let expires = "";
-        if (days) {
-            const date = new Date();
-            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-            expires = "; expires=" + date.toUTCString();
-        }
-        document.cookie = name + "=" + encodeURIComponent(value || "") + expires + "; path=/";
-    }
-    function getCookie(name) {
-        const nameEQ = name + "=";
-        const ca = document.cookie.split(';');
-        for (let i = 0; i < ca.length; i++) {
-            let c = ca[i].trim();
-            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length));
-        }
-        return null;
-    }
+
 
     // ---------------------------
     // Global State Variables
     // ---------------------------
     let accountData = []; // Array of card account objects
-    let sortState = { key: "", direction: 1 }; // For Members view sorting
+    let sortState = { key: "", direction: 1 }; // For members view sorting
     let offerData = []; // Array of aggregated offers (from all accounts)
-    let offerSortState = { key: "", direction: 1 }; // For Offers view sorting
+    let offerSortState = { key: "", direction: 1 }; // For offers view sorting
     let currentView = 'summary'; // "summary", "members", or "offers"
     let isMinimized = true;
 
@@ -182,7 +147,7 @@
     header.appendChild(viewButtons);
     header.appendChild(toggleBtn);
 
-    // Make header draggable
+    // Draggable header
     header.style.cursor = 'move';
     header.addEventListener('mousedown', function (e) {
         let shiftX = e.clientX - container.getBoundingClientRect().left;
@@ -231,7 +196,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(getUrl(ENROLL_API), {
+            const res = await fetch('https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1', {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -252,11 +217,14 @@
     async function runInBatches(tasks, limit = 8) {
         let i = 0;
         while (i < tasks.length) {
+            // Take next chunk of size limit
             const chunk = tasks.slice(i, i + limit);
+            // Run them in parallel
             await Promise.all(chunk.map(fn => fn()));
             i += limit;
         }
     }
+
 
     async function enrollAllEligibleOffers() {
         const cardMap = {};
@@ -306,20 +274,20 @@
     // ---------------------------
     async function fetchAndPrepareAccountData() {
         try {
-            const res = await fetch(getUrl(MEMBER_API), {
+            const res = await fetch('https://global.americanexpress.com/api/servicing/v1/member', {
                 method: 'GET',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
             });
-
+            if (!res.ok) throw new Error('Failed to fetch account data');
 
             const data = await res.json();
             if (!data || !Array.isArray(data.accounts)) {
                 throw new Error('Invalid account data received');
             }
-
             accountData = [];
             let mainCounter = 1;
+
             data.accounts.forEach(item => {
                 const mainCard = {
                     cardEnding: item.account?.display_account_number || 'N/A',
@@ -332,6 +300,7 @@
                     enrolledOffers: 0
                 };
                 accountData.push(mainCard);
+
                 if (Array.isArray(item.supplementary_accounts)) {
                     item.supplementary_accounts.forEach(supp => {
                         const suppIndex = supp.account?.supplementary_index
@@ -353,6 +322,7 @@
                 mainCounter++;
             });
 
+            // Default to summary after loading
             currentView = 'summary';
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
@@ -475,7 +445,8 @@
         return table;
     }
 
-    // Sort function for Members view.
+
+    // Sort function for Members view
     function sortData(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
@@ -492,7 +463,7 @@
     }
 
     // ---------------------------
-    // Offers & Mapping Functions
+    // Offers & Mapping
     // ---------------------------
     async function fetchOffersForAccount(accountToken) {
         const payload = {
@@ -505,7 +476,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(getUrl(OFFERS_API), {
+            const res = await fetch('https://functions.americanexpress.com/ReadCardAccountOffersList.v1', {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -540,12 +511,15 @@
                         category: offer.category || "N/A",
                         expiry_date: offer.expiry_date || "N/A",
                         logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        redemption_types: offer.redemption_types
+                            ? offer.redemption_types.join(', ')
+                            : "N/A",
                         short_description: offer.short_description || "N/A",
                         eligibleCards: [],
                         enrolledCards: []
                     };
                 }
+                // Tally
                 if (offer.status === "ELIGIBLE") {
                     if (!mapping[sourceId].eligibleCards.includes(acc.cardEnding)) {
                         mapping[sourceId].eligibleCards.push(acc.cardEnding);
@@ -583,10 +557,8 @@
 
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
-        win.style.position = 'fixed';
-        win.style.top = clickY + 'px';
-        // Adjust left so that the popup appears near the click.
-        win.style.left = (clickX - 400) + 'px';
+
+        //win.style.transform = 'translate(100%, 0)';
         win.style.backgroundColor = '#fff';
         win.style.border = '2px solid #000';
         win.style.padding = '10px';
@@ -595,6 +567,12 @@
         win.style.maxWidth = '500px';
         win.style.maxHeight = '400px';
         win.style.overflowY = 'auto';
+
+        win.style.position = 'fixed';
+        // Use lowercase "left" here
+        win.style.top = clickY + 'px';
+        win.style.left = (clickX - 400) + 'px';
+
 
         const header = document.createElement('div');
         header.style.fontWeight = 'bold';
@@ -632,6 +610,7 @@
                             } else {
                                 alert(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
                             }
+
                         });
                     } else {
                         cardSpan.style.cursor = 'default';
@@ -645,6 +624,7 @@
         }
         win.appendChild(contentDiv);
 
+        // Enroll All Cards button (Eligible only)
         if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
             const enrollAllBtn = document.createElement('button');
             enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
@@ -687,6 +667,7 @@
 
     function renderOfferMappingTable(offerArray) {
         const headers = [
+            //{ label: "Offer ID", key: "offerId" },
             { label: "Logo", key: "logo" },
             { label: "Name", key: "name" },
             { label: "Type", key: "achievement_type" },
@@ -698,6 +679,7 @@
             { label: "Enrolled", key: "enrolledCards" }
         ];
         const colWidths = {
+            //offerId: "60px",
             logo: "60px",
             name: "220px",
             achievement_type: "50px",
@@ -819,28 +801,6 @@
         return table;
     }
 
-    async function loadOrBuildOfferData() {
-        if (offerData && offerData.length > 0) {
-            return;
-        }
-        const cachedMapping = getCookie("offerMapping");
-        if (cachedMapping) {
-            try {
-                offerData = JSON.parse(cachedMapping);
-                console.log(`Loaded ${offerData.length} offers from cookie`);
-            } catch (e) {
-                console.log("Cookie parse error:", e, "Building from scratch...");
-                offerData = await buildOfferMapping();
-                setCookie("offerMapping", JSON.stringify(offerData), 1);
-            }
-        } else {
-            console.log("No cookie found, building new mapping...");
-            offerData = await buildOfferMapping();
-            setCookie("offerMapping", JSON.stringify(offerData), 1);
-        }
-        updateAccountOfferCounts();
-        renderCurrentView();
-    }
 
     // ---------------------------
     // Render Summary View
@@ -852,10 +812,13 @@
         let distinctNotFullyEnrolled = 0;
         let totalEnrolled = 0;
         let totalEligible = 0;
+
         offerData.forEach(offer => {
             if (offer.category === "DEFAULT") return;
+
             const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
             const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
+
             totalEligible += eligibleCount;
             totalEnrolled += enrolledCount;
             const totalCount = eligibleCount + enrolledCount;
@@ -865,6 +828,7 @@
                 distinctNotFullyEnrolled++;
             }
         });
+
         const summaryDiv = document.createElement('div');
         summaryDiv.style.fontSize = '16px';
         summaryDiv.style.lineHeight = '1.5';
@@ -901,6 +865,7 @@
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
+
             offerData = await buildOfferMapping();
             await updateAccountOfferCounts();
             renderCurrentView();
@@ -931,6 +896,7 @@
 
     async function getCurrentUserTrustLevel() {
         return new Promise((resolve) => {
+            // 1. Get current session to extract username
             GM.xmlHttpRequest({
                 method: "GET",
                 url: "https://www.uscardforum.com/session/current.json",
@@ -946,6 +912,7 @@
                             console.log("No current user found");
                             return resolve(0);
                         }
+                        // 2. Fetch user JSON to retrieve trust_level
                         GM.xmlHttpRequest({
                             method: "GET",
                             url: "https://www.uscardforum.com/u/" + encodeURIComponent(username) + ".json",
@@ -957,6 +924,7 @@
                                 try {
                                     const userData = JSON.parse(resp.responseText);
                                     const trustLevel = userData?.user?.trust_level;
+                                    // Return the actual trust level number, or 0 if not found.
                                     resolve(trustLevel ?? 0);
                                 } catch (e) {
                                     console.error("Error parsing user JSON:", e);
@@ -985,17 +953,25 @@
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-        try {
 
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            await fetchAndPrepareAccountData();
-            await loadOrBuildOfferData();
-        } catch (error) {
-            console.error('Error in init:', error);
-            content.innerHTML = `Error during init: ${error.message}`;
-        }
+
+        getCurrentUserTrustLevel().then(async (tl) => {
+            if (tl === null || tl < 4) {
+                console.log('No user logged in or invalid trust level');
+            } else {
+                await fetchAndPrepareAccountData();  // get account data
+            }
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        offerData = await buildOfferMapping(); // Process a load
+        await updateAccountOfferCounts();
+        await renderCurrentView();
+
     }
 
     init();
-
 })();
+
+//terser AMaxOffer.js -o AMaxOffer_RLS0213.min.js --compress --mangle
