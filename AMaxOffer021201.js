@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      1.0
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect    jsdelivr.net

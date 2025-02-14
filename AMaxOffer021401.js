@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.2 Revised
+// @version      1.2
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
@@ -51,7 +51,7 @@
     let isMinimized = true;
     let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
     let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
-
+    let runInBatchesLimit = 10; // Limit for batch processing
 
 
     // ---------------------------
@@ -558,8 +558,7 @@
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
-
-                // 3.1 Build the offer info table if not already present.
+                // Build the offer info table if not already present.
                 if (!offerInfoTable[sourceId]) {
                     offerInfoTable[sourceId] = {
                         source_id: sourceId,
@@ -575,16 +574,14 @@
                         enrolledCards: []
                     };
                 }
-                // 3.2 Update enrollment status: add to eligibleCards or enrolledCards if status is ELIGIBLE or ENROLLED.
-                if (offer.status === "ELIGIBLE" || offer.status === "ENROLLED") {
-                    if (offer.status === "ELIGIBLE") {
-                        if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                            offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
-                        }
-                    } else if (offer.status === "ENROLLED") {
-                        if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                            offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
-                        }
+                // Update enrollment status: add to eligibleCards or enrolledCards if status is ELIGIBLE/ENROLLED.
+                if (offer.status === "ELIGIBLE") {
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    }
+                } else if (offer.status === "ENROLLED") {
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
                     }
                 }
             });
@@ -729,7 +726,7 @@
                         }
                     };
                 });
-                await runInBatches(tasks, 6);
+                await runInBatches(tasks, runInBatchesLimit);
                 await renderCurrentView();
             });
             win.appendChild(enrollAllBtn);
@@ -938,8 +935,7 @@
     }
 
     async function enrollAllEligibleOffers() {
-        // Create a mapping of card numbers to account tokens,
-        // including only those accounts that have status "Active"
+        // Create a mapping of card numbers to account tokens for active accounts.
         const activeCardMap = {};
         accountData.forEach(acc => {
             if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
@@ -947,9 +943,7 @@
             }
         });
 
-        // Create tasks for enrolling offers that are eligible,
-        // have a category not equal to DEFAULT,
-        // and whose associated card is active.
+        // Create tasks for enrolling offers that are eligible, excluding those with category DEFAULT.
         const tasks = [];
         for (const offer of offerData) {
             if (offer.category === "DEFAULT") {
@@ -969,19 +963,20 @@
                                 console.log(`Enrollment failed for offer ${offer.offerId} on card ${card}`);
                             }
                         } catch (err) {
-                            console.log(`Error enrolling offer ${offer.offerId} on card ${card}`, err);
+                            console.error(`Error enrolling offer ${offer.offerId} on card ${card}:`, err);
                         }
                     });
                 }
             }
         }
 
-        // Run enrollment tasks in batches
-        await runInBatches(tasks, 8);
-        // Re-render the current view after enrollments are attempted
+        // Run enrollment tasks in batches.
+        await runInBatches(tasks, runInBatchesLimit);
+        // Refresh the offer mapping and update account counts.
+        offerData = await buildOfferMapping();
+        await updateAccountOfferCounts();
         await renderCurrentView();
     }
-
 
     // ---------------------------
     // Render Summary View
@@ -1047,8 +1042,7 @@
         summaryRefreshBtn.style.padding = '8px 16px';
         // Revised refresh: re-build and enrich offerData before re-rendering
         summaryRefreshBtn.addEventListener('click', async () => {
-            const mappingResult = await buildOfferMapping();
-            offerData = enrichOfferInfo(mappingResult.offerInfo, mappingResult.enrollmentStatus);
+            offerData = await buildOfferMapping();
             await updateAccountOfferCounts();
             renderCurrentView();
         });
@@ -1143,11 +1137,10 @@
 
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        const mappingResult = await buildOfferMapping();
-        // Enrich offer info with enrollment details so that later functions remain unchanged
-        offerData = enrichOfferInfo(mappingResult.offerInfo, mappingResult.enrollmentStatus);
+        // Directly assign the enriched offer data.
+        offerData = await buildOfferMapping();
 
-        // Update account offer counts and render current view
+        // Update account offer counts and render current view.
         await updateAccountOfferCounts();
         await renderCurrentView();
     }

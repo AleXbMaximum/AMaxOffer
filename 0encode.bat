@@ -1,1 +1,1 @@
-terser AMaxOffer_encode_URL.js -o 3AMaxOffer_RLS0213.min.js --compress --mangle
+terser "AMaxOffer021401.js" -o Released.min.js --compress --mangle
