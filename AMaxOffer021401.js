@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.2 Revised
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
@@ -35,10 +35,25 @@
 (function () {
     'use strict';
 
+    // Encoded URL Constants (Base64)
     // ---------------------------
-    // Cookie Helper Functions
-    // ---------------------------
+    // Note: You must ensure these strings are complete and correctly encoded.
+    const MEMBER_API = "aHR0cHM6Ly9nbG9iYWwuYW1lcmljYW5leHByZXNzLmNvbS9hcGkvc2VydmljaW5nL3YxL21lbWJlcg==";
+    // https://global.americanexpress.com/api/servicing/v1/member
+    const ENROLL_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9DcmVhdGVDYXJkQWNjb3VudE9mZmVyRW5yb2xsbWVudC52MQ==";
+    // https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
+    const OFFERS_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9SZWFkQ2FyZEFjY291bnRPZmZlcnNMaXN0LnYx";
+    // https://functions.americanexpress.com/ReadCardAccountOffersList.v1
 
+    // Helper function to decode an encoded URL
+    function getUrl(encoded) {
+        try {
+            return atob(encoded);
+        } catch (e) {
+            console.error("Error decoding URL:", e, "Encoded string:", encoded);
+            return "";
+        }
+    }
 
     // ---------------------------
     // Global State Variables
@@ -52,7 +67,6 @@
     let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
     let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
     let runInBatchesLimit = 10; // Limit for batch processing
-
 
     // ---------------------------
     // Create Overlay Container & Header
@@ -191,7 +205,7 @@
     // ---------------------------
     async function fetchAndPrepareAccountData() {
         try {
-            const res = await fetch('https://global.americanexpress.com/api/servicing/v1/member', {
+            const res = await fetch(getUrl(MEMBER_API), {
                 method: 'GET',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
@@ -233,7 +247,7 @@
                             relationship: supp.account?.relationship || 'N/A',
                             supplementary_index: supp.account?.supplementary_index || 'N/A',
                             account_status: Array.isArray(supp.status?.account_status)
-                                ? supp.status.account_status[0] // take only the first status
+                                ? supp.status.account_status[0]
                                 : (supp.status?.account_status || 'N/A'),
                             days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
                             account_setup_date: supp.status?.account_setup_date || 'N/A',
@@ -292,7 +306,7 @@
     }
 
     // ---------------------------
-    // Render Members Table (using new keys)
+    // Render Members View (using new keys)
     // ---------------------------
     function renderMembersView() {
         const container = document.createElement('div');
@@ -366,7 +380,6 @@
         container.appendChild(renderMembersTable());
         return container;
     }
-
 
     function renderMembersTable() {
         const headers = [
@@ -472,7 +485,6 @@
         return table;
     }
 
-
     function parseCardIndex(indexStr) {
         if (!indexStr) return [0, 0];
         const parts = indexStr.split('-');
@@ -508,7 +520,6 @@
         renderCurrentView();
     }
 
-
     // ---------------------------
     // Offers & Mapping
     // ---------------------------
@@ -523,7 +534,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch('https://functions.americanexpress.com/ReadCardAccountOffersList.v1', {
+            const res = await fetch(getUrl(OFFERS_API), {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -589,23 +600,6 @@
 
         return Object.values(offerInfoTable);
     }
-
-
-
-
-    function enrichOfferInfo(offerInfo, enrollmentStatus) {
-        return offerInfo.map(offer => {
-            // For each offer, compute eligible and enrolled cards based on the enrollmentStatus table
-            const eligibleCards = enrollmentStatus
-                .filter(enr => enr.offerId === offer.offerId && enr.status === "ELIGIBLE")
-                .map(enr => enr.display_account_number);
-            const enrolledCards = enrollmentStatus
-                .filter(enr => enr.offerId === offer.offerId && enr.status === "ENROLLED")
-                .map(enr => enr.display_account_number);
-            return { ...offer, eligibleCards, enrolledCards };
-        });
-    }
-
 
     function sortOfferData(key) {
         if (offerSortState.key === key) {
@@ -732,7 +726,6 @@
             win.appendChild(enrollAllBtn);
         }
 
-
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
         closeBtn.style.display = 'block';
@@ -828,7 +821,6 @@
                     }
                     td.textContent = cellValue;
                 } else if (headerItem.key === 'category' || headerItem.key === 'redemption_types') {
-                    // Convert so that only the first letter is capitalized.
                     if (cellValue && cellValue !== "N/A") {
                         const str = cellValue.toString().toLowerCase();
                         td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
@@ -836,7 +828,6 @@
                         td.textContent = 'N/A';
                     }
                 } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
-                    // Instead of only count, create a container with count and a "View" button.
                     const cards = Array.isArray(cellValue) ? cellValue : [];
                     const count = cards.length;
                     const containerDiv = document.createElement('div');
@@ -890,9 +881,6 @@
         return table;
     }
 
-
-
-
     // ---------------------------
     // Enrollment Functions
     // ---------------------------
@@ -907,7 +895,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch('https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1', {
+            const res = await fetch(getUrl(ENROLL_API), {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -935,7 +923,6 @@
     }
 
     async function enrollAllEligibleOffers() {
-        // Create a mapping of card numbers to account tokens for active accounts.
         const activeCardMap = {};
         accountData.forEach(acc => {
             if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
@@ -943,7 +930,6 @@
             }
         });
 
-        // Create tasks for enrolling offers that are eligible, excluding those with category DEFAULT.
         const tasks = [];
         for (const offer of offerData) {
             if (offer.category === "DEFAULT") {
@@ -970,9 +956,7 @@
             }
         }
 
-        // Run enrollment tasks in batches.
         await runInBatches(tasks, runInBatchesLimit);
-        // Refresh the offer mapping and update account counts.
         offerData = await buildOfferMapping();
         await updateAccountOfferCounts();
         await renderCurrentView();
@@ -1040,7 +1024,6 @@
         summaryRefreshBtn.style.cursor = 'pointer';
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
-        // Revised refresh: re-build and enrich offerData before re-rendering
         summaryRefreshBtn.addEventListener('click', async () => {
             offerData = await buildOfferMapping();
             await updateAccountOfferCounts();
@@ -1053,7 +1036,6 @@
 
         return summaryDiv;
     }
-
 
     // ---------------------------
     // Render Current View
@@ -1137,17 +1119,11 @@
 
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Directly assign the enriched offer data.
         offerData = await buildOfferMapping();
 
-        // Update account offer counts and render current view.
         await updateAccountOfferCounts();
         await renderCurrentView();
     }
 
     init();
-
-
 })();
-
-//terser AMaxOffer.js -o AMaxOffer_RLS0213.min.js --compress --mangle
