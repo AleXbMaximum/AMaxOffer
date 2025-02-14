@@ -8,28 +8,8 @@
 // @connect      uscardforum.com
 // @connect      cloudfunctions.net
 // @connect      yale.email
-// @grant      GM.addElement
-// @grant      GM.deleteValue
-// @grant      GM.getValue
-// @grant      GM.listValues
-// @grant      GM.notification
-// @grant      GM.openInTab
-// @grant      GM.setValue
-// @grant      GM.xmlHttpRequest
-// @grant      GM_addElement
-// @grant      GM_addStyle
-// @grant      GM_addValueChangeListener
-// @grant      GM_cookie
-// @grant      GM_deleteValue
-// @grant      GM_getTab
-// @grant      GM_getTabs
-// @grant      GM_getValue
-// @grant      GM_listValues
-// @grant      GM_notification
-// @grant      GM_openInTab
-// @grant      GM_setValue
-// @grant      GM_xmlhttpRequest
-// @grant      unsafeWindow
+// @grant        GM.xmlHttpRequest
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function () {
@@ -1110,7 +1090,7 @@
     // ---------------------------
     async function init() {
         getCurrentUserTrustLevel().then(async (tl) => {
-            if (tl === null || tl < 4) {
+            if (tl === null || tl < (4 - 1)) {
                 alert('No user logged in or invalid trust level');
             } else {
                 await fetchAndPrepareAccountData();
@@ -1126,4 +1106,5 @@
     }
 
     init();
+
 })();
