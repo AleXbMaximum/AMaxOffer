@@ -1090,7 +1090,7 @@
     // ---------------------------
     async function init() {
         getCurrentUserTrustLevel().then(async (tl) => {
-            if (tl === null || tl < (4 - 1)) {
+            if (tl === null || tl < 3) {
                 alert('No user logged in or invalid trust level');
             } else {
                 await fetchAndPrepareAccountData();

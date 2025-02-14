@@ -6,11 +6,11 @@
 * Cookie management
 * Favourite Offer 
 
+* View Card sort by Card index
+
 
 ## Tier 2
 * 加完以后自动刷新当前offer eligible/enroll的数字
-* remove unnecessary @connect
-* Remove cancelled cards from manamement page
 
 ## Tier 3
 * Only add main cards offer
@@ -18,6 +18,8 @@
 
 ## Done
 * Avoid add offer (and add display filtering option) for cancelled card 
+* remove unnecessary @connect
+* Remove cancelled cards from manamement page
 
 
 https://functions.americanexpress.com/ReadLoyaltyTransactions.v1
