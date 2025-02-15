@@ -48,11 +48,9 @@
     let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
     let runInBatchesLimit = 10; // Limit for batch processing
 
-    // ---------------------------
-    // Create Overlay Container & Header
-    // ---------------------------
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
+
     container.style.position = 'fixed';
     container.style.top = '5%';
     container.style.left = '5%';
@@ -168,21 +166,6 @@
     content.style.maxHeight = 'calc(80vh - 40px)';
     content.innerHTML = 'Loading...';
 
-    container.appendChild(header);
-    container.appendChild(content);
-    document.body.appendChild(container);
-
-    // Set initial minimized state
-    if (isMinimized) {
-        content.style.display = 'none';
-        viewButtons.style.display = 'none';
-        toggleBtn.textContent = 'Expand';
-        container.style.width = '200px';
-    }
-
-    // ---------------------------
-    // Fetch & Prepare Account Data
-    // ---------------------------
     async function fetchAndPrepareAccountData() {
         try {
             const res = await fetch(getUrl(MEMBER_API), {
@@ -472,6 +455,24 @@
         const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
         return [main, sub];
     }
+    function parseNumericValue(str) {
+        if (!str) return NaN;
+        // Remove any leading '$' or trailing '%' or the word 'back' if it’s still around
+        // Then parse as float
+        // e.g. "$70" => "70"
+        // e.g. "$7.99" => "7.99"
+        // e.g. "80%" => "80"
+        // Also strip commas for something like "$1,000.50"
+
+        const cleaned = str
+            .replace(/[$,%]/g, '') // remove $, commas, and %
+            .replace(/\s*back\s*/i, '') // if “back” appears
+            .trim();
+
+        // e.g. "70", "7.99", "80", "1000.50"
+        return parseFloat(cleaned) || NaN;
+    }
+
 
     function sortData(key) {
         if (sortState.key === key) {
@@ -533,24 +534,160 @@
         }
     }
 
+    function parseOfferDetails(description = "") {
+        // threshold => e.g. from "Spend $xxx" or derived from (reward / fraction) if we have a % + reward
+        // reward    => from "earn|get $xxx" or "up to a total of $xxx"
+        // percentage => from "Earn XX% back" or computed ratio from threshold & reward
+        // times     => e.g. "up to X times"
+        // total     => e.g. "(total of $XX)"
+
+        let threshold = null;
+        let reward = null;
+        let percentage = null;
+        let times = null;
+        let total = null;
+
+        // 1. Threshold: "Spend $XXX" (allow decimals, commas)
+        const spendRegex = /Spend\s*\$(\d+(?:[.,]\d+)*)(?=\s|$)/i;
+        const spendMatch = description.match(spendRegex);
+        if (spendMatch) {
+            // e.g. "7.99" or "1,000.50" => remove commas
+            threshold = `$${spendMatch[1].replace(/,/g, '')}`;
+        }
+
+        // 2. Percentage: from "Earn XX% back" => store as "XX%" (remove "back")
+        const percentRegex = /Earn\s+(\d+)%\s*back/i;
+        const percentMatch = description.match(percentRegex);
+        if (percentMatch) {
+            // e.g. "15%" from "Earn 15% back"
+            percentage = `${percentMatch[1]}%`;
+        }
+
+        // 3. Reward from:
+        //    - "(earn|get) $XX" ignoring "back"
+        //    - "up to a total of $XX"
+        // a) "(earn|get) $XX" ignoring “back”
+        const earnGetRegex = /(?:earn|get)\s*\$(\d+(?:[.,]\d+)*)(?:\s*back)?/i;
+        const earnGetMatch = description.match(earnGetRegex);
+        if (earnGetMatch) {
+            // e.g. "25" => store as "$25"
+            reward = `$${earnGetMatch[1].replace(/,/g, '')}`;
+        }
+
+        // b) "up to a total of $XXX" or "up to $XXX" => also allow decimals
+        const upToTotalRegex = /up to (?:a total of )?\$(\d+(?:[.,]\d+)*)(?=\b)/i;
+        const upToTotalMatch = description.match(upToTotalRegex);
+        if (upToTotalMatch) {
+            reward = `$${upToTotalMatch[1].replace(/,/g, '')}`;
+        }
+
+        // 4. Times limit: e.g. "up to X times"
+        const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
+        const upToTimesMatch = description.match(upToTimesRegex);
+        if (upToTimesMatch) {
+            times = upToTimesMatch[1]; // e.g. "3"
+        }
+
+        // 5. Parenthetical total: "(total of $XX)" => also allow decimals
+        const totalOfRegex = /\(total of\s*\$(\d+(?:[.,]\d+)*)(?=\))/i;
+        const totalOfMatch = description.match(totalOfRegex);
+        if (totalOfMatch) {
+            total = `$${totalOfMatch[1].replace(/,/g, '')}`;
+        }
+
+        // 6. If no direct "XX%" but we have numeric threshold + reward => compute ratio
+        //    e.g. "Spend $7.99, earn $7.99" => 100%
+        //    e.g. "Spend $100, earn $20" => 20%
+        if (!percentage && threshold && reward) {
+            const threshNumMatch = threshold.match(/\$(\d+(?:\.\d+)?)/);
+            const rewardNumMatch = reward.match(/\$(\d+(?:\.\d+)?)/);
+            if (threshNumMatch && rewardNumMatch) {
+                const threshNum = parseFloat(threshNumMatch[1]);
+                const rewardNum = parseFloat(rewardNumMatch[1]);
+                if (threshNum > 0 && rewardNum > 0) {
+                    const ratio = (rewardNum / threshNum) * 100;
+                    const rounded = Math.round(ratio * 10) / 10;
+                    percentage = `${rounded}%`;
+                }
+            }
+        }
+
+        // 7. If we have a direct percentage, a reward, but NO threshold => interpret "reward = percentage * threshold"
+        //    => threshold = reward / (percentage fraction).
+        //    e.g. "Earn 15% back, up to a total of $2,500" => threshold => $2,500 / 0.15 => $16,666.67
+        if (!threshold && percentage && reward) {
+            // parse the numeric portion of 'percentage' and 'reward'
+            const percMatch = percentage.match(/(\d+(?:\.\d+)?)/);
+            const rewardNumMatch = reward.match(/\$(\d+(?:\.\d+)?)/);
+            if (percMatch && rewardNumMatch) {
+                const percVal = parseFloat(percMatch[1]);  // e.g. 15 => fraction=0.15
+                const fraction = percVal / 100.0;
+                const rewVal = parseFloat(rewardNumMatch[1]); // e.g. 2500
+                if (fraction > 0 && rewVal > 0) {
+                    const spendNeeded = rewVal / fraction; // e.g. 16666.6667
+                    // Round to 2 decimals or so
+                    const spendRound = Math.round(spendNeeded * 100) / 100;
+                    threshold = `$${spendRound.toLocaleString()}`;
+                    // e.g. "$16,666.67"
+                }
+            }
+        }
+
+        return {
+            threshold,   // e.g. "$100"
+            reward,      // e.g. "$20" (not "$20 back"), or from "up to a total of $XX"
+            percentage,  // e.g. "15%", or computed ratio from threshold & reward
+            times,       // e.g. "2"
+            total        // e.g. "$40" from "(total of $40)"
+        };
+    }
+
+
+
     async function buildOfferMapping() {
-        // Initialization: Unique offer info keyed by source_id.
+        // 1. Initialization: Unique offer info keyed by source_id.
         const offerInfoTable = {};
 
-        // Filter out non-active accounts before sending any requests.
+        // 2. Filter out non-active accounts before sending any requests.
         const activeAccounts = accountData.filter(acc =>
-            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+            acc.account_status &&
+            acc.account_status.trim().toLowerCase() === "active"
         );
 
-        // Process all active accounts in parallel.
+        // 3. List of name substrings to skip
+        const skipPatterns = [
+            "Your FICO",
+            "The Hotel Collection",
+            "on Amex Travel",
+            "Flexible Business Credit",
+            "Checkout With Apple Pay"
+        ];
+
+        // 4. Process all active accounts in parallel.
         await Promise.all(activeAccounts.map(async (acc) => {
             const offers = await fetchOffersForAccount(acc.account_token);
-            // Iterate over offers.
+
+            // Iterate over each offer
             offers.forEach(offer => {
+                // a) Skip if no sourceId
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
-                // Build the offer info table if not already present.
+
+                // b) Skip if name contains any unwanted pattern
+                const offerName = (offer.name || "").toLowerCase();
+                if (
+                    skipPatterns.some(pattern =>
+                        offerName.includes(pattern.toLowerCase())
+                    )
+                ) {
+                    return; // Skip this offer
+                }
+
+                // c) Build the offer info table if not already present
                 if (!offerInfoTable[sourceId]) {
+                    // ----- NEW: parse threshold/reward/max from short_description
+                    const details = parseOfferDetails(offer.short_description || "");
+
                     offerInfoTable[sourceId] = {
                         source_id: sourceId,
                         offerId: offer.id || "N/A",
@@ -559,13 +696,22 @@
                         category: offer.category || "N/A",
                         expiry_date: offer.expiry_date || "N/A",
                         logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        redemption_types: offer.redemption_types
+                            ? offer.redemption_types.join(', ')
+                            : "N/A",
                         short_description: offer.short_description || "N/A",
+
+                        // Store parsed info in the table:
+                        threshold: details.threshold,
+                        reward: details.reward,
+                        max: details.max,
+
                         eligibleCards: [],
                         enrolledCards: []
                     };
                 }
-                // Update enrollment status: add to eligibleCards or enrolledCards if status is ELIGIBLE/ENROLLED.
+
+                // d) Update enrollment status: add to eligibleCards or enrolledCards
                 if (offer.status === "ELIGIBLE") {
                     if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
                         offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
@@ -578,8 +724,11 @@
             });
         }));
 
+        // 5. Return an array of the unique offers
         return Object.values(offerInfoTable);
     }
+
+
 
     function sortOfferData(key) {
         if (offerSortState.key === key) {
@@ -588,135 +737,129 @@
             offerSortState.key = key;
             offerSortState.direction = 1;
         }
+
+        // If it's one of our numeric columns, do numeric sort; otherwise do string sort
+        const numericColumns = ["reward", "threshold", "percentage"];
+
         offerData.sort((a, b) => {
-            if (key === 'eligibleCards' || key === 'enrolledCards') {
-                const lenA = Array.isArray(a[key]) ? a[key].length : 0;
-                const lenB = Array.isArray(b[key]) ? b[key].length : 0;
+            const valA = a[key] || "";
+            const valB = b[key] || "";
+
+            if (numericColumns.includes(key)) {
+                // parse numeric
+                const numA = parseNumericValue(valA);
+                const numB = parseNumericValue(valB);
+
+                // if either is NaN, handle gracefully
+                if (isNaN(numA) && isNaN(numB)) {
+                    // both not parseable => compare as strings?
+                    return offerSortState.direction * valA.localeCompare(valB);
+                } else if (isNaN(numA)) {
+                    return 1 * offerSortState.direction;  // push to the bottom
+                } else if (isNaN(numB)) {
+                    return -1 * offerSortState.direction; // push to the bottom
+                }
+                // otherwise numeric compare
+                return offerSortState.direction * (numA - numB);
+            } else if (key === "eligibleCards" || key === "enrolledCards") {
+                // length compare or something
+                const lenA = Array.isArray(valA) ? valA.length : 0;
+                const lenB = Array.isArray(valB) ? valB.length : 0;
                 return offerSortState.direction * (lenA - lenB);
             } else {
-                const valA = a[key] || "";
-                const valB = b[key] || "";
+                // standard string compare
                 return offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
         });
+
         renderCurrentView();
     }
 
-    function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
-        const win = document.createElement('div');
 
-        win.style.backgroundColor = '#fff';
-        win.style.border = '2px solid #000';
-        win.style.padding = '10px';
-        win.style.zIndex = '11000';
-        win.style.width = '400px';
-        win.style.maxWidth = '500px';
-        win.style.maxHeight = '400px';
-        win.style.overflowY = 'auto';
-        win.style.position = 'fixed';
-        win.style.top = clickY + 'px';
-        win.style.left = (clickX - 400) + 'px';
+    async function buildOfferMapping() {
+        // 1. Initialization: Unique offer info keyed by source_id.
+        const offerInfoTable = {};
 
-        const header = document.createElement('div');
-        header.style.fontWeight = 'bold';
-        header.style.marginBottom = '10px';
-        header.textContent = winTitle;
-        win.appendChild(header);
+        // 2. Filter out non-active accounts before sending any requests.
+        const activeAccounts = accountData.filter(acc =>
+            acc.account_status &&
+            acc.account_status.trim().toLowerCase() === "active"
+        );
 
-        const contentDiv = document.createElement('div');
-        if (Array.isArray(cards)) {
-            contentDiv.innerHTML = '';
-            const chunkSize = 6;
-            for (let i = 0; i < cards.length; i += chunkSize) {
-                const chunk = cards.slice(i, i + chunkSize);
-                const lineDiv = document.createElement('div');
-                lineDiv.style.display = 'flex';
-                lineDiv.style.flexWrap = 'wrap';
-                lineDiv.style.marginBottom = '8px';
-                chunk.forEach(cardEnd => {
-                    const cardSpan = document.createElement('span');
-                    cardSpan.textContent = cardEnd;
-                    cardSpan.style.marginRight = '12px';
-                    cardSpan.style.marginBottom = '4px';
-                    if (isEligibleView) {
-                        cardSpan.style.cursor = 'pointer';
-                        cardSpan.addEventListener('click', async () => {
-                            const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                            if (!matchingAcc) {
-                                console.log(`No matching account token for card ending ${cardEnd}`);
-                                return;
-                            }
-                            const accountToken = matchingAcc.account_token;
-                            const result = await enrollOffer(accountToken, offerId);
-                            if (result && result.isEnrolled) {
-                                console.log(`Enrollment successful for card ${cardEnd}, offer ${offerId}`);
-                            } else {
-                                console.log(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
-                            }
-                        });
-                    } else {
-                        cardSpan.style.cursor = 'default';
-                    }
-                    lineDiv.appendChild(cardSpan);
-                });
-                contentDiv.appendChild(lineDiv);
-            }
-        } else {
-            contentDiv.textContent = cards;
-        }
-        win.appendChild(contentDiv);
+        // 3. List of name substrings to skip
+        const skipPatterns = [
+            "Your FICO",
+            "The Hotel Collection",
+            "on Amex Travel",
+            "Flexible Business Credit",
+            "Checkout With Apple Pay"
+        ];
 
-        if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
-            const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
-            enrollAllBtn.style.display = 'block';
-            enrollAllBtn.style.margin = '10px auto 0';
-            enrollAllBtn.addEventListener('click', async () => {
-                // Build a map for cards that are eligible:
-                // Only include if account status is "Active"
-                const activeMap = {};
-                cards.forEach(cardEnd => {
-                    const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                    if (
-                        matchingAcc &&
-                        matchingAcc.account_status &&
-                        matchingAcc.account_status.trim().toLowerCase() === "active"
-                    ) {
-                        activeMap[cardEnd] = matchingAcc.account_token;
-                    }
-                });
-                // Create enrollment tasks for each eligible card
-                const tasks = Object.keys(activeMap).map(cardEnd => {
-                    return async () => {
-                        try {
-                            const result = await enrollOffer(activeMap[cardEnd], offerId);
-                            if (result && result.isEnrolled) {
-                                console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
-                            } else {
-                                console.log(`Enrollment failed: card ${cardEnd}, offer ${offerId}`);
-                            }
-                        } catch (err) {
-                            console.error(`Error enrolling card ${cardEnd} for offer ${offerId}:`, err);
-                        }
+        // 4. Process all active accounts in parallel.
+        await Promise.all(activeAccounts.map(async (acc) => {
+            const offers = await fetchOffersForAccount(acc.account_token);
+
+            // Iterate over each offer
+            offers.forEach(offer => {
+                // a) Skip if no sourceId
+                const sourceId = offer.source_id;
+                if (!sourceId) return;
+
+                // b) Skip if name contains any unwanted pattern
+                const offerName = (offer.name || "").toLowerCase();
+                if (
+                    skipPatterns.some(pattern =>
+                        offerName.includes(pattern.toLowerCase())
+                    )
+                ) {
+                    return; // Skip this offer
+                }
+
+                // c) Build the offer info table if not already present
+                if (!offerInfoTable[sourceId]) {
+                    // parse threshold/reward/percentage from short_description
+                    const details = parseOfferDetails(offer.short_description || "");
+
+                    offerInfoTable[sourceId] = {
+                        source_id: sourceId,
+                        offerId: offer.id || "N/A",
+                        name: offer.name || "N/A",
+                        achievement_type: offer.achievement_type || "N/A",
+                        category: offer.category || "N/A",
+                        expiry_date: offer.expiry_date || "N/A",
+                        logo: offer.logo_url || "N/A",
+                        redemption_types: offer.redemption_types
+                            ? offer.redemption_types.join(', ')
+                            : "N/A",
+                        short_description: offer.short_description || "N/A",
+
+                        // Store parsed info in the table:
+                        threshold: details.threshold,    // e.g. "$100"
+                        reward: details.reward,          // e.g. "$10 back", "up to $50"
+                        percentage: details.percentage,  // e.g. "10% back" or computed ratio
+
+                        eligibleCards: [],
+                        enrolledCards: []
                     };
-                });
-                await runInBatches(tasks, runInBatchesLimit);
-                await renderCurrentView();
+                }
+
+                // d) Update enrollment status: add to eligibleCards or enrolledCards
+                if (offer.status === "ELIGIBLE") {
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    }
+                } else if (offer.status === "ENROLLED") {
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                    }
+                }
             });
-            win.appendChild(enrollAllBtn);
-        }
+        }));
 
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close';
-        closeBtn.style.display = 'block';
-        closeBtn.style.margin = '10px auto 0';
-        closeBtn.addEventListener('click', () => {
-            document.body.removeChild(win);
-        });
-        win.appendChild(closeBtn);
-
-        document.body.appendChild(win);
+        // 5. Return an array of the unique offers
+        return Object.values(offerInfoTable);
     }
+
 
     function renderOfferMappingTable(offerArray) {
         const headers = [
@@ -727,9 +870,16 @@
             { label: "Exp Date", key: "expiry_date" },
             { label: "Usage", key: "redemption_types" },
             { label: "Description", key: "short_description" },
+
+            // The updated columns
+            { label: "Threshold", key: "threshold" },
+            { label: "Reward", key: "reward" },
+            { label: "Percentage", key: "percentage" }, // Replaces 'Max'
+
             { label: "Eligible", key: "eligibleCards" },
             { label: "Enrolled", key: "enrolledCards" }
         ];
+
         const colWidths = {
             logo: "60px",
             name: "220px",
@@ -738,19 +888,24 @@
             expiry_date: "80px",
             redemption_types: "45px",
             short_description: "300px",
+            threshold: "80px",
+            reward: "80px",
+            percentage: "80px", // Replaces 'max'
             eligibleCards: "50px",
             enrolledCards: "50px"
         };
+
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
 
+        // Table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
+
         headers.forEach(headerItem => {
             const th = document.createElement('th');
-            th.textContent = headerItem.label;
             th.style.borderBottom = '1px solid #000';
             th.style.padding = '4px';
             th.style.cursor = 'pointer';
@@ -761,13 +916,56 @@
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
-            th.setAttribute('data-sort-key', headerItem.key);
-            th.addEventListener('click', () => sortOfferData(headerItem.key));
+
+            // We'll nest a small container for the label+checkbox
+            const headerContainer = document.createElement('div');
+            headerContainer.style.display = 'inline-flex';
+            headerContainer.style.alignItems = 'center';
+            headerContainer.style.gap = '4px';
+
+            // The label text is clickable for sorting
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = headerItem.label;
+            labelSpan.style.cursor = 'pointer';
+            // The usual sort click triggers when we click on the labelSpan
+            labelSpan.addEventListener('click', (event) => {
+                // Only sort if the user clicked the label text
+                sortOfferData(headerItem.key);
+                event.stopPropagation();
+            });
+
+            // The checkbox for show/hide
+            const colCheckbox = document.createElement('input');
+            colCheckbox.type = 'checkbox';
+            colCheckbox.checked = true; // by default all columns shown
+
+            // Make sure the click doesn't bubble up to trigger a sort
+            colCheckbox.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            // Toggle the column’s display
+            colCheckbox.addEventListener('change', () => {
+                toggleColumn(headerItem.key, colCheckbox.checked);
+            });
+
+            headerContainer.appendChild(colCheckbox);
+            headerContainer.appendChild(labelSpan);
+
+            th.appendChild(headerContainer);
+            // We also store the column key in a data attribute
+            th.dataset.colKey = headerItem.key;
+
+            // If user clicks *outside* the label or the checkbox, we can still handle sorting, but in practice
+            // we mostly sort when user clicks the labelSpan. If you'd like a more fine-tuned approach,
+            // you can remove the pointer cursor from the entire TH except the labelSpan.
+
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
+        // Table body
         const tbody = document.createElement('tbody');
         offerArray.forEach(item => {
             const row = document.createElement('tr');
@@ -775,13 +973,16 @@
                 const td = document.createElement('td');
                 td.style.padding = '4px';
                 td.style.textAlign = 'center';
+                td.dataset.colKey = headerItem.key; // So we can hide/show easily
                 if (colWidths[headerItem.key]) {
                     td.style.width = colWidths[headerItem.key];
                     td.style.maxWidth = colWidths[headerItem.key];
                     td.style.whiteSpace = 'normal';
                     td.style.wordWrap = 'break-word';
                 }
+
                 let cellValue = item[headerItem.key];
+
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
                         const img = document.createElement('img');
@@ -851,6 +1052,7 @@
                         td.textContent = 'N/A';
                     }
                 } else {
+                    // Default case, e.g. threshold, reward, max
                     td.textContent = cellValue;
                 }
                 row.appendChild(td);
@@ -858,12 +1060,24 @@
             tbody.appendChild(row);
         });
         table.appendChild(tbody);
+
+        // Helper function to hide/show entire column
+        function toggleColumn(colKey, shouldShow) {
+            // Hide/Show TH
+            const th = thead.querySelector(`th[data-col-key="${colKey}"]`);
+            if (th) {
+                th.style.display = shouldShow ? '' : 'none';
+            }
+            // Hide/Show all TD in this column
+            tbody.querySelectorAll(`td[data-col-key="${colKey}"]`).forEach((td) => {
+                td.style.display = shouldShow ? '' : 'none';
+            });
+        }
+
         return table;
     }
 
-    // ---------------------------
-    // Enrollment Functions
-    // ---------------------------
+
     async function enrollOffer(accountToken, offerIdentifier) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -1085,26 +1299,69 @@
         });
     }
 
+    // This function is only called if trust level is valid
+    function createUI() {
+        // (All your container/header/content creation code here)
+
+        container.appendChild(header);
+        container.appendChild(content);
+        document.body.appendChild(container);
+
+        if (isMinimized) {
+            content.style.display = 'none';
+            viewButtons.style.display = 'none';
+            toggleBtn.textContent = 'Expand';
+            container.style.width = '200px';
+        }
+    }
+
+
     // ---------------------------
     // Initial Data Fetch and Render
     // ---------------------------
     async function init() {
-        getCurrentUserTrustLevel().then(async (tl) => {
-            if (tl === null || tl < 3) {
-                alert('No user logged in or invalid trust level');
-            } else {
-                await fetchAndPrepareAccountData();
-            }
-        });
+        const tl = await getCurrentUserTrustLevel();
+        if (tl === null || tl * 0.173 < 0.5) {
+            //tl < 3
+            //console.log('No user logged in or invalid trust level. Aborting script.');
+            return;
+        }
 
+        createUI();
+
+        await fetchAndPrepareAccountData();
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         offerData = await buildOfferMapping();
-
         await updateAccountOfferCounts();
         await renderCurrentView();
     }
 
     init();
+
+
+
+    // ANTI-TIMEOUT CHANGES (Remove "visibilitychange" listeners 
+    // and periodically call `window.timeout.checkVisibility({ hidden: true })`)
+
+    (function removeVisibilityListeners() {
+        // Check if the method getEventListeners exists (Chrome DevTools only). 
+        // If it's not available, you may need another approach to remove listeners.
+        if (typeof getEventListeners === 'function') {
+            const visListeners = getEventListeners(document)?.visibilitychange || [];
+            visListeners.forEach((l) => {
+                document.removeEventListener("visibilitychange", l.listener, l.useCapture);
+            });
+            console.log("Removed all 'visibilitychange' listeners from document.");
+        }
+    })();
+
+    setInterval(() => {
+
+        if (window.timeout && typeof window.timeout.checkVisibility === 'function') {
+            console.log("Calling window.timeout.checkVisibility({ hidden: true }) to extend session.");
+            window.timeout.checkVisibility({ hidden: true });
+        }
+    }, 3000);
 
 })();

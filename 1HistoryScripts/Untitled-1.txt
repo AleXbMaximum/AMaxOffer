@@ -1,0 +1,33 @@
+
+// ANTI-TIMEOUT CHANGES (Remove "visibilitychange" listeners 
+// and periodically call `window.timeout.checkVisibility({ hidden: true })`)
+
+(function removeVisibilityListeners() {
+    // Check if the method getEventListeners exists (Chrome DevTools only). 
+    // If it's not available, you may need another approach to remove listeners.
+    if (typeof getEventListeners === 'function') {
+        const visListeners = getEventListeners(document)?.visibilitychange || [];
+        visListeners.forEach((l) => {
+            document.removeEventListener("visibilitychange", l.listener, l.useCapture);
+        });
+        console.log("Removed all 'visibilitychange' listeners from document.");
+    }
+})();
+
+setInterval(() => {
+
+    if (window.timeout && typeof window.timeout.checkVisibility === 'function') {
+        console.log("Calling window.timeout.checkVisibility({ hidden: true }) to extend session.");
+        window.timeout.checkVisibility({ hidden: true });
+    }
+}, 3000);
+
+
+https://www.uscardforum.com/t/topic/354028/107
+
+我的做法是去掉所有监听切 tab 的事件
+
+getEventListeners(document)["visibilitychange"].map((l) => document.removeEventListener("visibilitychange", l.listener, l.useCapture))
+然后每半分钟触发一下 amex 切 tab 的代码（会自动延长 session）
+
+window.timeout.checkVisibility({ hidden: true })

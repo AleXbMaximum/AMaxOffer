@@ -7,6 +7,7 @@
 * Favourite Offer 
 
 * View Card sort by Card index
+* 更改验证到加载之前
 
 
 ## Tier 2
