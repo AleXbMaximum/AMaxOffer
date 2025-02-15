@@ -173,11 +173,15 @@
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
             });
-            if (!res.ok) throw new Error('Failed to fetch account data');
+            if (!res.ok) {
+                console.error('Failed to fetch account data (status not OK)');
+                return false; // <-- indicate failure
+            }
 
             const data = await res.json();
             if (!data || !Array.isArray(data.accounts)) {
                 throw new Error('Invalid account data received');
+                return false; // <-- indicate failure
             }
             accountData = [];
             let mainCounter = 1;
@@ -230,10 +234,12 @@
             currentView = 'summary';
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
+            return true; // <-- indicate success
 
         } catch (error) {
             console.error('Error fetching account data:', error);
             content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
+            return false; // <-- indicate failure
         }
     }
 
@@ -1076,7 +1082,115 @@
 
         return table;
     }
+    function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
+        const win = document.createElement('div');
 
+        //win.style.transform = 'translate(100%, 0)';
+        win.style.backgroundColor = '#fff';
+        win.style.border = '2px solid #000';
+        win.style.padding = '10px';
+        win.style.zIndex = '11000';
+        win.style.width = '400px';
+        win.style.maxWidth = '500px';
+        win.style.maxHeight = '400px';
+        win.style.overflowY = 'auto';
+
+        win.style.position = 'fixed';
+        // Use lowercase "left" here
+        win.style.top = clickY + 'px';
+        win.style.left = (clickX - 400) + 'px';
+
+
+        const header = document.createElement('div');
+        header.style.fontWeight = 'bold';
+        header.style.marginBottom = '10px';
+        header.textContent = winTitle;
+        win.appendChild(header);
+
+        const contentDiv = document.createElement('div');
+        if (Array.isArray(cards)) {
+            contentDiv.innerHTML = '';
+            const chunkSize = 6;
+            for (let i = 0; i < cards.length; i += chunkSize) {
+                const chunk = cards.slice(i, i + chunkSize);
+                const lineDiv = document.createElement('div');
+                lineDiv.style.display = 'flex';
+                lineDiv.style.flexWrap = 'wrap';
+                lineDiv.style.marginBottom = '8px';
+                chunk.forEach(cardEnd => {
+                    const cardSpan = document.createElement('span');
+                    cardSpan.textContent = cardEnd;
+                    cardSpan.style.marginRight = '12px';
+                    cardSpan.style.marginBottom = '4px';
+                    if (isEligibleView) {
+                        cardSpan.style.cursor = 'pointer';
+                        cardSpan.addEventListener('click', async () => {
+                            const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
+                            if (!matchingAcc) {
+                                alert(`No matching account token for card ending ${cardEnd}`);
+                                return;
+                            }
+                            const accountToken = matchingAcc.accountToken;
+                            const result = await enrollOffer(accountToken, offerId);
+                            if (result && result.isEnrolled) {
+                                alert(`Enrollment successful for card ${cardEnd}, offer ${offerId}`);
+                            } else {
+                                alert(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
+                            }
+
+                        });
+                    } else {
+                        cardSpan.style.cursor = 'default';
+                    }
+                    lineDiv.appendChild(cardSpan);
+                });
+                contentDiv.appendChild(lineDiv);
+            }
+        } else {
+            contentDiv.textContent = cards;
+        }
+        win.appendChild(contentDiv);
+
+        // Enroll All Cards button (Eligible only)
+        if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
+            const enrollAllBtn = document.createElement('button');
+            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
+            enrollAllBtn.style.display = 'block';
+            enrollAllBtn.style.margin = '10px auto 0';
+            enrollAllBtn.addEventListener('click', async () => {
+                const tasks = cards.map(cardEnd => {
+                    return async () => {
+                        const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
+                        if (!matchingAcc) {
+                            console.log(`No matching account token for card ending ${cardEnd}`);
+                            return;
+                        }
+                        const accountToken = matchingAcc.accountToken;
+                        const result = await enrollOffer(accountToken, offerId);
+                        if (result && result.isEnrolled) {
+                            console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
+                        } else {
+                            console.log(`Enrollment failed: card ${cardEnd}, offer ${offerId}`);
+                        }
+                    };
+                });
+                await runInBatches(tasks, 6);
+                alert(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
+            });
+            win.appendChild(enrollAllBtn);
+        }
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.display = 'block';
+        closeBtn.style.margin = '10px auto 0';
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(win);
+        });
+        win.appendChild(closeBtn);
+
+        document.body.appendChild(win);
+    }
 
     async function enrollOffer(accountToken, offerIdentifier) {
         const payload = {
@@ -1329,12 +1443,33 @@
 
         createUI();
 
-        await fetchAndPrepareAccountData();
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const fetch_status = await fetchAndPrepareAccountData();
+        //console.log("Account data fetch success:", fetch_status);
 
         offerData = await buildOfferMapping();
         await updateAccountOfferCounts();
         await renderCurrentView();
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        // removeVisibilityListeners();
+        //
+        // console.log("Setting up periodic checkVisibility calls...");
+        // // log window.timeout && typeof window.timeout.checkVisibility === 'function'
+        // console.log("window.timeout:", window.timeout);
+        // console.log("typeof window.timeout.checkVisibility:", typeof window.timeout.checkVisibility);
+        // setInterval(() => {
+        //     if (window.AmexSession && typeof window.AmexSession.extend === 'function') {
+        //         console.log("Calling window.AmexSession.extend() to reset the session warning timer.");
+        //         window.AmexSession.extend();
+        //     } else {
+        //         console.log("window.AmexSession.extend is unavailable; dispatching a mousemove event as fallback.");
+        //         const event = new MouseEvent("mousemove", {
+        //             bubbles: true,
+        //             cancelable: true,
+        //             view: window
+        //         });
+        //         document.dispatchEvent(event);
+        //     }
+        // }, 3000);
     }
 
     init();
@@ -1344,26 +1479,32 @@
     // ANTI-TIMEOUT CHANGES (Remove "visibilitychange" listeners 
     // and periodically call `window.timeout.checkVisibility({ hidden: true })`)
 
-    (async function removeVisibilityListeners() {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        console.log("Removing visibility listeners...");
-        // Check if the method getEventListeners exists (Chrome DevTools only). 
-        // If it's not available, you may need another approach to remove listeners.
-        if (typeof getEventListeners === 'function') {
-            const visListeners = getEventListeners(document)?.visibilitychange || [];
-            visListeners.forEach((l) => {
-                document.removeEventListener("visibilitychange", l.listener, l.useCapture);
-            });
-            console.log("Removed all 'visibilitychange' listeners from document.");
-        }
-    })();
+    function removeVisibilityListeners() {
+        console.log("Overriding visibility properties...");
 
-    setInterval(() => {
+        // 1. Override document.hidden
+        Object.defineProperty(document, "hidden", {
+            configurable: true, // so future scripts can redefine if needed
+            enumerable: true,
+            get: function () {
+                return false; // Always not hidden
+            }
+        });
 
-        if (window.timeout && typeof window.timeout.checkVisibility === 'function') {
-            console.log("Calling window.timeout.checkVisibility({ hidden: true }) to extend session.");
-            window.timeout.checkVisibility({ hidden: true });
-        }
-    }, 3000);
+        // 2. Override document.visibilityState
+        Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            enumerable: true,
+            get: function () {
+                return "visible"; // Always 'visible'
+            }
+        });
+        console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
+
+    };
+
+
+
+
 
 })();
