@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.2 Revised
+// @version      1.3 Rlease Date 2-14-2025
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
@@ -1344,7 +1344,9 @@
     // ANTI-TIMEOUT CHANGES (Remove "visibilitychange" listeners 
     // and periodically call `window.timeout.checkVisibility({ hidden: true })`)
 
-    (function removeVisibilityListeners() {
+    (async function removeVisibilityListeners() {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        console.log("Removing visibility listeners...");
         // Check if the method getEventListeners exists (Chrome DevTools only). 
         // If it's not available, you may need another approach to remove listeners.
         if (typeof getEventListeners === 'function') {

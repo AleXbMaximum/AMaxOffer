@@ -1,1 +1,1 @@
-terser "AMaxOffer021401.js" -o Released.min.js --compress --mangle
+terser "AMaxOffer.js" -o AMaxOffer_released.min.js --compress --mangle
