@@ -541,200 +541,151 @@
     }
 
     function parseOfferDetails(description = "") {
-        // threshold => e.g. from "Spend $xxx" or derived from (reward / fraction) if we have a % + reward
-        // reward    => from "earn|get $xxx" or "up to a total of $xxx"
-        // percentage => from "Earn XX% back" or computed ratio from threshold & reward
-        // times     => e.g. "up to X times"
-        // total     => e.g. "(total of $XX)"
+        // Helpers for conversion
+        const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
+        const toMoneyString = (num) => {
+            if (num == null || isNaN(num)) return null;
+            return `$${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+        };
 
+        // We'll store numeric forms here
+        let thresholdVal = null;
+        let rewardVal = null;
+        let percentageVal = null;
+
+        // For returning final results (as strings)
         let threshold = null;
         let reward = null;
         let percentage = null;
+
+        // Additional fields
         let times = null;
         let total = null;
 
-        // 1. Threshold: "Spend $XXX" (allow decimals, commas)
-        const spendRegex = /Spend\s*\$(\d+(?:[.,]\d+)*)(?=\s|$)/i;
-        const spendMatch = description.match(spendRegex);
-        if (spendMatch) {
-            // e.g. "7.99" or "1,000.50" => remove commas
-            threshold = `$${spendMatch[1].replace(/,/g, '')}`;
+        // 1) Parse threshold: e.g. "Spend $500"
+        {
+            const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
+            const spendMatch = description.match(spendRegex);
+            if (spendMatch) {
+                thresholdVal = parseDollar(spendMatch[1]);
+            }
         }
 
-        // 2. Percentage: from "Earn XX% back" => store as "XX%" (remove "back")
-        const percentRegex = /Earn\s+(\d+)%\s*back/i;
-        const percentMatch = description.match(percentRegex);
-        if (percentMatch) {
-            // e.g. "15%" from "Earn 15% back"
-            percentage = `${percentMatch[1]}%`;
+        // 2) Parse explicit percentage offers: e.g. "Earn 10% back" or "Get 5% back"
+        {
+            const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
+            const percentMatch = description.match(percentRegex);
+            if (percentMatch) {
+                percentageVal = parseFloat(percentMatch[1]);
+            }
         }
 
-        // 3. Reward from:
-        //    - "(earn|get) $XX" ignoring "back"
-        //    - "up to a total of $XX"
-        // a) "(earn|get) $XX" ignoring “back”
-        const earnGetRegex = /(?:earn|get)\s*\$(\d+(?:[.,]\d+)*)(?:\s*back)?/i;
-        const earnGetMatch = description.match(earnGetRegex);
-        if (earnGetMatch) {
-            // e.g. "25" => store as "$25"
-            reward = `$${earnGetMatch[1].replace(/,/g, '')}`;
-        }
-
-        // b) "up to a total of $XXX" or "up to $XXX" => also allow decimals
-        const upToTotalRegex = /up to (?:a total of )?\$(\d+(?:[.,]\d+)*)(?=\b)/i;
-        const upToTotalMatch = description.match(upToTotalRegex);
-        if (upToTotalMatch) {
-            reward = `$${upToTotalMatch[1].replace(/,/g, '')}`;
-        }
-
-        // 4. Times limit: e.g. "up to X times"
-        const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
-        const upToTimesMatch = description.match(upToTimesRegex);
-        if (upToTimesMatch) {
-            times = upToTimesMatch[1]; // e.g. "3"
-        }
-
-        // 5. Parenthetical total: "(total of $XX)" => also allow decimals
-        const totalOfRegex = /\(total of\s*\$(\d+(?:[.,]\d+)*)(?=\))/i;
-        const totalOfMatch = description.match(totalOfRegex);
-        if (totalOfMatch) {
-            total = `$${totalOfMatch[1].replace(/,/g, '')}`;
-        }
-
-        // 6. If no direct "XX%" but we have numeric threshold + reward => compute ratio
-        //    e.g. "Spend $7.99, earn $7.99" => 100%
-        //    e.g. "Spend $100, earn $20" => 20%
-        if (!percentage && threshold && reward) {
-            const threshNumMatch = threshold.match(/\$(\d+(?:\.\d+)?)/);
-            const rewardNumMatch = reward.match(/\$(\d+(?:\.\d+)?)/);
-            if (threshNumMatch && rewardNumMatch) {
-                const threshNum = parseFloat(threshNumMatch[1]);
-                const rewardNum = parseFloat(rewardNumMatch[1]);
-                if (threshNum > 0 && rewardNum > 0) {
-                    const ratio = (rewardNum / threshNum) * 100;
-                    const rounded = Math.round(ratio * 10) / 10;
-                    percentage = `${rounded}%`;
+        // 2A) Parse Membership Rewards® points per dollar (interpreted as a percentage)
+        //     e.g. "Earn +1 Membership Rewards® point per eligible dollar spent"
+        {
+            const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
+            const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
+            if (mrPointsPerDollarMatch) {
+                const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
+                if (!percentageVal) {
+                    percentageVal = mrPointsEachDollar;
+                }
+                // "up to X points" in this context sets reward limit in dollars (each point = 1 cent)
+                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*points/i;
+                const mrPointsCapMatch = description.match(mrPointsCapRegex);
+                if (mrPointsCapMatch) {
+                    const capVal = parseDollar(mrPointsCapMatch[1]);
+                    rewardVal = capVal * 0.01;
                 }
             }
         }
 
-        // 7. If we have a direct percentage, a reward, but NO threshold => interpret "reward = percentage * threshold"
-        //    => threshold = reward / (percentage fraction).
-        //    e.g. "Earn 15% back, up to a total of $2,500" => threshold => $2,500 / 0.15 => $16,666.67
-        if (!threshold && percentage && reward) {
-            // parse the numeric portion of 'percentage' and 'reward'
-            const percMatch = percentage.match(/(\d+(?:\.\d+)?)/);
-            const rewardNumMatch = reward.match(/\$(\d+(?:\.\d+)?)/);
-            if (percMatch && rewardNumMatch) {
-                const percVal = parseFloat(percMatch[1]);  // e.g. 15 => fraction=0.15
-                const fraction = percVal / 100.0;
-                const rewVal = parseFloat(rewardNumMatch[1]); // e.g. 2500
-                if (fraction > 0 && rewVal > 0) {
-                    const spendNeeded = rewVal / fraction; // e.g. 16666.6667
-                    // Round to 2 decimals or so
-                    const spendRound = Math.round(spendNeeded * 100) / 100;
-                    threshold = `$${spendRound.toLocaleString()}`;
-                    // e.g. "$16,666.67"
-                }
+        // 3) Parse reward amounts given as dollars, e.g. "earn $XX" or "up to a total of $XX"
+        {
+            // a) (earn|get) $XX – ignoring "back"
+            const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
+            const earnGetMatch = description.match(earnGetRegex);
+            if (earnGetMatch) {
+                rewardVal = parseDollar(earnGetMatch[1]);
             }
+            // b) "up to a total of $XX" or "up to $XX"
+            const upToTotalRegex = /up to (?:a total of )?\$(\d[\d,\.]*)/i;
+            const upToTotalMatch = description.match(upToTotalRegex);
+            if (upToTotalMatch) {
+                rewardVal = parseDollar(upToTotalMatch[1]);
+            }
+        }
+
+        // 3A) Parse reward amounts given as a flat number of points (without a "per" clause)
+        //     e.g. "earn 10,000 Membership Rewards® points"
+        {
+            const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
+            const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
+            if (mrPointsRewardMatch) {
+                const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
+                rewardVal = points * 0.01;
+            }
+        }
+
+        // 4) Parse times limit: e.g. "up to X times"
+        {
+            const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
+            const upToTimesMatch = description.match(upToTimesRegex);
+            if (upToTimesMatch) {
+                times = upToTimesMatch[1];
+            }
+        }
+
+        // 5) Parse parenthetical total: e.g. "(total of $XX)"
+        {
+            const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
+            const totalOfMatch = description.match(totalOfRegex);
+            if (totalOfMatch) {
+                total = toMoneyString(parseDollar(totalOfMatch[1]));
+            }
+        }
+
+        // Determine which values are available
+        const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
+        const haveReward = (rewardVal != null && !isNaN(rewardVal));
+        const havePercent = (percentageVal != null && !isNaN(percentageVal));
+
+        // Compute the missing value based on the available two:
+        if (haveThreshold && haveReward && !havePercent && thresholdVal > 0) {
+            // Compute percentage = (reward / threshold) * 100
+            percentageVal = (rewardVal / thresholdVal) * 100;
+        } else if (haveThreshold && havePercent && !haveReward) {
+            // Compute reward = threshold * (percentage / 100)
+            rewardVal = thresholdVal * (percentageVal / 100);
+        } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
+            // Compute threshold = reward / (percentage / 100)
+            thresholdVal = rewardVal / (percentageVal / 100);
+        } else if (havePercent && !haveThreshold && !haveReward) {
+            // If only a percentage is provided, default threshold of $10,000
+            thresholdVal = 10000;
+            rewardVal = thresholdVal * (percentageVal / 100);
+        }
+
+        // Convert numeric values back to formatted strings
+        if (thresholdVal != null) {
+            threshold = toMoneyString(thresholdVal);
+        }
+        if (rewardVal != null) {
+            reward = toMoneyString(rewardVal);
+        }
+        if (percentageVal != null) {
+            const rounded = Math.round(percentageVal * 10) / 10;
+            percentage = `${rounded}%`;
         }
 
         return {
-            threshold,   // e.g. "$100"
-            reward,      // e.g. "$20" (not "$20 back"), or from "up to a total of $XX"
-            percentage,  // e.g. "15%", or computed ratio from threshold & reward
-            times,       // e.g. "2"
-            total        // e.g. "$40" from "(total of $40)"
+            threshold,   // e.g., "$500.00"
+            reward,      // e.g., "$100.00"
+            percentage,  // e.g., "20%"
+            times,       // e.g., null
+            total        // e.g., null
         };
     }
-
-
-
-    async function buildOfferMapping() {
-        // 1. Initialization: Unique offer info keyed by source_id.
-        const offerInfoTable = {};
-
-        // 2. Filter out non-active accounts before sending any requests.
-        const activeAccounts = accountData.filter(acc =>
-            acc.account_status &&
-            acc.account_status.trim().toLowerCase() === "active"
-        );
-
-        // 3. List of name substrings to skip
-        const skipPatterns = [
-            "Your FICO",
-            "The Hotel Collection",
-            "on Amex Travel",
-            "Flexible Business Credit",
-            "Checkout With Apple Pay"
-        ];
-
-        // 4. Process all active accounts in parallel.
-        await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.account_token);
-
-            // Iterate over each offer
-            offers.forEach(offer => {
-                // a) Skip if no sourceId
-                const sourceId = offer.source_id;
-                if (!sourceId) return;
-
-                // b) Skip if name contains any unwanted pattern
-                const offerName = (offer.name || "").toLowerCase();
-                if (
-                    skipPatterns.some(pattern =>
-                        offerName.includes(pattern.toLowerCase())
-                    )
-                ) {
-                    return; // Skip this offer
-                }
-
-                // c) Build the offer info table if not already present
-                if (!offerInfoTable[sourceId]) {
-                    // ----- NEW: parse threshold/reward/max from short_description
-                    const details = parseOfferDetails(offer.short_description || "");
-
-                    offerInfoTable[sourceId] = {
-                        source_id: sourceId,
-                        offerId: offer.id || "N/A",
-                        name: offer.name || "N/A",
-                        achievement_type: offer.achievement_type || "N/A",
-                        category: offer.category || "N/A",
-                        expiry_date: offer.expiry_date || "N/A",
-                        logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types
-                            ? offer.redemption_types.join(', ')
-                            : "N/A",
-                        short_description: offer.short_description || "N/A",
-
-                        // Store parsed info in the table:
-                        threshold: details.threshold,
-                        reward: details.reward,
-                        max: details.max,
-
-                        eligibleCards: [],
-                        enrolledCards: []
-                    };
-                }
-
-                // d) Update enrollment status: add to eligibleCards or enrolledCards
-                if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
-                    }
-                }
-            });
-        }));
-
-        // 5. Return an array of the unique offers
-        return Object.values(offerInfoTable);
-    }
-
-
 
     function sortOfferData(key) {
         if (offerSortState.key === key) {
@@ -780,7 +731,6 @@
 
         renderCurrentView();
     }
-
 
     async function buildOfferMapping() {
         // 1. Initialization: Unique offer info keyed by source_id.
@@ -865,7 +815,6 @@
         // 5. Return an array of the unique offers
         return Object.values(offerInfoTable);
     }
-
 
     function renderOfferMappingTable(offerArray) {
         const headers = [
@@ -1084,8 +1033,6 @@
     }
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
-
-        //win.style.transform = 'translate(100%, 0)';
         win.style.backgroundColor = '#fff';
         win.style.border = '2px solid #000';
         win.style.padding = '10px';
@@ -1094,12 +1041,9 @@
         win.style.maxWidth = '500px';
         win.style.maxHeight = '400px';
         win.style.overflowY = 'auto';
-
         win.style.position = 'fixed';
-        // Use lowercase "left" here
         win.style.top = clickY + 'px';
         win.style.left = (clickX - 400) + 'px';
-
 
         const header = document.createElement('div');
         header.style.fontWeight = 'bold';
@@ -1109,7 +1053,6 @@
 
         const contentDiv = document.createElement('div');
         if (Array.isArray(cards)) {
-            contentDiv.innerHTML = '';
             const chunkSize = 6;
             for (let i = 0; i < cards.length; i += chunkSize) {
                 const chunk = cards.slice(i, i + chunkSize);
@@ -1125,19 +1068,17 @@
                     if (isEligibleView) {
                         cardSpan.style.cursor = 'pointer';
                         cardSpan.addEventListener('click', async () => {
-                            const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
+                            // Use display_account_number instead of cardEnding, and account_token instead of accountToken
+                            const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
                             if (!matchingAcc) {
-                                alert(`No matching account token for card ending ${cardEnd}`);
+                                console.log(`No matching account token for card ending ${cardEnd}`);
                                 return;
                             }
-                            const accountToken = matchingAcc.accountToken;
+                            const accountToken = matchingAcc.account_token;
                             const result = await enrollOffer(accountToken, offerId);
-                            if (result && result.isEnrolled) {
-                                alert(`Enrollment successful for card ${cardEnd}, offer ${offerId}`);
-                            } else {
-                                alert(`Enrollment failed for card ${cardEnd}, offer ${offerId}`);
-                            }
-
+                            console.log(result && result.isEnrolled
+                                ? `Enrollment successful for card ${cardEnd}, offer ${offerId}`
+                                : `Enrollment failed for card ${cardEnd}, offer ${offerId}`);
                         });
                     } else {
                         cardSpan.style.cursor = 'default';
@@ -1151,31 +1092,27 @@
         }
         win.appendChild(contentDiv);
 
-        // Enroll All Cards button (Eligible only)
         if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
             const enrollAllBtn = document.createElement('button');
             enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
             enrollAllBtn.style.display = 'block';
             enrollAllBtn.style.margin = '10px auto 0';
             enrollAllBtn.addEventListener('click', async () => {
-                const tasks = cards.map(cardEnd => {
-                    return async () => {
-                        const matchingAcc = accountData.find(acc => acc.cardEnding === cardEnd);
-                        if (!matchingAcc) {
-                            console.log(`No matching account token for card ending ${cardEnd}`);
-                            return;
-                        }
-                        const accountToken = matchingAcc.accountToken;
-                        const result = await enrollOffer(accountToken, offerId);
-                        if (result && result.isEnrolled) {
-                            console.log(`Enrollment successful: card ${cardEnd}, offer ${offerId}`);
-                        } else {
-                            console.log(`Enrollment failed: card ${cardEnd}, offer ${offerId}`);
-                        }
-                    };
+                const tasks = cards.map(cardEnd => async () => {
+                    // Use display_account_number and account_token here as well
+                    const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
+                    if (!matchingAcc) {
+                        console.log(`No matching account token for card ending ${cardEnd}`);
+                        return;
+                    }
+                    const accountToken = matchingAcc.account_token;
+                    const result = await enrollOffer(accountToken, offerId);
+                    console.log(result && result.isEnrolled
+                        ? `Enrollment successful: card ${cardEnd}, offer ${offerId}`
+                        : `Enrollment failed: card ${cardEnd}, offer ${offerId}`);
                 });
                 await runInBatches(tasks, 6);
-                alert(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
+                console.log(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
             });
             win.appendChild(enrollAllBtn);
         }
@@ -1191,6 +1128,7 @@
 
         document.body.appendChild(win);
     }
+
 
     async function enrollOffer(accountToken, offerIdentifier) {
         const payload = {
@@ -1502,9 +1440,5 @@
         console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
 
     };
-
-
-
-
 
 })();
