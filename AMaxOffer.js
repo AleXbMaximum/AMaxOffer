@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.5 Rlease Date 2-16-2025
+// @version      1.6
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
@@ -17,7 +17,6 @@
 
     // Encoded URL Constants (Base64)
     // ---------------------------
-    // Note: You must ensure these strings are complete and correctly encoded.
     const MEMBER_API = "aHR0cHM6Ly9nbG9iYWwuYW1lcmljYW5leHByZXNzLmNvbS9hcGkvc2VydmljaW5nL3YxL21lbWJlcg==";
     // https://global.americanexpress.com/api/servicing/v1/member
     const ENROLL_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9DcmVhdGVDYXJkQWNjb3VudE9mZmVyRW5yb2xsbWVudC52MQ==";
@@ -651,53 +650,11 @@
         };
     }
 
-    function sortOfferData(key) {
-        if (offerSortState.key === key) {
-            offerSortState.direction *= -1;
-        } else {
-            offerSortState.key = key;
-            offerSortState.direction = 1;
-        }
-
-        // If it's one of our numeric columns, do numeric sort; otherwise do string sort
-        const numericColumns = ["reward", "threshold", "percentage"];
-
-        offerData.sort((a, b) => {
-            const valA = a[key] || "";
-            const valB = b[key] || "";
-
-            if (numericColumns.includes(key)) {
-                // parse numeric
-                const numA = parseNumericValue(valA);
-                const numB = parseNumericValue(valB);
-
-                // if either is NaN, handle gracefully
-                if (isNaN(numA) && isNaN(numB)) {
-                    // both not parseable => compare as strings?
-                    return offerSortState.direction * valA.localeCompare(valB);
-                } else if (isNaN(numA)) {
-                    return 1 * offerSortState.direction;  // push to the bottom
-                } else if (isNaN(numB)) {
-                    return -1 * offerSortState.direction; // push to the bottom
-                }
-                // otherwise numeric compare
-                return offerSortState.direction * (numA - numB);
-            } else if (key === "eligibleCards" || key === "enrolledCards") {
-                // length compare or something
-                const lenA = Array.isArray(valA) ? valA.length : 0;
-                const lenB = Array.isArray(valB) ? valB.length : 0;
-                return offerSortState.direction * (lenA - lenB);
-            } else {
-                // standard string compare
-                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
-            }
-        });
-
-        renderCurrentView();
-    }
-
-    async function refreshOffers(dontfetch = false) {
-        // 1. Build unique offer map keyed by source_id.
+    // ---------------------------
+    // Refresh and Merge logic for Offers
+    // ---------------------------
+    async function refreshOffers() {
+        // We'll store new offers in a map keyed by source_id
         const offerInfoTable = {};
 
         // 2. Filter active accounts.
