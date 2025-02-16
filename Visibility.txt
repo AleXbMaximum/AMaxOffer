@@ -1,0 +1,48 @@
+
+
+
+// removeVisibilityListeners();
+//
+// console.log("Setting up periodic checkVisibility calls...");
+// // log window.timeout && typeof window.timeout.checkVisibility === 'function'
+// console.log("window.timeout:", window.timeout);
+// console.log("typeof window.timeout.checkVisibility:", typeof window.timeout.checkVisibility);
+// setInterval(() => {
+//     if (window.AmexSession && typeof window.AmexSession.extend === 'function') {
+//         console.log("Calling window.AmexSession.extend() to reset the session warning timer.");
+//         window.AmexSession.extend();
+//     } else {
+//         console.log("window.AmexSession.extend is unavailable; dispatching a mousemove event as fallback.");
+//         const event = new MouseEvent("mousemove", {
+//             bubbles: true,
+//             cancelable: true,
+//             view: window
+//         });
+//         document.dispatchEvent(event);
+//     }
+// }, 3000);
+
+
+function removeVisibilityListeners() {
+    console.log("Overriding visibility properties...");
+
+    // 1. Override document.hidden
+    Object.defineProperty(document, "hidden", {
+        configurable: true, // so future scripts can redefine if needed
+        enumerable: true,
+        get: function () {
+            return false; // Always not hidden
+        }
+    });
+
+    // 2. Override document.visibilityState
+    Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        enumerable: true,
+        get: function () {
+            return "visible"; // Always 'visible'
+        }
+    });
+    console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
+
+};

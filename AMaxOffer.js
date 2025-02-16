@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.4 Rlease Date 2-14-2025
+// @version      1.5 Rlease Date 2-16-2025
 // @description  None
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
@@ -696,7 +696,7 @@
         renderCurrentView();
     }
 
-    async function buildOfferMap(dontfetch = false) {
+    async function refreshOffers(dontfetch = false) {
         // 1. Build unique offer map keyed by source_id.
         const offerInfoTable = {};
 
@@ -1147,7 +1147,7 @@
             console.log("Doing a full refresh before enroll...");
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
-                offerData = await buildOfferMap(); // This updates eligible/enrolled counts.
+                offerData = await refreshOffers(); // This updates eligible/enrolled counts.
             }
         } else {
             console.log(`Skipping full refresh because providing of offerSourceId=${offerSourceId} or accountNumber=${accountNumber}`);
@@ -1173,7 +1173,7 @@
             }
 
             // Deflult category offers are not eligible for enrollment.
-            //if (offer.category === "DEFAULT") { console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`); continue; }
+            if (offer.category === "DEFAULT") { console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`); continue; }
 
             const cardHolderMap = {};
             for (const card of offer.eligibleCards) {
@@ -1229,7 +1229,7 @@
         // Process the enrollment tasks in batches (per cardholder per offer).
         await runInBatches(tasks, runInBatchesLimit);
         // Refresh the offer map and update the UI.
-        offerData = await buildOfferMap();
+        offerData = await refreshOffers();
         await renderCurrentView();
     }
 
@@ -1293,14 +1293,14 @@
             console.log("Refreshing data...");
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
-                const newOfferData = await buildOfferMap();
+                const newOfferData = await refreshOffers();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
                     await renderCurrentView();
                     setLocalStorage();
                 } else {
-                    console.error("buildOfferMap failed. Not updating localStorage.");
+                    console.error("refreshOffers failed. Not updating localStorage.");
                 }
             }
         });
@@ -1461,14 +1461,14 @@
         if (localDataStatus === 0 || localDataStatus === 2) {
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
-                const newOfferData = await buildOfferMap();
+                const newOfferData = await refreshOffers();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
                     await renderCurrentView();
                     setLocalStorage();
                 } else {
-                    console.error("buildOfferMap failed. Not updating localStorage.");
+                    console.error("refreshOffers failed. Not updating localStorage.");
                 }
             }
         } else {
@@ -1486,51 +1486,3 @@
 
 })();
 
-
-
-
-// removeVisibilityListeners();
-//
-// console.log("Setting up periodic checkVisibility calls...");
-// // log window.timeout && typeof window.timeout.checkVisibility === 'function'
-// console.log("window.timeout:", window.timeout);
-// console.log("typeof window.timeout.checkVisibility:", typeof window.timeout.checkVisibility);
-// setInterval(() => {
-//     if (window.AmexSession && typeof window.AmexSession.extend === 'function') {
-//         console.log("Calling window.AmexSession.extend() to reset the session warning timer.");
-//         window.AmexSession.extend();
-//     } else {
-//         console.log("window.AmexSession.extend is unavailable; dispatching a mousemove event as fallback.");
-//         const event = new MouseEvent("mousemove", {
-//             bubbles: true,
-//             cancelable: true,
-//             view: window
-//         });
-//         document.dispatchEvent(event);
-//     }
-// }, 3000);
-
-
-function removeVisibilityListeners() {
-    console.log("Overriding visibility properties...");
-
-    // 1. Override document.hidden
-    Object.defineProperty(document, "hidden", {
-        configurable: true, // so future scripts can redefine if needed
-        enumerable: true,
-        get: function () {
-            return false; // Always not hidden
-        }
-    });
-
-    // 2. Override document.visibilityState
-    Object.defineProperty(document, "visibilityState", {
-        configurable: true,
-        enumerable: true,
-        get: function () {
-            return "visible"; // Always 'visible'
-        }
-    });
-    console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
-
-};
