@@ -80,7 +80,7 @@
     const title = document.createElement('span');
     title.textContent = 'AMaxOffer';
 
-    // View buttons container: Summary, Members, Offer Mapping
+    // View buttons container: Summary, Members, Offer Map
     const viewButtons = document.createElement('div');
     viewButtons.style.display = 'flex';
     viewButtons.style.gap = '40px';
@@ -110,7 +110,7 @@
     });
 
     const btnOffers = document.createElement('button');
-    btnOffers.textContent = 'Offer Mapping';
+    btnOffers.textContent = 'Offer Map';
     btnOffers.style.cursor = 'pointer';
     btnOffers.style.fontSize = '20px';
     btnOffers.addEventListener('click', () => {
@@ -170,7 +170,7 @@
     content.style.maxHeight = 'calc(80vh - 40px)';
     content.innerHTML = 'Loading...';
 
-    async function fetch_account() {
+    async function fetchAccount() {
         try {
             const res = await fetch(getUrl(MEMBER_API), {
                 method: 'GET',
@@ -235,7 +235,7 @@
             });
 
             // Set default view and update UI
-            currentView = 'summary';
+
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
             return true; // <-- indicate success
@@ -697,7 +697,7 @@
     }
 
     async function buildOfferMap(dontfetch = false) {
-        // 1. Build unique offer mapping keyed by source_id.
+        // 1. Build unique offer map keyed by source_id.
         const offerInfoTable = {};
 
         // 2. Filter active accounts.
@@ -712,7 +712,7 @@
             "The Hotel Collection",
             "on Amex Travel",
             "Flexible Business Credit",
-            "Checkout With Apple Pay"
+            //"Checkout With Apple Pay"
         ];
 
         // 4. Process each active account in parallel.
@@ -767,7 +767,7 @@
             acc.eligibleOffers = 0;
             acc.enrolledOffers = 0;
         });
-        // Update counts based on the offer mapping.
+        // Update counts based on the offer map.
         Object.values(offerInfoTable).forEach(offer => {
             if (Array.isArray(offer.eligibleCards)) {
                 offer.eligibleCards.forEach(card => {
@@ -794,7 +794,7 @@
     }
 
 
-    function renderOfferMappingTable(offerArray) {
+    function renderOfferMap(offerArray) {
         const headers = [
             { label: "Logo", key: "logo" },
             { label: "Name", key: "name" },
@@ -1055,7 +1055,7 @@
                             const accountToken = matchingAcc.account_token;
                             const result = await enrollOffer(accountToken, offerId);
                             console.log(result && result.isEnrolled
-                                ? `Enrollment successful for card ${cardEnd}, offer ${offerId}`
+                                ? `Enrollment successful for card ${cardEnd}, offer ${offerna}`
                                 : `Enrollment failed for card ${cardEnd}, offer ${offerId}`);
                         });
                     } else {
@@ -1071,29 +1071,24 @@
         win.appendChild(contentDiv);
 
         if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
-            const enrollThisOfferBtn = document.createElement('button');
-            enrollThisOfferBtn.textContent = 'Enroll All Cards in This Offer';
-            enrollThisOfferBtn.style.display = 'block';
-            enrollThisOfferBtn.style.margin = '10px auto 0';
-            enrollThisOfferBtn.addEventListener('click', async () => {
-                const tasks = cards.map(cardEnd => async () => {
-                    // Use display_account_number and account_token here as well
-                    const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                    if (!matchingAcc) {
-                        console.log(`No matching account token for card ending ${cardEnd}`);
-                        return;
-                    }
-                    const accountToken = matchingAcc.account_token;
-                    const result = await enrollOffer(accountToken, offerId);
-                    console.log(result && result.isEnrolled
-                        ? `Enrollment successful: card ${cardEnd}, offer ${offerId}`
-                        : `Enrollment failed: card ${cardEnd}, offer ${offerId}`);
-                });
-                await runInBatches(tasks, runInBatchesLimit);
-                console.log(`Enrollment attempt completed for all listed cards, offer ${offerId}.`);
+            const enrollAllBtn = document.createElement('button');
+            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
+            enrollAllBtn.style.display = 'block';
+            enrollAllBtn.style.margin = '10px auto 0';
+            enrollAllBtn.addEventListener('click', async () => {
+
+                const foundOffer = offerData.find(o => o.offerId === offerId);
+                const sourceId = foundOffer.source_id;
+
+                console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
+                await batchEnrollOffer(sourceId);
+                currentView = 'offers';
+                renderCurrentView();
             });
-            win.appendChild(enrollThisOfferBtn);
+            win.appendChild(enrollAllBtn);
         }
+
+
 
         const closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
@@ -1146,14 +1141,18 @@
         }
     }
 
-    async function enrollAllEligibleOffers(offerSourceId, accountNumber) {
-        // First: full refresh of account/offer data.
-        const fetchStatus = await fetchAndPrepareAccountData();
-        if (fetchStatus) {
-            offerData = await buildOfferMap(); // This now also updates eligible/enrolled counts
+    async function batchEnrollOffer(offerSourceId, accountNumber) {
+        // Only do a full refresh if both offerSourceId and accountNumber are NOT provided.
+        if (!offerSourceId && !accountNumber) {
+            console.log("Doing a full refresh before enroll...");
+            const fetchStatus = await fetchAccount();
+            if (fetchStatus) {
+                offerData = await buildOfferMap(); // This updates eligible/enrolled counts.
+            }
+        } else {
+            console.log(`Skipping full refresh because providing of offerSourceId=${offerSourceId} or accountNumber=${accountNumber}`);
         }
 
-        // Build a map of active accounts.
         // If accountNumber is provided, only include that account.
         const activeCardMap = {};
         accountData.forEach(acc => {
@@ -1172,19 +1171,13 @@
             if (offerSourceId && offer.source_id !== offerSourceId) {
                 continue;
             }
-            // Skip offers in the DEFAULT category (logging the offer name).
-            if (offer.category === "DEFAULT") {
-                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-                continue;
-            }
 
-            // Group eligible cards by the cardholder's normalized name.
-            // cardHolderMap: key is normalized (first+last) name, value is array of objects { card, accountToken }.
+            // Deflult category offers are not eligible for enrollment.
+            //if (offer.category === "DEFAULT") { console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`); continue; }
+
             const cardHolderMap = {};
-
-            // For each eligible card in the offer.
             for (const card of offer.eligibleCards) {
-                // Find active account(s) matching this card.
+                // Only consider active + matching accounts
                 const matchingAccounts = accountData.filter(acc =>
                     acc.display_account_number === card &&
                     acc.account_status &&
@@ -1193,7 +1186,6 @@
                 for (const acc of matchingAccounts) {
                     let fullName = acc.embossed_name;
                     if (!fullName) continue;
-                    // Normalize the cardholder's name by taking only the first and last parts.
                     let parts = fullName.trim().split(/\s+/);
                     let normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
                     if (!cardHolderMap[normalizedName]) {
@@ -1215,7 +1207,7 @@
                             const result = await enrollOffer(entry.accountToken, offer.offerId);
                             if (result && result.isEnrolled) {
                                 console.log(`Enrollment successful for offer "${offer.name}" on card ${entry.card} (cardholder ${cardHolder})`);
-                                // Update the offer status: remove the card from eligibleCards and add it to enrolledCards.
+                                // Update offer’s arrays
                                 const idx = offer.eligibleCards.indexOf(entry.card);
                                 if (idx !== -1) {
                                     offer.eligibleCards.splice(idx, 1);
@@ -1236,12 +1228,10 @@
 
         // Process the enrollment tasks in batches (per cardholder per offer).
         await runInBatches(tasks, runInBatchesLimit);
-        // Refresh the offer mapping and update the UI.
+        // Refresh the offer map and update the UI.
         offerData = await buildOfferMap();
         await renderCurrentView();
     }
-
-
 
     // ---------------------------
     // Render Summary View
@@ -1300,15 +1290,15 @@
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
             // On refresh, always perform a fresh fetch and update the data
-            const fetchStatus = await fetch_account();
+            console.log("Refreshing data...");
+            const fetchStatus = await fetchAccount();
             if (fetchStatus) {
                 const newOfferData = await buildOfferMap();
-                // Only update if buildOfferMap returned valid data.
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
                     await renderCurrentView();
-                    setLocalStorage(); // Only set localStorage if full refresh succeeded.
+                    setLocalStorage();
                 } else {
                     console.error("buildOfferMap failed. Not updating localStorage.");
                 }
@@ -1322,7 +1312,7 @@
         summaryenrollThisOfferBtn.style.fontSize = '22px';
         summaryenrollThisOfferBtn.style.padding = '8px 16px';
         summaryenrollThisOfferBtn.addEventListener('click', async () => {
-            await enrollAllEligibleOffers();
+            await batchEnrollOffer();
         });
 
         btnContainer.appendChild(summaryenrollThisOfferBtn);
@@ -1341,7 +1331,7 @@
             content.appendChild(renderMembersView());
         } else if (currentView === 'offers') {
             content.innerHTML = '';
-            content.appendChild(renderOfferMappingTable(offerData));
+            content.appendChild(renderOfferMap(offerData));
         } else if (currentView === 'summary') {
             content.innerHTML = '';
             content.appendChild(renderSummaryView());
@@ -1439,13 +1429,12 @@
                 lastUpdate = savedLastUpdate || "";
                 console.log("Load from localStorage successful.");
                 renderCurrentView();
-                // Compare lastUpdate to now.
                 if (lastUpdate) {
                     const savedDate = new Date(lastUpdate);
                     const now = new Date();
-                    const diff = now - savedDate; // difference in milliseconds
-                    if (diff > 24 * 60 * 60 * 1000) { // more than 1 day
-                        //console.log("Local storage data is over 1 day old. Full refresh required.");
+                    const diff = now - savedDate;
+                    if (diff > 24 * 60 * 60 * 1000) {
+                        // data is older than 1 day
                         return 2;
                     }
                 }
@@ -1458,27 +1447,26 @@
         return 0;
     }
 
-
-    // Init function: first try to load localStorage data; only fetch if none found.
+    // ---------------------------
+    // Init
+    // ---------------------------
     async function init() {
         const tl = await getCurrentUserTrustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
             return;
         }
-        // Attempt to load cached data.
-        const localDataStatus = loadLocalStorage(); // returns 0, 1, or 2
+        const localDataStatus = loadLocalStorage();
         createUI();
         // If no local data was loaded or data is older than one day:
         if (localDataStatus === 0 || localDataStatus === 2) {
-            const fetchStatus = await fetchAndPrepareAccountData();
+            const fetchStatus = await fetchAccount();
             if (fetchStatus) {
                 const newOfferData = await buildOfferMap();
-                // Only update if buildOfferMap returned valid data.
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
                     await renderCurrentView();
-                    setLocalStorage(); // Only set localStorage if full refresh succeeded.
+                    setLocalStorage();
                 } else {
                     console.error("buildOfferMap failed. Not updating localStorage.");
                 }
