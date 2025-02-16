@@ -40,8 +40,12 @@
     // ---------------------------
     let accountData = []; // Array of account objects with new keys
     let sortState = { key: "", direction: 1 }; // For members view sorting
+
     let offerData = []; // Array of aggregated offers (from all accounts)
     let offerSortState = { key: "", direction: 1 }; // For offers view sorting
+
+    let lastUpdate = ""; // Holds the timestamp of the last successful fetch
+
     let currentView = 'summary'; // "summary", "members", or "offers"
     let isMinimized = true;
     let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
@@ -1213,7 +1217,7 @@
     // ---------------------------
     function renderSummaryView() {
         const numAccounts = accountData.length;
-        const lastUpdate = new Date().toLocaleString();
+        const updateTime = lastUpdate || "Never";
         let distinctFullyEnrolled = 0;
         let distinctNotFullyEnrolled = 0;
         let totalEnrolled = 0;
@@ -1245,25 +1249,18 @@
         summaryDiv.style.borderRadius = '8px';
 
         summaryDiv.innerHTML = `
-            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${lastUpdate}</p>
+            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${updateTime}</p>
             <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
             <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
         `;
 
+        // Create the refresh button inside renderSummaryView.
+        // This button can be used to trigger a fresh fetch.
         const btnContainer = document.createElement('div');
         btnContainer.style.marginTop = '20px';
         btnContainer.style.display = 'flex';
         btnContainer.style.justifyContent = 'center';
         btnContainer.style.gap = '60px';
-
-        const summaryEnrollAllBtn = document.createElement('button');
-        summaryEnrollAllBtn.textContent = 'Enroll All';
-        summaryEnrollAllBtn.style.cursor = 'pointer';
-        summaryEnrollAllBtn.style.fontSize = '22px';
-        summaryEnrollAllBtn.style.padding = '8px 16px';
-        summaryEnrollAllBtn.addEventListener('click', async () => {
-            await enrollAllEligibleOffers();
-        });
 
         const summaryRefreshBtn = document.createElement('button');
         summaryRefreshBtn.textContent = 'Refresh';
@@ -1271,9 +1268,26 @@
         summaryRefreshBtn.style.fontSize = '22px';
         summaryRefreshBtn.style.padding = '8px 16px';
         summaryRefreshBtn.addEventListener('click', async () => {
-            offerData = await buildOfferMapping();
-            await updateAccountOfferCounts();
-            renderCurrentView();
+            // On refresh, always perform a fresh fetch and update the data
+            const fetchStatus = await fetchAndPrepareAccountData();
+            if (fetchStatus) {
+                offerData = await buildOfferMapping();
+                await updateAccountOfferCounts();
+                // Update lastUpdate on successful fetch
+                lastUpdate = new Date().toLocaleString();
+                renderCurrentView();
+                setLocalStorage();
+            }
+        });
+
+        // Optionally, you might also have an "Enroll All" button here.
+        const summaryEnrollAllBtn = document.createElement('button');
+        summaryEnrollAllBtn.textContent = 'Enroll All';
+        summaryEnrollAllBtn.style.cursor = 'pointer';
+        summaryEnrollAllBtn.style.fontSize = '22px';
+        summaryEnrollAllBtn.style.padding = '8px 16px';
+        summaryEnrollAllBtn.addEventListener('click', async () => {
+            await enrollAllEligibleOffers();
         });
 
         btnContainer.appendChild(summaryEnrollAllBtn);
@@ -1367,48 +1381,69 @@
         }
     }
 
+    /// Helper functions to save and load data using localStorage
+    function setLocalStorage() {
+        try {
+            localStorage.setItem("accountData", JSON.stringify(accountData));
+            localStorage.setItem("offerData", JSON.stringify(offerData));
+            localStorage.setItem("lastUpdate", lastUpdate);
+            console.log("Data saved to localStorage.");
+        } catch (e) {
+            console.error("Error saving data to localStorage:", e);
+        }
+    }
 
-    // ---------------------------
-    // Initial Data Fetch and Render
-    // ---------------------------
+    function loadLocalStorage() {
+        const savedAccountData = localStorage.getItem("accountData");
+        const savedOfferData = localStorage.getItem("offerData");
+        const savedLastUpdate = localStorage.getItem("lastUpdate");
+        if (savedAccountData && savedOfferData) {
+            try {
+                accountData = JSON.parse(savedAccountData);
+                offerData = JSON.parse(savedOfferData);
+                lastUpdate = savedLastUpdate || "";
+                console.log("Load from localStorage successfull.");
+                renderCurrentView();
+                return true;
+            } catch (e) {
+                console.error("Error parsing saved localStorage data:", e);
+                return false;
+            }
+        }
+    }
+
+
+    // If localStorage data is found, use it; otherwise perform a fetch request.
     async function init() {
+
         const tl = await getCurrentUserTrustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
-            //tl < 3
-            //console.log('No user logged in or invalid trust level. Aborting script.');
             return;
         }
 
+        const localDataLoaded = loadLocalStorage();
         createUI();
 
-        const fetch_status = await fetchAndPrepareAccountData();
-        //console.log("Account data fetch success:", fetch_status);
-
-        offerData = await buildOfferMapping();
-        await updateAccountOfferCounts();
-        await renderCurrentView();
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        // removeVisibilityListeners();
-        //
-        // console.log("Setting up periodic checkVisibility calls...");
-        // // log window.timeout && typeof window.timeout.checkVisibility === 'function'
-        // console.log("window.timeout:", window.timeout);
-        // console.log("typeof window.timeout.checkVisibility:", typeof window.timeout.checkVisibility);
-        // setInterval(() => {
-        //     if (window.AmexSession && typeof window.AmexSession.extend === 'function') {
-        //         console.log("Calling window.AmexSession.extend() to reset the session warning timer.");
-        //         window.AmexSession.extend();
-        //     } else {
-        //         console.log("window.AmexSession.extend is unavailable; dispatching a mousemove event as fallback.");
-        //         const event = new MouseEvent("mousemove", {
-        //             bubbles: true,
-        //             cancelable: true,
-        //             view: window
-        //         });
-        //         document.dispatchEvent(event);
-        //     }
-        // }, 3000);
+        // Only perform fresh fetch if no data was loaded
+        if (!localDataLoaded) {
+            const fetchStatus = await fetchAndPrepareAccountData();
+            if (fetchStatus) {
+                offerData = await buildOfferMapping();
+                await updateAccountOfferCounts();
+                // Set lastUpdate only when a new fetch occurs
+                lastUpdate = new Date().toLocaleString();
+                await renderCurrentView();
+                setLocalStorage();
+            }
+        } else {
+            console.log("Using data from localStorage. No forced fetch.");
+        }
     }
+
+    // Revised renderSummaryView uses the stored lastUpdate value
+
+
+
 
     init();
 
@@ -1417,28 +1452,54 @@
     // ANTI-TIMEOUT CHANGES (Remove "visibilitychange" listeners 
     // and periodically call `window.timeout.checkVisibility({ hidden: true })`)
 
-    function removeVisibilityListeners() {
-        console.log("Overriding visibility properties...");
-
-        // 1. Override document.hidden
-        Object.defineProperty(document, "hidden", {
-            configurable: true, // so future scripts can redefine if needed
-            enumerable: true,
-            get: function () {
-                return false; // Always not hidden
-            }
-        });
-
-        // 2. Override document.visibilityState
-        Object.defineProperty(document, "visibilityState", {
-            configurable: true,
-            enumerable: true,
-            get: function () {
-                return "visible"; // Always 'visible'
-            }
-        });
-        console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
-
-    };
 
 })();
+
+
+
+
+// removeVisibilityListeners();
+//
+// console.log("Setting up periodic checkVisibility calls...");
+// // log window.timeout && typeof window.timeout.checkVisibility === 'function'
+// console.log("window.timeout:", window.timeout);
+// console.log("typeof window.timeout.checkVisibility:", typeof window.timeout.checkVisibility);
+// setInterval(() => {
+//     if (window.AmexSession && typeof window.AmexSession.extend === 'function') {
+//         console.log("Calling window.AmexSession.extend() to reset the session warning timer.");
+//         window.AmexSession.extend();
+//     } else {
+//         console.log("window.AmexSession.extend is unavailable; dispatching a mousemove event as fallback.");
+//         const event = new MouseEvent("mousemove", {
+//             bubbles: true,
+//             cancelable: true,
+//             view: window
+//         });
+//         document.dispatchEvent(event);
+//     }
+// }, 3000);
+
+
+function removeVisibilityListeners() {
+    console.log("Overriding visibility properties...");
+
+    // 1. Override document.hidden
+    Object.defineProperty(document, "hidden", {
+        configurable: true, // so future scripts can redefine if needed
+        enumerable: true,
+        get: function () {
+            return false; // Always not hidden
+        }
+    });
+
+    // 2. Override document.visibilityState
+    Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        enumerable: true,
+        get: function () {
+            return "visible"; // Always 'visible'
+        }
+    });
+    console.log("document.hidden and document.visibilityState are now stubbed as 'always visible'.");
+
+};
