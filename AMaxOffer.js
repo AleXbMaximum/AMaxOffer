@@ -40,6 +40,10 @@
     let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
     let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
     let runInBatchesLimit = 10; // Limit for batch processing
+    let showFavoritesOnly = false;
+    let offerMapContainer = null;  // Will hold the persistent container for the Offer Map view.
+    let offerSearchKeyword = "";   // Global keyword for filtering offers.
+
 
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
@@ -644,6 +648,8 @@
             "The Hotel Collection",
             "on Amex Travel",
             "Flexible Business Credit",
+            "Apple Pay",
+            //"Send Money to Friends"
         ];
 
         // Fetch offers for each account in parallel
@@ -749,39 +755,42 @@
             offerSortState.direction *= -1;
         } else {
             offerSortState.key = key;
-            offerSortState.direction = 1;
+            offerSortState.direction = (key === "favorite") ? -1 : 1;
         }
 
-        // If numeric column or boolean
-        const numericColumns = ["reward", "threshold", "percentage"];
         offerData.sort((a, b) => {
-            const valA = a[key];
-            const valB = b[key];
-
-            if (key === 'favorite') {
-                // True > False
-                const numA = valA === true ? 1 : 0;
-                const numB = valB === true ? 1 : 0;
-                return offerSortState.direction * (numA - numB);
+            if (key === "favorite") {
+                // Custom comparator for booleans: true comes first
+                if (a.favorite === b.favorite) return 0;
+                return a.favorite ? -1 : 1;
             }
 
+            // For numeric columns, compare their parsed numeric values
+            const numericColumns = ["reward", "threshold", "percentage"];
+            const valA = a[key] || "";
+            const valB = b[key] || "";
             if (numericColumns.includes(key)) {
                 const numA = parseNumericValue(valA);
                 const numB = parseNumericValue(valB);
                 if (isNaN(numA) && isNaN(numB)) {
-                    return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+                    return offerSortState.direction * valA.localeCompare(valB);
                 } else if (isNaN(numA)) {
-                    return offerSortState.direction; // push to bottom
+                    return 1 * offerSortState.direction;
                 } else if (isNaN(numB)) {
-                    return -offerSortState.direction; // push to top
+                    return -1 * offerSortState.direction;
                 }
                 return offerSortState.direction * (numA - numB);
-            } else if (key === "eligibleCards" || key === "enrolledCards") {
+            }
+            // For columns that are arrays (like eligibleCards or enrolledCards), sort by length
+            else if (key === "eligibleCards" || key === "enrolledCards") {
                 const lenA = Array.isArray(valA) ? valA.length : 0;
                 const lenB = Array.isArray(valB) ? valB.length : 0;
                 return offerSortState.direction * (lenA - lenB);
             }
-            return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+            // Standard string comparison for everything else
+            else {
+                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+            }
         });
 
         renderCurrentView();
@@ -790,9 +799,69 @@
     // ---------------------------
     // Render Offer Map (including new “Favorite” column)
     // ---------------------------
+
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
     function renderOfferMap(offerArray) {
+        // Create a container for the entire view.
+        const container = document.createElement('div');
+
+        // Create a filter row (favorites checkbox and search bar) that sits at the top.
+        const filterRow = document.createElement('div');
+        filterRow.style.display = 'flex';
+        filterRow.style.alignItems = 'center';
+        filterRow.style.gap = '20px';
+        filterRow.style.margin = '10px';
+
+        // Favorites checkbox
+        const favCheckbox = document.createElement('input');
+        favCheckbox.type = 'checkbox';
+        favCheckbox.checked = showFavoritesOnly;
+        favCheckbox.addEventListener('change', () => {
+            showFavoritesOnly = favCheckbox.checked;
+            renderCurrentView(); // re-render entire offers view
+        });
+        const favLabel = document.createElement('label');
+        favLabel.textContent = "Show Favorites Only";
+        favLabel.style.fontSize = '16px';
+        favLabel.style.cursor = 'pointer';
+
+        // Search input – debounced so that re-rendering does not occur immediately on every keystroke.
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search Merchants...';
+        searchInput.style.fontSize = '16px';
+        searchInput.style.padding = '4px';
+        searchInput.style.width = '200px';
+        // Restore any previously typed value.
+        searchInput.value = offerSearchKeyword;
+        // Debounce the input event so we only re-render after 300ms of inactivity.
+        searchInput.addEventListener('input', debounce(() => {
+            offerSearchKeyword = searchInput.value.toLowerCase();
+            renderCurrentView();
+        }, 300));
+
+        filterRow.appendChild(favCheckbox);
+        filterRow.appendChild(favLabel);
+        filterRow.appendChild(searchInput);
+        container.appendChild(filterRow);
+
+        // Filter the offers according to favorites and the search keyword.
+        const filteredOffers = offerArray.filter(o => {
+            if (showFavoritesOnly && !o.favorite) return false;
+            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
+            return true;
+        });
+
+        // Define headers (with "Fav" and "Pct" shortened if desired)
         const headers = [
-            { label: "Favorite", key: "favorite" },
+            { label: "Fav", key: "favorite" },
             { label: "Logo", key: "logo" },
             { label: "Name", key: "name" },
             { label: "Type", key: "achievement_type" },
@@ -802,12 +871,9 @@
             { label: "Description", key: "short_description" },
             { label: "Threshold", key: "threshold" },
             { label: "Reward", key: "reward" },
-            { label: "Percentage", key: "percentage" },
+            { label: "Pct", key: "percentage" },
             { label: "Eligible", key: "eligibleCards" },
             { label: "Enrolled", key: "enrolledCards" }
-
-            // New Favorite column
-
         ];
 
         const colWidths = {
@@ -826,34 +892,27 @@
             enrolledCards: "50px"
         };
 
+        // Build the table.
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
 
-        // Table header
+        // Table header without checkboxes.
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
-
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.style.borderBottom = '1px solid #000';
             th.style.padding = '4px';
             th.style.cursor = 'pointer';
             th.style.textAlign = 'center';
-
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
                 th.style.maxWidth = colWidths[headerItem.key];
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
-
-            const headerContainer = document.createElement('div');
-            headerContainer.style.display = 'inline-flex';
-            headerContainer.style.alignItems = 'center';
-            headerContainer.style.gap = '4px';
-
             const labelSpan = document.createElement('span');
             labelSpan.textContent = headerItem.label;
             labelSpan.style.cursor = 'pointer';
@@ -861,27 +920,16 @@
                 sortOfferData(headerItem.key);
                 event.stopPropagation();
             });
-
-            // Optionally, if you want per-column hide/show checkboxes:
-            // (commented out for brevity, but example is in your original code)
-            const colCheckbox = document.createElement('input');
-            colCheckbox.type = 'checkbox';
-            colCheckbox.checked = true;
-            colCheckbox.addEventListener('click', (e) => e.stopPropagation());
-            colCheckbox.addEventListener('change', () => toggleColumn(headerItem.key, colCheckbox.checked));
-            headerContainer.appendChild(colCheckbox);
-
-            headerContainer.appendChild(labelSpan);
-            th.appendChild(headerContainer);
+            th.appendChild(labelSpan);
             th.dataset.colKey = headerItem.key;
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Table body
+        // Build table body.
         const tbody = document.createElement('tbody');
-        offerArray.forEach(item => {
+        filteredOffers.forEach(item => {
             const row = document.createElement('tr');
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
@@ -894,8 +942,8 @@
                     td.style.whiteSpace = 'normal';
                     td.style.wordWrap = 'break-word';
                 }
-
                 let cellValue = item[headerItem.key];
+
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
                         const img = document.createElement('img');
@@ -914,12 +962,25 @@
                         cellValue = "MR";
                     }
                     td.textContent = cellValue;
-                } else if (headerItem.key === 'category' || headerItem.key === 'redemption_types') {
+                } else if (headerItem.key === 'category') {
                     if (cellValue && cellValue !== "N/A") {
                         const str = cellValue.toString().toLowerCase();
                         td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
                     } else {
                         td.textContent = 'N/A';
+                    }
+                } else if (headerItem.key === 'redemption_types') {
+                    if (cellValue && cellValue !== "N/A") {
+                        let parts = cellValue.toString().split(",");
+                        let abbreviatedParts = parts.map(val => {
+                            let trimmed = val.trim().toLowerCase();
+                            if (trimmed.includes("instore")) return "INS";
+                            if (trimmed.includes("online")) return "ONL";
+                            return trimmed.toUpperCase().slice(0, 3);
+                        });
+                        td.textContent = abbreviatedParts.join(", ");
+                    } else {
+                        td.textContent = "N/A";
                     }
                 } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
                     const cards = Array.isArray(cellValue) ? cellValue : [];
@@ -939,7 +1000,7 @@
                     viewBtn.style.fontSize = '10px';
                     viewBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        WindowrRender_ViewCard(
+                        renderViewCard(
                             cards,
                             item.offerId,
                             headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
@@ -950,7 +1011,6 @@
                     });
                     containerDiv.appendChild(viewBtn);
                     td.appendChild(containerDiv);
-
                 } else if (headerItem.key === 'expiry_date') {
                     if (cellValue && cellValue !== 'N/A') {
                         const d = new Date(cellValue);
@@ -966,13 +1026,11 @@
                         td.textContent = 'N/A';
                     }
                 } else if (headerItem.key === 'favorite') {
-                    // Our new Favorite column: a checkbox
                     const favCheckbox = document.createElement('input');
                     favCheckbox.type = 'checkbox';
                     favCheckbox.checked = item.favorite === true;
                     favCheckbox.addEventListener('change', () => {
                         item.favorite = favCheckbox.checked;
-                        // Save immediately so user changes aren’t lost
                         setLocalStorage();
                     });
                     td.appendChild(favCheckbox);
@@ -984,9 +1042,13 @@
             tbody.appendChild(row);
         });
         table.appendChild(tbody);
-
-        return table;
+        container.appendChild(table);
+        return container;
     }
+
+
+
+
 
     // For the “View” button in the Eligible/Enrolled columns
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
@@ -1010,10 +1072,27 @@
         win.appendChild(header);
 
         const contentDiv = document.createElement('div');
-        if (Array.isArray(cards)) {
+
+        // Create a sorted copy of the cards array based on cardIndex from accountData.
+        const sortedCards = cards.slice();
+        sortedCards.sort((a, b) => {
+            const accA = accountData.find(acc => acc.display_account_number === a);
+            const accB = accountData.find(acc => acc.display_account_number === b);
+            if (accA && accB) {
+                const [aMain, aSub] = parseCardIndex(accA.cardIndex);
+                const [bMain, bSub] = parseCardIndex(accB.cardIndex);
+                if (aMain === bMain) {
+                    return aSub - bSub;
+                }
+                return aMain - bMain;
+            }
+            return 0;
+        });
+
+        if (Array.isArray(sortedCards)) {
             const chunkSize = 6;
-            for (let i = 0; i < cards.length; i += chunkSize) {
-                const chunk = cards.slice(i, i + chunkSize);
+            for (let i = 0; i < sortedCards.length; i += chunkSize) {
+                const chunk = sortedCards.slice(i, i + chunkSize);
                 const lineDiv = document.createElement('div');
                 lineDiv.style.display = 'flex';
                 lineDiv.style.flexWrap = 'wrap';
@@ -1026,7 +1105,6 @@
                     if (isEligibleView) {
                         cardSpan.style.cursor = 'pointer';
                         cardSpan.addEventListener('click', async () => {
-                            // Find the matching account token for enrollment
                             const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
                             if (!matchingAcc) {
                                 console.log(`No matching account token for card ending ${cardEnd}`);
@@ -1059,9 +1137,9 @@
                 const foundOffer = offerData.find(o => o.offerId === offerId);
                 if (!foundOffer) return;
                 const sourceId = foundOffer.source_id;
-
                 console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
                 await batchEnrollOffer(sourceId);
+                // Force the UI to remain in the offer mapping view after enrollment.
                 currentView = 'offers';
                 renderCurrentView();
             });
