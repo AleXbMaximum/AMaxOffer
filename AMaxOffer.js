@@ -2,7 +2,7 @@
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
 // @version      1.6
-// @description  None
+// @description  AMaxOffer utility with persistent sort, filter, and independent scroll state per view
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
 // @connect      uscardforum.com
@@ -15,39 +15,87 @@
 (function () {
     'use strict';
 
-    // Encoded URL Constants (Base64)
     // ---------------------------
-    const MEMBER_API = "aHR0cHM6Ly9nbG9iYWwuYW1lcmljYW5leHByZXNzLmNvbS9hcGkvc2VydmljaW5nL3YxL21lbWJlcg==";
-    // https://global.americanexpress.com/api/servicing/v1/member
-    const ENROLL_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9DcmVhdGVDYXJkQWNjb3VudE9mZmVyRW5yb2xsbWVudC52MQ==";
-    // https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
-    const OFFERS_API = "aHR0cHM6Ly9mdW5jdGlvbnMuYW1lcmljYW5leHByZXNzLmNvbS9SZWFkQ2FyZEFjY291bnRPZmZlcnNMaXN0LnYx";
-    // https://functions.americanexpress.com/ReadCardAccountOffersList.v1
+    // Obfuscated Encoded URL Constants (Base64 strings split into segments)
+    // ---------------------------
+    function reconstructObfuscated(obfSegments, indexMap) {
+        let ordered = [];
+        Object.keys(indexMap)
+            .sort((a, b) => parseInt(a) - parseInt(b))
+            .forEach(key => {
+                let seg = obfSegments[Number(indexMap[key])];
+                seg = seg.slice(0, -1);
+                ordered.push(seg);
+            });
+        return ordered.join('');
+    }
+
+    function getUrl(encoded) {
+        try {
+            let firstDecoding = atob(encoded);
+            let originalUrl = atob(firstDecoding);
+            return originalUrl;
+        } catch (e) {
+            console.error("Error decoding URL:", e, "Encoded string:", encoded);
+            return "";
+        }
+    }
+
+    // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
+    const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];
+    const MEMBER_API_indexMapping = { "0": "4", "1": "0", "2": "9", "3": "2", "4": "3", "5": "6", "6": "7", "7": "8", "8": "1", "9": "5", "10": "11", "11": "10" };
+    const MEMBER_API = reconstructObfuscated(MEMBER_API_segments, MEMBER_API_indexMapping);
+
+    // ENROLL_API: https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
+    const ENROLL_API_segments = ["JX)", "bHZibk11WVcxbGNtbGpZVzVsZUh$", "Z1ZEU5bVptVnlSVzV5YjJ4c2%", "E^", "Ce(", "VpYTnpMbU52YlM5RGN)", "VnVkQzUyTVE9PQ==*", "GNITTZMeTltZFc1amRH(", "tVmhkR1Z*", "piM1&", "YUhSM$", "WVhKa1FXTm#"];
+    const ENROLL_API_indexMapping = { "0": "10", "1": "7", "2": "1", "3": "4", "4": "5", "5": "8", "6": "3", "7": "11", "8": "9", "9": "2", "10": "0", "11": "6" };
+    const ENROLL_API = reconstructObfuscated(ENROLL_API_segments, ENROLL_API_indexMapping);
+
+    // OFFERS_API: https://functions.americanexpress.com/ReadCardAccountOffersList.v1
+    const OFFERS_API_segments = ["HbHZibk11WVcxbGNt_", "YUhSMGNITT*", "yOTFi@", "pXRmtRMkZ5_", "TltZFc1amR!", "Wm1abG%", "GpZVzVsZUhCeVpYTnpMbU52YlM5U1%", "NuTk1hWE4wTG5ZeA==%", "WkVGalk)", "blJQ&", "ZMe$", "b+"];
+    const OFFERS_API_indexMapping = { "0": "1", "1": "10", "2": "4", "3": "0", "4": "11", "5": "6", "6": "3", "7": "8", "8": "2", "9": "9", "10": "5", "11": "7" };
+    const OFFERS_API = reconstructObfuscated(OFFERS_API_segments, OFFERS_API_indexMapping);
+
+    // USCF1: https://www.uscardforum.com/session/current.json
+    const USCF1_segments = ["kQzVx%", "SMG+", "YUh%", "2WT$", "5eWRXMHVZMjl0#", "I5dQ==&", "Yz&", "TDNObGMzTnBiMjR%", "WeWNtVnV_", "kzZDNjdWRYTmpZWEprWm0%", "NITTZMeT*", "N^"];
+    const USCF1_indexMapping = { "0": "2", "1": "1", "2": "10", "3": "9", "4": "4", "5": "7", "6": "3", "7": "11", "8": "8", "9": "0", "10": "6", "11": "5" };
+    const USCF1 = reconstructObfuscated(USCF1_segments, USCF1_indexMapping);
+
+    // USCF2: https://www.uscardforum.com/u/
+    const USCF2_segments = ["WRXMHVZMjl0T(", "TZM&", "rWm05^", "IT&", "YUhSMGN@", "NjdWRYT!", "DNV%", "mpZWE)", "e_", "eTkzZD!", "p#", "dg==$"];
+    const USCF2_indexMapping = { "0": "4", "1": "3", "2": "1", "3": "9", "4": "5", "5": "7", "6": "10", "7": "2", "8": "8", "9": "0", "10": "6", "11": "11" };
+    const USCF2 = reconstructObfuscated(USCF2_segments, USCF2_indexMapping);
 
     // ---------------------------
     // Global State Variables
     // ---------------------------
-    let accountData = []; // Array of account objects with new keys
-    let sortState = { key: "", direction: 1 }; // For members view sorting
-
-    let offerData = []; // Array of aggregated offers (from all accounts)
-    let offerSortState = { key: "", direction: 1 }; // For offers view sorting
-
-    let lastUpdate = ""; // Holds the timestamp of the last successful fetch
-
-    let currentView = 'summary'; // "summary", "members", or "offers"
+    let accountData = [];
+    let offerData = [];
+    let lastUpdate = "";
+    let currentView = 'summary'; // "summary", "members", "offers"
     let isMinimized = true;
-    let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
-    let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
-    let runInBatchesLimit = 10; // Limit for batch processing
+    let currentStatusFilter = "Active"; // "all", "Active", "Canceled"
+    let currentTypeFilter = "all";    // "all", "BASIC", "SUPP"
+    let runInBatchesLimit = 20;
     let showFavoritesOnly = false;
-    let offerMapContainer = null;  // Will hold the persistent container for the Offer Map view.
-    let offerSearchKeyword = "";   // Global keyword for filtering offers.
+    let offerSearchKeyword = "";
 
+    // Global sort states for members & offers
+    let sortState = { key: "", direction: 1 };
+    let offerSortState = { key: "", direction: 1 };
 
+    // Global object to store independent scroll positions per view
+    const globalViewState = {
+        summary: { scrollTop: 0 },
+        members: { scrollTop: 0 },
+        offers: { scrollTop: 0 }
+    };
+
+    // ---------------------------
+    // Create UI Elements
+    // ---------------------------
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
-
     container.style.position = 'fixed';
     container.style.top = '5%';
     container.style.left = '5%';
@@ -69,79 +117,46 @@
     header.style.display = 'flex';
     header.style.justifyContent = 'space-between';
     header.style.alignItems = 'center';
+    header.style.cursor = 'move';
 
     const title = document.createElement('span');
     title.textContent = 'AMaxOffer';
 
-    // View buttons container: Summary, Members, Offer Map
+    // Create view buttons container
     const viewButtons = document.createElement('div');
     viewButtons.style.display = 'flex';
     viewButtons.style.gap = '40px';
 
+    // Create view buttons
     const btnSummary = document.createElement('button');
     btnSummary.textContent = 'Summary';
     btnSummary.style.cursor = 'pointer';
     btnSummary.style.fontSize = '20px';
-    btnSummary.addEventListener('click', () => {
-        currentView = 'summary';
-        btnSummary.style.fontWeight = 'bold';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
 
     const btnMembers = document.createElement('button');
     btnMembers.textContent = 'Members';
     btnMembers.style.cursor = 'pointer';
     btnMembers.style.fontSize = '20px';
-    btnMembers.addEventListener('click', () => {
-        currentView = 'members';
-        btnMembers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
 
     const btnOffers = document.createElement('button');
     btnOffers.textContent = 'Offer Map';
     btnOffers.style.cursor = 'pointer';
     btnOffers.style.fontSize = '20px';
-    btnOffers.addEventListener('click', () => {
-        currentView = 'offers';
-        btnOffers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
 
     viewButtons.appendChild(btnSummary);
     viewButtons.appendChild(btnMembers);
     viewButtons.appendChild(btnOffers);
 
+    // Create toggle button for minimizing/expanding the overlay
     const toggleBtn = document.createElement('button');
     toggleBtn.textContent = 'Minimize';
     toggleBtn.style.cursor = 'pointer';
-    toggleBtn.addEventListener('click', () => {
-        isMinimized = !isMinimized;
-        if (isMinimized) {
-            content.style.display = 'none';
-            viewButtons.style.display = 'none';
-            toggleBtn.textContent = 'Expand';
-            container.style.width = '200px';
-        } else {
-            content.style.display = 'block';
-            viewButtons.style.display = 'flex';
-            toggleBtn.textContent = 'Minimize';
-            container.style.width = '90%';
-        }
-    });
 
     header.appendChild(title);
     header.appendChild(viewButtons);
     header.appendChild(toggleBtn);
 
-    // Draggable header
-    header.style.cursor = 'move';
+    // Draggable header implementation
     header.addEventListener('mousedown', function (e) {
         let shiftX = e.clientX - container.getBoundingClientRect().left;
         let shiftY = e.clientY - container.getBoundingClientRect().top;
@@ -163,8 +178,65 @@
     content.style.maxHeight = 'calc(80vh - 40px)';
     content.innerHTML = 'Loading...';
 
+    container.appendChild(header);
+    container.appendChild(content);
+
     // ---------------------------
-    // Fetch / Merge logic for Accounts
+    // Global Helper: Save current view's scroll state
+    // ---------------------------
+    function saveCurrentScrollState() {
+        if (content) {
+            globalViewState[currentView].scrollTop = content.scrollTop;
+        }
+    }
+
+    // ---------------------------
+    // Attach Event Listeners for View Switching
+    // ---------------------------
+    btnSummary.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'summary';
+        btnSummary.style.fontWeight = 'bold';
+        btnMembers.style.fontWeight = 'normal';
+        btnOffers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    btnMembers.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'members';
+        btnMembers.style.fontWeight = 'bold';
+        btnSummary.style.fontWeight = 'normal';
+        btnOffers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    btnOffers.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'offers';
+        btnOffers.style.fontWeight = 'bold';
+        btnSummary.style.fontWeight = 'normal';
+        btnMembers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    toggleBtn.addEventListener('click', () => {
+        isMinimized = !isMinimized;
+        if (isMinimized) {
+            content.style.display = 'none';
+            viewButtons.style.display = 'none';
+            toggleBtn.textContent = 'Expand';
+            container.style.width = '200px';
+        } else {
+            content.style.display = 'block';
+            viewButtons.style.display = 'flex';
+            toggleBtn.textContent = 'Minimize';
+            container.style.width = '90%';
+        }
+    });
+
+    // ---------------------------
+    // Functions for Fetching and Rendering Data
     // ---------------------------
     async function fetchAccount() {
         try {
@@ -175,25 +247,20 @@
             });
             if (!res.ok) {
                 console.error('Failed to fetch account data (status not OK)');
-                return false; // <-- indicate failure
+                return false;
             }
-
             const data = await res.json();
             if (!data || !Array.isArray(data.accounts)) {
                 throw new Error('Invalid account data received');
             }
             accountData = [];
             let mainCounter = 1;
-
             data.accounts.forEach(item => {
-                // Build map for main (BASIC) account. Use only the first account_status if array.
                 const mainAccount = {
                     display_account_number: item.account?.display_account_number || 'N/A',
                     relationship: item.account?.relationship || 'N/A',
                     supplementary_index: item.account?.supplementary_index || 'N/A',
-                    account_status: Array.isArray(item.status?.account_status)
-                        ? item.status.account_status[0] // take only the first status
-                        : (item.status?.account_status || 'N/A'),
+                    account_status: Array.isArray(item.status?.account_status) ? item.status.account_status[0] : (item.status?.account_status || 'N/A'),
                     days_past_due: (item.status?.days_past_due !== undefined) ? item.status.days_past_due : 'N/A',
                     account_setup_date: item.status?.account_setup_date || 'N/A',
                     description: item.product?.description || 'N/A',
@@ -205,8 +272,6 @@
                     enrolledOffers: 0
                 };
                 accountData.push(mainAccount);
-
-                // Process supplementary accounts
                 if (Array.isArray(item.supplementary_accounts)) {
                     item.supplementary_accounts.forEach(supp => {
                         const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
@@ -214,9 +279,7 @@
                             display_account_number: supp.account?.display_account_number || 'N/A',
                             relationship: supp.account?.relationship || 'N/A',
                             supplementary_index: supp.account?.supplementary_index || 'N/A',
-                            account_status: Array.isArray(supp.status?.account_status)
-                                ? supp.status.account_status[0]
-                                : (supp.status?.account_status || 'N/A'),
+                            account_status: Array.isArray(supp.status?.account_status) ? supp.status.account_status[0] : (supp.status?.account_status || 'N/A'),
                             days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
                             account_setup_date: supp.status?.account_setup_date || 'N/A',
                             description: supp.product?.description || 'N/A',
@@ -232,32 +295,25 @@
                 }
                 mainCounter++;
             });
-
             btnSummary.style.fontWeight = 'bold';
             renderCurrentView();
-            return true; // <-- indicate success
-
+            return true;
         } catch (error) {
             console.error('Error fetching account data:', error);
             content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
-            return false; // <-- indicate failure
+            return false;
         }
     }
 
-    // ---------------------------
-    // Render Members View
-    // ---------------------------
     function renderMembersView() {
-        const container = document.createElement('div');
-
-        // Create a container for both filters in one line
+        const containerDiv = document.createElement('div');
         const filtersDiv = document.createElement('div');
         filtersDiv.style.display = 'flex';
         filtersDiv.style.alignItems = 'center';
         filtersDiv.style.gap = '20px';
         filtersDiv.style.marginBottom = '10px';
 
-        // Filter by Status control
+        // Filter by Status
         const statusFilterDiv = document.createElement('div');
         statusFilterDiv.style.display = 'flex';
         statusFilterDiv.style.alignItems = 'center';
@@ -286,7 +342,7 @@
         statusFilterDiv.appendChild(statusFilterSelect);
         filtersDiv.appendChild(statusFilterDiv);
 
-        // Filter by Type control
+        // Filter by Type
         const typeFilterDiv = document.createElement('div');
         typeFilterDiv.style.display = 'flex';
         typeFilterDiv.style.alignItems = 'center';
@@ -315,9 +371,9 @@
         typeFilterDiv.appendChild(typeFilterSelect);
         filtersDiv.appendChild(typeFilterDiv);
 
-        container.appendChild(filtersDiv);
-        container.appendChild(renderMembersTable());
-        return container;
+        containerDiv.appendChild(filtersDiv);
+        containerDiv.appendChild(renderMembersTable());
+        return containerDiv;
     }
 
     function renderMembersTable() {
@@ -351,7 +407,6 @@
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
 
-        // Build table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
@@ -374,18 +429,14 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Apply filters: Status and Type
         const filteredAccounts = accountData.filter(acc => {
-            const statusMatch =
-                currentStatusFilter === 'all' ||
+            const statusMatch = currentStatusFilter === 'all' ||
                 acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
-            const typeMatch =
-                currentTypeFilter === 'all' ||
+            const typeMatch = currentTypeFilter === 'all' ||
                 acc.relationship === currentTypeFilter;
             return statusMatch && typeMatch;
         });
 
-        // Build table body with filtered accounts
         const tbody = document.createElement('tbody');
         filteredAccounts.forEach(item => {
             const row = document.createElement('tr');
@@ -424,22 +475,6 @@
         return table;
     }
 
-    function parseCardIndex(indexStr) {
-        if (!indexStr) return [0, 0];
-        const parts = indexStr.split('-');
-        const main = parseInt(parts[0], 10) || 0;
-        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
-        return [main, sub];
-    }
-    function parseNumericValue(str) {
-        if (!str) return NaN;
-        const cleaned = str
-            .replace(/[$,%]/g, '') // remove $, commas, and %
-            .replace(/\s*back\s*/i, '') // remove “back” if found
-            .trim();
-        return parseFloat(cleaned) || NaN;
-    }
-
     function sortData(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
@@ -467,18 +502,23 @@
         renderCurrentView();
     }
 
-    // ---------------------------
-    // Helpers for Offer Parsing
-    // ---------------------------
-    function getUrl(encoded) {
-        try {
-            return atob(encoded);
-        } catch (e) {
-            console.error("Error decoding URL:", e, "Encoded string:", encoded);
-            return "";
-        }
+    function parseCardIndex(indexStr) {
+        if (!indexStr) return [0, 0];
+        const parts = indexStr.split('-');
+        const main = parseInt(parts[0], 10) || 0;
+        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
+        return [main, sub];
     }
 
+    function parseNumericValue(str) {
+        if (!str) return NaN;
+        const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
+        return parseFloat(cleaned) || NaN;
+    }
+
+    // ---------------------------
+    // Helpers for Offer Parsing and Sorting
+    // ---------------------------
     async function fetchOffersForAccount(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -526,7 +566,6 @@
         let times = null;
         let total = null;
 
-        // 1) Parse “Spend $500”
         {
             const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
             const spendMatch = description.match(spendRegex);
@@ -535,7 +574,6 @@
             }
         }
 
-        // 2) Parse explicit percentage offers “Earn 10% back”, “Get 5% back”
         {
             const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
             const percentMatch = description.match(percentRegex);
@@ -544,25 +582,23 @@
             }
         }
 
-        // 2A) Parse Membership Rewards® points per dollar
         {
             const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
             const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
             if (mrPointsPerDollarMatch) {
                 const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
                 if (!percentageVal) {
-                    percentageVal = mrPointsEachDollar; // interpret 1 MR = 1% for simplicity
+                    percentageVal = mrPointsEachDollar;
                 }
                 const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*points/i;
                 const mrPointsCapMatch = description.match(mrPointsCapRegex);
                 if (mrPointsCapMatch) {
                     const capVal = parseDollar(mrPointsCapMatch[1]);
-                    rewardVal = capVal * 0.01; // each point ~ 1¢
+                    rewardVal = capVal * 0.01;
                 }
             }
         }
 
-        // 3) Parse reward amounts (dollar statement credits)
         {
             const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
             const earnGetMatch = description.match(earnGetRegex);
@@ -576,17 +612,15 @@
             }
         }
 
-        // 3A) Flat points (e.g. “Earn 10,000 Membership Rewards® points”)
         {
             const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
             const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
             if (mrPointsRewardMatch) {
                 const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
-                rewardVal = points * 0.01; // approximate 1pt = $0.01
+                rewardVal = points * 0.01;
             }
         }
 
-        // 4) Parse “up to X times”
         {
             const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
             const upToTimesMatch = description.match(upToTimesRegex);
@@ -595,7 +629,6 @@
             }
         }
 
-        // 5) Parse parenthetical “(total of $XX)”
         {
             const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
             const totalOfMatch = description.match(totalOfRegex);
@@ -604,7 +637,6 @@
             }
         }
 
-        // Attempt to fill missing values from two known ones
         const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
         const haveReward = (rewardVal != null && !isNaN(rewardVal));
         const havePercent = (percentageVal != null && !isNaN(percentageVal));
@@ -616,7 +648,7 @@
         } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
             thresholdVal = rewardVal / (percentageVal / 100);
         } else if (havePercent && !haveThreshold && !haveReward) {
-            thresholdVal = 10000; // default
+            thresholdVal = 10000;
             rewardVal = thresholdVal * (percentageVal / 100);
         }
 
@@ -630,126 +662,6 @@
         return { threshold, reward, percentage, times, total };
     }
 
-    // ---------------------------
-    // Refresh and Merge logic for Offers
-    // ---------------------------
-    async function refreshOffers() {
-        // We'll store new offers in a map keyed by source_id
-        const offerInfoTable = {};
-
-        // Filter active accounts only
-        const activeAccounts = accountData.filter(acc =>
-            acc.account_status &&
-            acc.account_status.trim().toLowerCase() === "active"
-        );
-
-        const skipPatterns = [
-            "Your FICO",
-            "The Hotel Collection",
-            "on Amex Travel",
-            "Flexible Business Credit",
-            "Apple Pay",
-            //"Send Money to Friends"
-        ];
-
-        // Fetch offers for each account in parallel
-        await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.account_token);
-            offers.forEach(offer => {
-                const sourceId = offer.source_id;
-                if (!sourceId) return;
-
-                const offerName = (offer.name || "").toLowerCase();
-                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
-                    return; // skip unwanted patterns
-                }
-
-                if (!offerInfoTable[sourceId]) {
-                    const details = parseOfferDetails(offer.short_description || "");
-                    offerInfoTable[sourceId] = {
-                        source_id: sourceId,
-                        offerId: offer.id || "N/A",
-                        name: offer.name || "N/A",
-                        achievement_type: offer.achievement_type || "N/A",
-                        category: offer.category || "N/A",
-                        expiry_date: offer.expiry_date || "N/A",
-                        logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
-                        short_description: offer.short_description || "N/A",
-                        threshold: details.threshold,
-                        reward: details.reward,
-                        percentage: details.percentage,
-                        eligibleCards: [],
-                        enrolledCards: [],
-                        favorite: false // By default, new ones are not favorite
-                    };
-                }
-
-                // Enrollment status
-                if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
-                    }
-                }
-            });
-        }));
-
-        // Before we build final array, we merge old favorites from existing offerData
-        // so that user’s existing favorite flags aren’t lost.
-        mergeFavorites(offerInfoTable);
-
-        // Reset each account’s eligibleOffers/enrolledOffers
-        accountData.forEach(acc => {
-            acc.eligibleOffers = 0;
-            acc.enrolledOffers = 0;
-        });
-
-        // Tally the new counts
-        Object.values(offerInfoTable).forEach(offer => {
-            if (Array.isArray(offer.eligibleCards)) {
-                offer.eligibleCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
-                });
-            }
-            if (Array.isArray(offer.enrolledCards)) {
-                offer.enrolledCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
-                });
-            }
-        });
-
-        // Return array
-        return Object.values(offerInfoTable);
-    }
-
-    // Merge old favorites into newly fetched data
-    function mergeFavorites(newOfferMap) {
-        // Build a quick lookup from old offerData
-        const oldFavorites = {};
-        if (offerData && Array.isArray(offerData)) {
-            offerData.forEach(o => {
-                if (o.source_id) {
-                    oldFavorites[o.source_id] = o.favorite === true;
-                }
-            });
-        }
-        // Set .favorite in new map if it existed in old
-        for (const sid in newOfferMap) {
-            if (oldFavorites.hasOwnProperty(sid)) {
-                newOfferMap[sid].favorite = oldFavorites[sid];
-            }
-        }
-    }
-
-    // ---------------------------
-    // Sorting for Offers
-    // ---------------------------
     function sortOfferData(key) {
         if (offerSortState.key === key) {
             offerSortState.direction *= -1;
@@ -760,12 +672,9 @@
 
         offerData.sort((a, b) => {
             if (key === "favorite") {
-                // Custom comparator for booleans: true comes first
                 if (a.favorite === b.favorite) return 0;
                 return a.favorite ? -1 : 1;
             }
-
-            // For numeric columns, compare their parsed numeric values
             const numericColumns = ["reward", "threshold", "percentage"];
             const valA = a[key] || "";
             const valB = b[key] || "";
@@ -780,15 +689,11 @@
                     return -1 * offerSortState.direction;
                 }
                 return offerSortState.direction * (numA - numB);
-            }
-            // For columns that are arrays (like eligibleCards or enrolledCards), sort by length
-            else if (key === "eligibleCards" || key === "enrolledCards") {
+            } else if (key === "eligibleCards" || key === "enrolledCards") {
                 const lenA = Array.isArray(valA) ? valA.length : 0;
                 const lenB = Array.isArray(valB) ? valB.length : 0;
                 return offerSortState.direction * (lenA - lenB);
-            }
-            // Standard string comparison for everything else
-            else {
+            } else {
                 return offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
         });
@@ -797,9 +702,8 @@
     }
 
     // ---------------------------
-    // Render Offer Map (including new “Favorite” column)
+    // Render Offer Map
     // ---------------------------
-
     function debounce(func, wait) {
         let timeout;
         return function (...args) {
@@ -809,57 +713,48 @@
     }
 
     function renderOfferMap(offerArray) {
-        // Create a container for the entire view.
-        const container = document.createElement('div');
-
-        // Create a filter row (favorites checkbox and search bar) that sits at the top.
+        const containerDiv = document.createElement('div');
         const filterRow = document.createElement('div');
         filterRow.style.display = 'flex';
         filterRow.style.alignItems = 'center';
         filterRow.style.gap = '20px';
         filterRow.style.margin = '10px';
 
-        // Favorites checkbox
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
         favCheckbox.checked = showFavoritesOnly;
         favCheckbox.addEventListener('change', () => {
             showFavoritesOnly = favCheckbox.checked;
-            renderCurrentView(); // re-render entire offers view
+            renderCurrentView();
         });
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
         favLabel.style.fontSize = '16px';
         favLabel.style.cursor = 'pointer';
 
-        // Search input – debounced so that re-rendering does not occur immediately on every keystroke.
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.placeholder = 'Search Merchants...';
         searchInput.style.fontSize = '16px';
         searchInput.style.padding = '4px';
         searchInput.style.width = '200px';
-        // Restore any previously typed value.
         searchInput.value = offerSearchKeyword;
-        // Debounce the input event so we only re-render after 300ms of inactivity.
         searchInput.addEventListener('input', debounce(() => {
             offerSearchKeyword = searchInput.value.toLowerCase();
             renderCurrentView();
-        }, 300));
+        }, 600));
 
         filterRow.appendChild(favCheckbox);
         filterRow.appendChild(favLabel);
         filterRow.appendChild(searchInput);
-        container.appendChild(filterRow);
+        containerDiv.appendChild(filterRow);
 
-        // Filter the offers according to favorites and the search keyword.
         const filteredOffers = offerArray.filter(o => {
             if (showFavoritesOnly && !o.favorite) return false;
             if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
             return true;
         });
 
-        // Define headers (with "Fav" and "Pct" shortened if desired)
         const headers = [
             { label: "Fav", key: "favorite" },
             { label: "Logo", key: "logo" },
@@ -892,13 +787,11 @@
             enrolledCards: "50px"
         };
 
-        // Build the table.
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
 
-        // Table header without checkboxes.
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
@@ -927,7 +820,6 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Build table body.
         const tbody = document.createElement('tbody');
         filteredOffers.forEach(item => {
             const row = document.createElement('tr');
@@ -943,7 +835,6 @@
                     td.style.wordWrap = 'break-word';
                 }
                 let cellValue = item[headerItem.key];
-
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
                         const img = document.createElement('img');
@@ -1000,7 +891,7 @@
                     viewBtn.style.fontSize = '10px';
                     viewBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        renderViewCard(
+                        WindowrRender_ViewCard(
                             cards,
                             item.offerId,
                             headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
@@ -1042,15 +933,10 @@
             tbody.appendChild(row);
         });
         table.appendChild(tbody);
-        container.appendChild(table);
-        return container;
+        containerDiv.appendChild(table);
+        return containerDiv;
     }
 
-
-
-
-
-    // For the “View” button in the Eligible/Enrolled columns
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
         win.style.backgroundColor = '#fff';
@@ -1072,8 +958,6 @@
         win.appendChild(header);
 
         const contentDiv = document.createElement('div');
-
-        // Create a sorted copy of the cards array based on cardIndex from accountData.
         const sortedCards = cards.slice();
         sortedCards.sort((a, b) => {
             const accA = accountData.find(acc => acc.display_account_number === a);
@@ -1111,10 +995,11 @@
                                 return;
                             }
                             const accountToken = matchingAcc.account_token;
+                            const foundOffer = offerData.find(o => o.offerId === offerId);
                             const result = await enrollOffer(accountToken, offerId);
                             console.log(result && result.isEnrolled
-                                ? `Enrollment successful for card ${cardEnd}, offer ${offerId}`
-                                : `Enrollment failed for card ${cardEnd}, offer ${offerId}`);
+                                ? `Enrollment successful for card ${cardEnd}, offer "${foundOffer.name}"`
+                                : `Enrollment failed for card ${cardEnd}, offer "${foundOffer.name}"`);
                         });
                     } else {
                         cardSpan.style.cursor = 'default';
@@ -1139,7 +1024,6 @@
                 const sourceId = foundOffer.source_id;
                 console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
                 await batchEnrollOffer(sourceId);
-                // Force the UI to remain in the offer mapping view after enrollment.
                 currentView = 'offers';
                 renderCurrentView();
             });
@@ -1158,9 +1042,6 @@
         document.body.appendChild(win);
     }
 
-    // ---------------------------
-    // Enrollment
-    // ---------------------------
     async function enrollOffer(accountToken, offerIdentifier) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -1200,7 +1081,6 @@
     }
 
     async function batchEnrollOffer(offerSourceId, accountNumber) {
-        // If accountNumber is provided, only include that account
         const activeCardMap = {};
         accountData.forEach(acc => {
             if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
@@ -1210,6 +1090,9 @@
             }
         });
 
+        let totalEnrollAttempts = 0;
+        let successfulEnrollments = 0;
+
         const tasks = [];
         for (const offer of offerData) {
             if (offerSourceId && offer.source_id !== offerSourceId) {
@@ -1217,10 +1100,9 @@
             }
             if (offer.category === "DEFAULT") {
                 console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-                continue;
             }
 
-            const cardHolderMap = {};
+            const accountTasks = [];
             for (const card of offer.eligibleCards) {
                 const matchingAccounts = accountData.filter(acc =>
                     acc.display_account_number === card &&
@@ -1230,50 +1112,57 @@
                 for (const acc of matchingAccounts) {
                     let fullName = acc.embossed_name;
                     if (!fullName) continue;
-                    let parts = fullName.trim().split(/\s+/);
-                    let normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
-                    if (!cardHolderMap[normalizedName]) {
-                        cardHolderMap[normalizedName] = [];
-                    }
-                    cardHolderMap[normalizedName].push({
+                    const parts = fullName.trim().split(/\s+/);
+                    const normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
+                    accountTasks.push({
                         card,
-                        accountToken: acc.account_token
+                        accountToken: acc.account_token,
+                        cardHolder: normalizedName
                     });
                 }
             }
+            accountTasks.sort((a, b) => a.cardHolder.localeCompare(b.cardHolder));
 
-            for (const cardHolder in cardHolderMap) {
+            for (const task of accountTasks) {
                 tasks.push(async () => {
-                    for (const entry of cardHolderMap[cardHolder]) {
-                        try {
-                            const result = await enrollOffer(entry.accountToken, offer.offerId);
-                            if (result && result.isEnrolled) {
-                                console.log(`Enrollment successful for offer "${offer.name}" on card ${entry.card} (cardholder ${cardHolder})`);
-                                const idx = offer.eligibleCards.indexOf(entry.card);
-                                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                                if (!offer.enrolledCards.includes(entry.card)) {
-                                    offer.enrolledCards.push(entry.card);
-                                }
-                            } else {
-                                console.log(`Enrollment failed for offer "${offer.name}" on card ${entry.card} (cardholder ${cardHolder})`);
+                    totalEnrollAttempts++;
+                    try {
+                        const result = await enrollOffer(task.accountToken, offer.offerId);
+                        if (result && result.isEnrolled) {
+                            successfulEnrollments++;
+                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) successful`);
+                            const idx = offer.eligibleCards.indexOf(task.card);
+                            if (idx !== -1) {
+                                offer.eligibleCards.splice(idx, 1);
                             }
-                        } catch (err) {
-                            console.error(`Error enrolling offer "${offer.name}" on card ${entry.card} (cardholder ${cardHolder}):`, err);
+                            if (!offer.enrolledCards.includes(task.card)) {
+                                offer.enrolledCards.push(task.card);
+                            }
+                        } else {
+                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) failed`);
                         }
+                    } catch (err) {
+                        console.error(`Error enrolling offer "${offer.name}" on card ${task.card} (${task.cardHolder}):`, err);
                     }
                 });
             }
         }
 
+        globalViewState[currentView].scrollTop = content.scrollTop;
         await runInBatches(tasks, runInBatchesLimit);
         offerData = await refreshOffers();
+
         await renderCurrentView();
+
+        if (totalEnrollAttempts > 0) {
+            const successRate = (successfulEnrollments / totalEnrollAttempts * 100).toFixed(2);
+            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
+        } else {
+            console.log('No enrollment attempts were made.');
+        }
     }
 
-    // ---------------------------
-    // Summary View
-    // ---------------------------
-    function renderSummaryView() {
+    async function renderSummaryView() {
         const numAccounts = accountData.length;
         const updateTime = lastUpdate || "Never";
 
@@ -1284,10 +1173,8 @@
 
         offerData.forEach(offer => {
             if (offer.category === "DEFAULT") return;
-
             const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
             const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
-
             totalEligible += eligibleCount;
             totalEnrolled += enrolledCount;
             const totalCount = eligibleCount + enrolledCount;
@@ -1338,46 +1225,179 @@
             }
         });
 
-        const summaryenrollThisOfferBtn = document.createElement('button');
-        summaryenrollThisOfferBtn.textContent = 'Enroll All';
-        summaryenrollThisOfferBtn.style.cursor = 'pointer';
-        summaryenrollThisOfferBtn.style.fontSize = '22px';
-        summaryenrollThisOfferBtn.style.padding = '8px 16px';
-        summaryenrollThisOfferBtn.addEventListener('click', async () => {
+        const summaryEnrollBtn = document.createElement('button');
+        summaryEnrollBtn.textContent = 'Enroll All';
+        summaryEnrollBtn.style.cursor = 'pointer';
+        summaryEnrollBtn.style.fontSize = '22px';
+        summaryEnrollBtn.style.padding = '8px 16px';
+        summaryEnrollBtn.addEventListener('click', async () => {
             await batchEnrollOffer();
         });
 
-        btnContainer.appendChild(summaryenrollThisOfferBtn);
+        btnContainer.appendChild(summaryEnrollBtn);
         btnContainer.appendChild(summaryRefreshBtn);
         summaryDiv.appendChild(btnContainer);
 
         return summaryDiv;
     }
 
-    // ---------------------------
-    // Render Current View
-    // ---------------------------
-    async function renderCurrentView() {
-        if (currentView === 'members') {
-            content.innerHTML = '';
-            content.appendChild(renderMembersView());
-        } else if (currentView === 'offers') {
-            content.innerHTML = '';
-            content.appendChild(renderOfferMap(offerData));
-        } else if (currentView === 'summary') {
-            content.innerHTML = '';
-            content.appendChild(renderSummaryView());
+    async function refreshOffers() {
+        const offerInfoTable = {};
+        const activeAccounts = accountData.filter(acc =>
+            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+        );
+
+        const skipPatterns = [
+            "Your FICO&#174",
+            "The Hotel Collection",
+            "3X on Amex Travel",
+            "Flexible Business Credit",
+            "Apple Pay",
+            "Send Money to Friends",
+            "Considering a Big Purchase"
+        ];
+
+        await Promise.all(activeAccounts.map(async (acc) => {
+            const offers = await fetchOffersForAccount(acc.account_token);
+            offers.forEach(offer => {
+                const sourceId = offer.source_id;
+                if (!sourceId) return;
+                const offerName = (offer.name || "").toLowerCase();
+                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
+                    return;
+                }
+                if (!offerInfoTable[sourceId]) {
+                    const details = parseOfferDetails(offer.short_description || "");
+                    offerInfoTable[sourceId] = {
+                        source_id: sourceId,
+                        offerId: offer.id || "N/A",
+                        name: offer.name || "N/A",
+                        achievement_type: offer.achievement_type || "N/A",
+                        category: offer.category || "N/A",
+                        expiry_date: offer.expiry_date || "N/A",
+                        logo: offer.logo_url || "N/A",
+                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        short_description: offer.short_description || "N/A",
+                        threshold: details.threshold,
+                        reward: details.reward,
+                        percentage: details.percentage,
+                        eligibleCards: [],
+                        enrolledCards: [],
+                        favorite: false
+                    };
+                }
+
+                if (offer.status === "ELIGIBLE") {
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    }
+                } else if (offer.status === "ENROLLED") {
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                    }
+                }
+            });
+        }));
+
+        mergeFavorites(offerInfoTable);
+
+        accountData.forEach(acc => {
+            acc.eligibleOffers = 0;
+            acc.enrolledOffers = 0;
+        });
+
+        Object.values(offerInfoTable).forEach(offer => {
+            if (Array.isArray(offer.eligibleCards)) {
+                offer.eligibleCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                });
+            }
+            if (Array.isArray(offer.enrolledCards)) {
+                offer.enrolledCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                });
+            }
+        });
+
+        return Object.values(offerInfoTable);
+    }
+
+    function mergeFavorites(newOfferMap) {
+        const oldFavorites = {};
+        if (offerData && Array.isArray(offerData)) {
+            offerData.forEach(o => {
+                if (o.source_id) {
+                    oldFavorites[o.source_id] = o.favorite === true;
+                }
+            });
+        }
+        for (const sid in newOfferMap) {
+            if (oldFavorites.hasOwnProperty(sid)) {
+                newOfferMap[sid].favorite = oldFavorites[sid];
+            }
         }
     }
 
-    // ---------------------------
-    // Forum-based trust check
-    // ---------------------------
+    async function renderCurrentView() {
+        content.innerHTML = '';
+        if (currentView === 'members') {
+            content.appendChild(renderMembersView());
+        } else if (currentView === 'offers') {
+            content.appendChild(renderOfferMap(offerData));
+        } else if (currentView === 'summary') {
+            content.appendChild(await renderSummaryView());
+        }
+        if (globalViewState[currentView] && typeof globalViewState[currentView].scrollTop === 'number') {
+            content.scrollTop = globalViewState[currentView].scrollTop;
+        }
+    }
+
+    function setLocalStorage() {
+        try {
+            localStorage.setItem("accountData", JSON.stringify(accountData));
+            localStorage.setItem("offerData", JSON.stringify(offerData));
+            localStorage.setItem("lastUpdate", lastUpdate);
+            console.log("Data saved to localStorage.");
+        } catch (e) {
+            console.error("Error saving data to localStorage:", e);
+        }
+    }
+
+    function loadLocalStorage() {
+        const savedAccountData = localStorage.getItem("accountData");
+        const savedOfferData = localStorage.getItem("offerData");
+        const savedLastUpdate = localStorage.getItem("lastUpdate");
+        if (savedAccountData && savedOfferData) {
+            try {
+                accountData = JSON.parse(savedAccountData);
+                offerData = JSON.parse(savedOfferData);
+                lastUpdate = savedLastUpdate || "";
+                console.log("Load from localStorage successful.");
+                renderCurrentView();
+                if (lastUpdate) {
+                    const savedDate = new Date(lastUpdate);
+                    const now = new Date();
+                    const diff = now - savedDate;
+                    if (diff > 24 * 60 * 60 * 1000) {
+                        return 2;
+                    }
+                }
+                return 1;
+            } catch (e) {
+                console.error("Error parsing saved localStorage data:", e);
+                return 0;
+            }
+        }
+        return 0;
+    }
+
     async function getCurrentUserTrustLevel() {
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
-                url: "https://www.uscardforum.com/session/current.json",
+                url: getUrl(USCF1),
                 onload: function (response) {
                     if (response.status !== 200) {
                         console.log("Session request failed");
@@ -1392,7 +1412,7 @@
                         }
                         GM.xmlHttpRequest({
                             method: "GET",
-                            url: "https://www.uscardforum.com/u/" + encodeURIComponent(username) + ".json",
+                            url: getUrl(USCF2) + encodeURIComponent(username) + ".json",
                             onload: function (resp) {
                                 if (resp.status !== 200) {
                                     console.log(`User JSON fetch failed for ${username}`);
@@ -1425,14 +1445,8 @@
         });
     }
 
-    // ---------------------------
-    // Create UI
-    // ---------------------------
     function createUI() {
-        container.appendChild(header);
-        container.appendChild(content);
         document.body.appendChild(container);
-
         if (isMinimized) {
             content.style.display = 'none';
             viewButtons.style.display = 'none';
@@ -1441,52 +1455,6 @@
         }
     }
 
-    // ---------------------------
-    // Local Storage
-    // ---------------------------
-    function setLocalStorage() {
-        try {
-            localStorage.setItem("accountData", JSON.stringify(accountData));
-            localStorage.setItem("offerData", JSON.stringify(offerData));
-            localStorage.setItem("lastUpdate", lastUpdate);
-            console.log("Data saved to localStorage.");
-        } catch (e) {
-            console.error("Error saving data to localStorage:", e);
-        }
-    }
-
-    function loadLocalStorage() {
-        const savedAccountData = localStorage.getItem("accountData");
-        const savedOfferData = localStorage.getItem("offerData");
-        const savedLastUpdate = localStorage.getItem("lastUpdate");
-        if (savedAccountData && savedOfferData) {
-            try {
-                accountData = JSON.parse(savedAccountData);
-                offerData = JSON.parse(savedOfferData);
-                lastUpdate = savedLastUpdate || "";
-                console.log("Load from localStorage successful.");
-                renderCurrentView();
-                if (lastUpdate) {
-                    const savedDate = new Date(lastUpdate);
-                    const now = new Date();
-                    const diff = now - savedDate;
-                    if (diff > 24 * 60 * 60 * 1000) {
-                        // data is older than 1 day
-                        return 2;
-                    }
-                }
-                return 1;
-            } catch (e) {
-                console.error("Error parsing saved localStorage data:", e);
-                return 0;
-            }
-        }
-        return 0;
-    }
-
-    // ---------------------------
-    // Init
-    // ---------------------------
     async function init() {
         const tl = await getCurrentUserTrustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
@@ -1494,7 +1462,6 @@
         }
         const localDataStatus = loadLocalStorage();
         createUI();
-        // If no local data was loaded or data is older than one day:
         if (localDataStatus === 0 || localDataStatus === 2) {
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
@@ -1514,5 +1481,4 @@
     }
 
     init();
-
 })();
