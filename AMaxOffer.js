@@ -62,15 +62,25 @@
     const OFFERS_API_indexMapping = { "0": "1", "1": "10", "2": "4", "3": "0", "4": "11", "5": "6", "6": "3", "7": "8", "8": "2", "9": "9", "10": "5", "11": "7" };
     const OFFERS_API = reconstructObfuscated(OFFERS_API_segments, OFFERS_API_indexMapping);
 
-    // USCF1: https://www.uscardforum.com/session/current.json
+    // USCF1_API: https://www.uscardforum.com/session/current.json
     const USCF1_segments = ["kQzVx%", "SMG+", "YUh%", "2WT$", "5eWRXMHVZMjl0#", "I5dQ==&", "Yz&", "TDNObGMzTnBiMjR%", "WeWNtVnV_", "kzZDNjdWRYTmpZWEprWm0%", "NITTZMeT*", "N^"];
     const USCF1_indexMapping = { "0": "2", "1": "1", "2": "10", "3": "9", "4": "4", "5": "7", "6": "3", "7": "11", "8": "8", "9": "0", "10": "6", "11": "5" };
-    const USCF1 = reconstructObfuscated(USCF1_segments, USCF1_indexMapping);
+    const USCF1_API = reconstructObfuscated(USCF1_segments, USCF1_indexMapping);
 
-    // USCF2: https://www.uscardforum.com/u/
+    // USCF2_API: https://www.uscardforum.com/u/
     const USCF2_segments = ["WRXMHVZMjl0T(", "TZM&", "rWm05^", "IT&", "YUhSMGN@", "NjdWRYT!", "DNV%", "mpZWE)", "e_", "eTkzZD!", "p#", "dg==$"];
     const USCF2_indexMapping = { "0": "4", "1": "3", "2": "1", "3": "9", "4": "5", "5": "7", "6": "10", "7": "2", "8": "8", "9": "0", "10": "6", "11": "11" };
-    const USCF2 = reconstructObfuscated(USCF2_segments, USCF2_indexMapping);
+    const USCF2_API = reconstructObfuscated(USCF2_segments, USCF2_indexMapping);
+
+    // FINANCIAL_BALANCES_API: https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay
+    const FINANCIAL_BALANCES_segments = ["E0vWlhoMFpXNWtaV1JmWkdWMFlXbHNjejFrWldabGNuSmxa_", "hMMlpwYm)", "Hd3NjR0Y1WDI5MlpYSmZkR2x0WlN4bFlYSnN^", "bkwzWX%", "iSE12WW1Gc1lXNWpaW!", "YUhSMGN#", "uYkc5aVlXd3VZVzFsY21sallXNWxlSEJ!", "lVjl3WVhrPQ==$", "ITTZMeTl!", "5WlhOekxtTnZiUzloY0drdmMyVnlkbWxqYVc1%", "Q3h1YjI1ZlpHVm1aWEp5WldRc2NHRjVYMmx1WDJaMWJ_", "1GdVkybGh$"];
+    const FINANCIAL_BALANCES_indexMapping = { "0": "5", "1": "8", "2": "6", "3": "9", "4": "3", "5": "1", "6": "11", "7": "4", "8": "0", "9": "10", "10": "2", "11": "7" };
+    const FINANCIAL_BALANCES_API = reconstructObfuscated(FINANCIAL_BALANCES_segments, FINANCIAL_BALANCES_indexMapping);
+
+    // FINANCIAL_TRANSACTION_API: https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending
+    const FINANCIAL_TRANSACTION_segments = ["VzFs)", "wYm1GdVkybGh*", "YUhSM@", "iS+", "hMMlp(", "1bkwzWX(", "lSEJ5WlhOekxtTnZiUzl%", "E12ZEhKaGJuTm)", "hZM1JwYjI1ZmMzVnRiV0Z5ZVQ5emRHRjBkWE05Y0dWdVpHbHVadz09(", "Y21sallXNWx#", "GNITTZMeTluYkc5aVlXd3VZ_", "oY0drdmMyVnlkbWxqYVc@"];
+    const FINANCIAL_TRANSACTION_indexMapping = { "0": "2", "1": "10", "2": "0", "3": "9", "4": "6", "5": "11", "6": "5", "7": "4", "8": "1", "9": "3", "10": "7", "11": "8" };
+    const FINANCIAL_TRANSACTION_API = reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping);
 
     // =========================================================================
     // Section 2: Global State Variables
@@ -346,9 +356,11 @@
             return null;
         }
         try {
-            const balancesUrl = "https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay";
-            const transactionUrl = "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending";
+            // Decode the obfuscated URLs
+            const balancesUrl = getUrl(FINANCIAL_BALANCES_API);
+            const transactionUrl = getUrl(FINANCIAL_TRANSACTION_API);
 
+            // Run both fetch calls concurrently.
             const [balancesResponse, transactionResponse] = await Promise.all([
                 fetch(balancesUrl, {
                     method: 'GET',
@@ -370,45 +382,32 @@
                 })
             ]);
 
-            if (!balancesResponse.ok) {
-                console.error("Failed to fetch balances, status:", balancesResponse.status);
-                return null;
-            }
-            if (!transactionResponse.ok) {
-                console.error("Failed to fetch transaction summary, status:", transactionResponse.status);
-                return null;
-            }
+            if (!balancesResponse.ok) { console.error("Failed to fetch balances, status:", balancesResponse.status); return null; }
+            if (!transactionResponse.ok) { console.error("Failed to fetch transaction summary, status:", transactionResponse.status); return null; }
 
             const balanceData = await balancesResponse.json();
             const transactionData = await transactionResponse.json();
 
-            let balanceInfo = null;
+            let balanceInfo = {};
             if (Array.isArray(balanceData) && balanceData.length > 0) {
                 balanceInfo = {
                     statement_balance_amount: balanceData[0].statement_balance_amount,
                     remaining_statement_balance_amount: balanceData[0].remaining_statement_balance_amount
                 };
-            } else {
-                console.error("Unexpected data format for balances:", balanceData);
-            }
+            } else { console.error("Unexpected data format for balances:", balanceData); }
 
-            let transactionInfo = null;
+            let transactionInfo = {};
             if (Array.isArray(transactionData) && transactionData.length > 0) {
                 transactionInfo = {
                     debits_credits_payments_total_amount: transactionData[0].total?.debits_credits_payments_total_amount
                 };
-            } else {
-                console.error("Unexpected data format for transaction summary:", transactionData);
-            }
+            } else { console.error("Unexpected data format for transaction summary:", transactionData); }
 
             return {
                 ...balanceInfo,
                 ...transactionInfo
             };
-        } catch (error) {
-            console.error("Error fetching financial data:", error);
-            return null;
-        }
+        } catch (error) { console.error("Error fetching financial data:", error); return null; }
     }
 
     async function fetchFinancialDataForBasicCards() {
@@ -425,7 +424,7 @@
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
-                url: getUrl(USCF1),
+                url: getUrl(USCF1_API),
                 onload: function (response) {
                     if (response.status !== 200) {
                         console.log("Session request failed");
@@ -440,7 +439,7 @@
                         }
                         GM.xmlHttpRequest({
                             method: "GET",
-                            url: getUrl(USCF2) + encodeURIComponent(username) + ".json",
+                            url: getUrl(USCF2_API) + encodeURIComponent(username) + ".json",
                             onload: function (resp) {
                                 if (resp.status !== 200) {
                                     console.log(`User JSON fetch failed for ${username}`);
