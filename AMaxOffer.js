@@ -79,6 +79,7 @@
     let runInBatchesLimit = 20;
     let showFavoritesOnly = false;
     let offerSearchKeyword = "";
+    let offerSearchMembersKeyword = "";
 
     // Global sort states for members & offers
     let sortState = { key: "", direction: 1 };
@@ -187,6 +188,65 @@
     function saveCurrentScrollState() {
         if (content) {
             globalViewState[currentView].scrollTop = content.scrollTop;
+        }
+    }
+
+    // ---------------------------
+    // Sorting Helpers: Reapply stored sort orders for Members and Offers
+    // ---------------------------
+    function applyMemberSort() {
+        if (sortState.key) {
+            if (sortState.key === 'cardIndex') {
+                accountData.sort((a, b) => {
+                    const [aMain, aSub] = parseCardIndex(a.cardIndex);
+                    const [bMain, bSub] = parseCardIndex(b.cardIndex);
+                    if (aMain === bMain) {
+                        return sortState.direction * (aSub - bSub);
+                    }
+                    return sortState.direction * (aMain - bMain);
+                });
+            } else {
+                accountData.sort((a, b) => {
+                    const valA = a[sortState.key] || "";
+                    const valB = b[sortState.key] || "";
+                    return sortState.direction * valA.toString().localeCompare(valB.toString());
+                });
+            }
+        }
+    }
+
+    function applyOfferSort() {
+        if (offerSortState.key) {
+            if (offerSortState.key === "favorite") {
+                offerData.sort((a, b) => {
+                    if (a.favorite === b.favorite) return 0;
+                    return a.favorite ? -1 : 1;
+                });
+            } else {
+                const numericColumns = ["reward", "threshold", "percentage"];
+                offerData.sort((a, b) => {
+                    const valA = a[offerSortState.key] || "";
+                    const valB = b[offerSortState.key] || "";
+                    if (numericColumns.includes(offerSortState.key)) {
+                        const numA = parseNumericValue(valA);
+                        const numB = parseNumericValue(valB);
+                        if (isNaN(numA) && isNaN(numB)) {
+                            return offerSortState.direction * valA.localeCompare(valB);
+                        } else if (isNaN(numA)) {
+                            return 1 * offerSortState.direction;
+                        } else if (isNaN(numB)) {
+                            return -1 * offerSortState.direction;
+                        }
+                        return offerSortState.direction * (numA - numB);
+                    } else if (offerSortState.key === "eligibleCards" || offerSortState.key === "enrolledCards") {
+                        const lenA = Array.isArray(valA) ? valA.length : 0;
+                        const lenB = Array.isArray(valB) ? valB.length : 0;
+                        return offerSortState.direction * (lenA - lenB);
+                    } else {
+                        return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+                    }
+                });
+            }
         }
     }
 
@@ -371,10 +431,33 @@
         typeFilterDiv.appendChild(typeFilterSelect);
         filtersDiv.appendChild(typeFilterDiv);
 
+        // --- New: Offer Search Bar for Members ---
+        const offerSearchDiv = document.createElement('div');
+        offerSearchDiv.style.display = 'flex';
+        offerSearchDiv.style.alignItems = 'center';
+        const offerSearchLabel = document.createElement('label');
+        offerSearchLabel.textContent = 'Search Offer: ';
+        offerSearchDiv.appendChild(offerSearchLabel);
+        const offerSearchInput = document.createElement('input');
+        offerSearchInput.type = 'text';
+        offerSearchInput.placeholder = 'Enter offer keyword';
+        offerSearchInput.style.fontSize = '16px';
+        offerSearchInput.style.padding = '4px';
+        offerSearchInput.style.width = '200px';
+        offerSearchInput.value = offerSearchMembersKeyword;
+        offerSearchInput.addEventListener('input', debounce(() => {
+            offerSearchMembersKeyword = offerSearchInput.value.toLowerCase();
+            renderCurrentView();
+        }, 600));
+        offerSearchDiv.appendChild(offerSearchInput);
+        filtersDiv.appendChild(offerSearchDiv);
+        // --- End new offer search bar ---
+
         containerDiv.appendChild(filtersDiv);
         containerDiv.appendChild(renderMembersTable());
         return containerDiv;
     }
+
 
     function renderMembersTable() {
         const headers = [
@@ -429,13 +512,33 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        const filteredAccounts = accountData.filter(acc => {
+        // Initial filtering by status and type
+        let filteredAccounts = accountData.filter(acc => {
             const statusMatch = currentStatusFilter === 'all' ||
                 acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
             const typeMatch = currentTypeFilter === 'all' ||
                 acc.relationship === currentTypeFilter;
             return statusMatch && typeMatch;
         });
+
+        // --- New: Further filter accounts based on offer search keyword ---
+        if (offerSearchMembersKeyword && offerSearchMembersKeyword.trim() !== "") {
+            let matchingAccountNumbers = new Set();
+            offerData.forEach(offer => {
+                if (offer.name.toLowerCase().includes(offerSearchMembersKeyword)) {
+                    if (Array.isArray(offer.eligibleCards)) {
+                        offer.eligibleCards.forEach(card => matchingAccountNumbers.add(card));
+                    }
+                    if (Array.isArray(offer.enrolledCards)) {
+                        offer.enrolledCards.forEach(card => matchingAccountNumbers.add(card));
+                    }
+                }
+            });
+            filteredAccounts = filteredAccounts.filter(acc =>
+                matchingAccountNumbers.has(acc.display_account_number)
+            );
+        }
+        // --- End new filtering logic ---
 
         const tbody = document.createElement('tbody');
         filteredAccounts.forEach(item => {
@@ -475,6 +578,7 @@
         return table;
     }
 
+
     function sortData(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
@@ -509,7 +613,6 @@
         const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
         return [main, sub];
     }
-
     function parseNumericValue(str) {
         if (!str) return NaN;
         const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
@@ -573,7 +676,6 @@
                 thresholdVal = parseDollar(spendMatch[1]);
             }
         }
-
         {
             const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
             const percentMatch = description.match(percentRegex);
@@ -581,7 +683,6 @@
                 percentageVal = parseFloat(percentMatch[1]);
             }
         }
-
         {
             const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
             const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
@@ -590,7 +691,8 @@
                 if (!percentageVal) {
                     percentageVal = mrPointsEachDollar;
                 }
-                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*points/i;
+
+                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
                 const mrPointsCapMatch = description.match(mrPointsCapRegex);
                 if (mrPointsCapMatch) {
                     const capVal = parseDollar(mrPointsCapMatch[1]);
@@ -598,7 +700,6 @@
                 }
             }
         }
-
         {
             const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
             const earnGetMatch = description.match(earnGetRegex);
@@ -611,7 +712,6 @@
                 rewardVal = parseDollar(upToTotalMatch[1]);
             }
         }
-
         {
             const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
             const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
@@ -620,7 +720,6 @@
                 rewardVal = points * 0.01;
             }
         }
-
         {
             const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
             const upToTimesMatch = description.match(upToTimesRegex);
@@ -628,7 +727,6 @@
                 times = upToTimesMatch[1];
             }
         }
-
         {
             const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
             const totalOfMatch = description.match(totalOfRegex);
@@ -636,7 +734,6 @@
                 total = toMoneyString(parseDollar(totalOfMatch[1]));
             }
         }
-
         const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
         const haveReward = (rewardVal != null && !isNaN(rewardVal));
         const havePercent = (percentageVal != null && !isNaN(percentageVal));
@@ -651,14 +748,12 @@
             thresholdVal = 10000;
             rewardVal = thresholdVal * (percentageVal / 100);
         }
-
         if (thresholdVal != null) threshold = toMoneyString(thresholdVal);
         if (rewardVal != null) reward = toMoneyString(rewardVal);
         if (percentageVal != null) {
             const rounded = Math.round(percentageVal * 10) / 10;
             percentage = `${rounded}%`;
         }
-
         return { threshold, reward, percentage, times, total };
     }
 
@@ -669,7 +764,6 @@
             offerSortState.key = key;
             offerSortState.direction = (key === "favorite") ? -1 : 1;
         }
-
         offerData.sort((a, b) => {
             if (key === "favorite") {
                 if (a.favorite === b.favorite) return 0;
@@ -697,7 +791,6 @@
                 return offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
         });
-
         renderCurrentView();
     }
 
@@ -922,7 +1015,7 @@
                     favCheckbox.checked = item.favorite === true;
                     favCheckbox.addEventListener('change', () => {
                         item.favorite = favCheckbox.checked;
-                        setLocalStorage();
+                        setLocalStorage(accountData[0].account_token);
                     });
                     td.appendChild(favCheckbox);
                 } else {
@@ -1162,7 +1255,8 @@
         }
     }
 
-    async function renderSummaryView() {
+    // Changed renderSummaryView to be synchronous so it returns a Node.
+    function renderSummaryView() {
         const numAccounts = accountData.length;
         const updateTime = lastUpdate || "Never";
 
@@ -1220,7 +1314,7 @@
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
                     await renderCurrentView();
-                    setLocalStorage();
+                    setLocalStorage(accountData[0].account_token);
                 }
             }
         });
@@ -1340,47 +1434,62 @@
         }
     }
 
+    // Modified renderCurrentView to await any Promise that might be returned from a view function.
     async function renderCurrentView() {
-        content.innerHTML = '';
+        // Reapply stored sort orders if applicable
         if (currentView === 'members') {
-            content.appendChild(renderMembersView());
+            applyMemberSort();
         } else if (currentView === 'offers') {
-            content.appendChild(renderOfferMap(offerData));
-        } else if (currentView === 'summary') {
-            content.appendChild(await renderSummaryView());
+            applyOfferSort();
         }
+        content.innerHTML = '';
+        let viewContent;
+        if (currentView === 'members') {
+            viewContent = renderMembersView();
+        } else if (currentView === 'offers') {
+            viewContent = renderOfferMap(offerData);
+        } else if (currentView === 'summary') {
+            viewContent = renderSummaryView();
+        }
+        // <<-- CHANGED CODE: Check if viewContent is thenable and await it if so.
+        if (viewContent && typeof viewContent.then === 'function') {
+            viewContent = await viewContent;
+        }
+        // End of changed code.
+        content.appendChild(viewContent);
         if (globalViewState[currentView] && typeof globalViewState[currentView].scrollTop === 'number') {
             content.scrollTop = globalViewState[currentView].scrollTop;
         }
     }
 
-    function setLocalStorage() {
+
+    function setLocalStorage(tokenSuffix) {
         try {
-            localStorage.setItem("accountData", JSON.stringify(accountData));
-            localStorage.setItem("offerData", JSON.stringify(offerData));
-            localStorage.setItem("lastUpdate", lastUpdate);
-            console.log("Data saved to localStorage.");
+            localStorage.setItem("accountData_" + tokenSuffix, JSON.stringify(accountData));
+            localStorage.setItem("offerData_" + tokenSuffix, JSON.stringify(offerData));
+            localStorage.setItem("lastUpdate_" + tokenSuffix, lastUpdate);
+            console.log("Data saved to localStorage with token: " + tokenSuffix);
         } catch (e) {
             console.error("Error saving data to localStorage:", e);
         }
     }
 
-    function loadLocalStorage() {
-        const savedAccountData = localStorage.getItem("accountData");
-        const savedOfferData = localStorage.getItem("offerData");
-        const savedLastUpdate = localStorage.getItem("lastUpdate");
+    function loadLocalStorage(tokenSuffix) {
+        const savedAccountData = localStorage.getItem("accountData_" + tokenSuffix);
+        const savedOfferData = localStorage.getItem("offerData_" + tokenSuffix);
+        const savedLastUpdate = localStorage.getItem("lastUpdate_" + tokenSuffix);
         if (savedAccountData && savedOfferData) {
             try {
                 accountData = JSON.parse(savedAccountData);
                 offerData = JSON.parse(savedOfferData);
                 lastUpdate = savedLastUpdate || "";
-                console.log("Load from localStorage successful.");
+                console.log("Load from localStorage successful for token: " + tokenSuffix);
                 renderCurrentView();
                 if (lastUpdate) {
                     const savedDate = new Date(lastUpdate);
                     const now = new Date();
                     const diff = now - savedDate;
-                    if (diff > 24 * 60 * 60 * 1000) {
+                    if (diff > 24 * 60 * 60 * 1000) { // if data is older than 24 hours
                         return 2;
                     }
                 }
@@ -1460,25 +1569,31 @@
         if (tl === null || tl * 0.173 < 0.5) {
             return;
         }
-        const localDataStatus = loadLocalStorage();
+
+        const fetchStatus = await fetchAccount();
+        if (!fetchStatus || accountData.length === 0) {
+            console.error("Failed to fetch account data or no accounts found.");
+            return;
+        }
+
+        const localDataStatus = loadLocalStorage(accountData[0].account_token);
         createUI();
+
         if (localDataStatus === 0 || localDataStatus === 2) {
-            const fetchStatus = await fetchAccount();
-            if (fetchStatus) {
-                const newOfferData = await refreshOffers();
-                if (newOfferData && Array.isArray(newOfferData)) {
-                    offerData = newOfferData;
-                    lastUpdate = new Date().toLocaleString();
-                    await renderCurrentView();
-                    setLocalStorage();
-                } else {
-                    console.error("refreshOffers failed. Not updating localStorage.");
-                }
+            const newOfferData = await refreshOffers();
+            if (newOfferData && Array.isArray(newOfferData)) {
+                offerData = newOfferData;
+                lastUpdate = new Date().toLocaleString();
+                await renderCurrentView();
+                setLocalStorage(accountData[0].account_token);
+            } else {
+                console.error("refreshOffers failed. Not updating localStorage.");
             }
         } else {
-            console.log("Using data from localStorage. No forced fetch.");
+            console.log("Using data from LocalStorage. No forced fetch.");
         }
     }
 
     init();
 })();
+
