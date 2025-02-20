@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         AMaxOffer
+// @license CC BY-NC-ND 4.0 (https://creativecommons.org/licenses/by-nc-nd/4.0/)
 // @namespace    http://tampermonkey.net/
 // @version      2.0
 // @description  AMaxOffer utility with persistent sort, filter, and independent scroll state per view
 // @match        https://global.americanexpress.com/*
+// @exclude      https://global.americanexpress.com/*/login*
 // @connect      jsdelivr.net
 // @connect      uscardforum.com
 // @connect      cloudfunctions.net
@@ -100,6 +102,11 @@
     // Global sort states for members & offers
     let sortState = { key: "", direction: 1 };
     let offerSortState = { key: "", direction: 1 };
+
+    // Global variables for card priority and exclusion
+    let priorityCards = [];   // Array of card endings that should be added immediately
+    let excludedCards = [];   // Array of card endings that should be skipped
+
 
     // Global object to store independent scroll positions per view
     const globalViewState = {
@@ -688,6 +695,15 @@
             for (const task of accountTasks) {
                 tasks.push(async () => {
                     totalEnrollAttempts++;
+                    // If the card is in the excluded list, skip it
+                    if (excludedCards.includes(task.card)) {
+                        console.log(`Skipping card ${task.card} as it is excluded.`);
+                        return;
+                    }
+                    // If the card is NOT in the priority list, wait 0.5 seconds before proceeding
+                    if (!priorityCards.includes(task.card)) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
                     try {
                         const result = await enrollOffer(task.accountToken, offer.offerId);
                         if (result && result.isEnrolled) {
@@ -720,6 +736,7 @@
             console.log('No enrollment attempts were made.');
         }
     }
+
 
     async function refreshOffers() {
         const offerInfoTable = {};
@@ -909,6 +926,7 @@
         return containerDiv;
     }
 
+
     function renderMembersTable() {
         const headers = [
             { label: "Logo", key: "small_card_art" },
@@ -921,8 +939,11 @@
             { label: "Bal", key: "SB" },
             { label: "Pending", key: "pending" },
             { label: "Sta Bal", key: "remainingSB" },
-            { label: "Eligible Offers", key: "eligibleOffers" },
-            { label: "Enrolled Offers", key: "enrolledOffers" }
+            { label: "Eligible", key: "eligibleOffers" },
+            { label: "Enrolled", key: "enrolledOffers" },
+            // New columns for per-account priority/exclusion
+            { label: "Priority", key: "priority" },
+            { label: "Excluded", key: "exclude" }
         ];
         const colWidths = {
             small_card_art: "60px",
@@ -936,7 +957,9 @@
             pending: "80px",
             remainingSB: "80px",
             eligibleOffers: "80px",
-            enrolledOffers: "80px"
+            enrolledOffers: "80px",
+            priority: "60px",
+            exclude: "60px"
         };
 
         const table = document.createElement('table');
@@ -960,8 +983,11 @@
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
-            th.setAttribute('data-sort-key', headerItem.key);
-            th.addEventListener('click', () => sortData(headerItem.key));
+            // Only add sort behavior for columns that exist in your data
+            if (["small_card_art", "display_account_number", "embossed_name", "relationship", "cardIndex", "account_setup_date", "account_status", "SB", "pending", "remainingSB", "eligibleOffers", "enrolledOffers"].includes(headerItem.key)) {
+                th.setAttribute('data-sort-key', headerItem.key);
+                th.addEventListener('click', () => sortData(headerItem.key));
+            }
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
@@ -996,7 +1022,7 @@
         filteredAccounts.forEach(item => {
             const row = document.createElement('tr');
 
-            // Instead of bolding BASIC accounts, highlight the row if it matches the search term.
+            // Highlight row if account matches search
             if (shouldHighlightAccount(item)) {
                 row.style.backgroundColor = 'lightyellow';
             }
@@ -1012,6 +1038,7 @@
                     td.style.wordWrap = 'break-word';
                 }
 
+                // Render existing columns
                 if (headerItem.key === 'small_card_art') {
                     if (item.small_card_art && item.small_card_art !== 'N/A') {
                         const img = document.createElement('img');
@@ -1058,6 +1085,39 @@
                     } else {
                         td.textContent = sanitizeValue(item[headerItem.key]);
                     }
+                }
+                // Render new columns for Priority and Excluded
+                else if (headerItem.key === 'priority') {
+                    const chk = document.createElement('input');
+                    chk.type = 'checkbox';
+                    // Check if the current card (using its display number) is in the priority list
+                    chk.checked = priorityCards.includes(item.display_account_number);
+                    chk.addEventListener('change', () => {
+                        if (chk.checked) {
+                            if (!priorityCards.includes(item.display_account_number)) {
+                                priorityCards.push(item.display_account_number);
+                            }
+                        } else {
+                            priorityCards = priorityCards.filter(num => num !== item.display_account_number);
+                        }
+                        setLocalStorage(accountData[0].account_token);
+                    });
+                    td.appendChild(chk);
+                } else if (headerItem.key === 'exclude') {
+                    const chk = document.createElement('input');
+                    chk.type = 'checkbox';
+                    chk.checked = excludedCards.includes(item.display_account_number);
+                    chk.addEventListener('change', () => {
+                        if (chk.checked) {
+                            if (!excludedCards.includes(item.display_account_number)) {
+                                excludedCards.push(item.display_account_number);
+                            }
+                        } else {
+                            excludedCards = excludedCards.filter(num => num !== item.display_account_number);
+                        }
+                        setLocalStorage(accountData[0].account_token);
+                    });
+                    td.appendChild(chk);
                 } else {
                     td.textContent = sanitizeValue(item[headerItem.key]);
                 }
@@ -1068,6 +1128,7 @@
         table.appendChild(tbody);
         return table;
     }
+
 
     function renderOfferMap(offerArray) {
         const containerDiv = document.createElement('div');
@@ -1597,6 +1658,8 @@
             localStorage.setItem("accountData_" + tokenSuffix, JSON.stringify(accountData));
             localStorage.setItem("offerData_" + tokenSuffix, JSON.stringify(offerData));
             localStorage.setItem("lastUpdate_" + tokenSuffix, lastUpdate);
+            localStorage.setItem("priorityCards_" + tokenSuffix, JSON.stringify(priorityCards));
+            localStorage.setItem("excludedCards_" + tokenSuffix, JSON.stringify(excludedCards));
             console.log("Data saved to localStorage with token: " + tokenSuffix);
         } catch (e) {
             console.error("Error saving data to localStorage:", e);
@@ -1607,11 +1670,15 @@
         const savedAccountData = localStorage.getItem("accountData_" + tokenSuffix);
         const savedOfferData = localStorage.getItem("offerData_" + tokenSuffix);
         const savedLastUpdate = localStorage.getItem("lastUpdate_" + tokenSuffix);
+        const savedPriorityCards = localStorage.getItem("priorityCards_" + tokenSuffix);
+        const savedExcludedCards = localStorage.getItem("excludedCards_" + tokenSuffix);
         if (savedAccountData && savedOfferData) {
             try {
                 accountData = JSON.parse(savedAccountData);
                 offerData = JSON.parse(savedOfferData);
                 lastUpdate = savedLastUpdate || "";
+                priorityCards = savedPriorityCards ? JSON.parse(savedPriorityCards) : [];
+                excludedCards = savedExcludedCards ? JSON.parse(savedExcludedCards) : [];
                 console.log("Load from localStorage successful for token: " + tokenSuffix);
                 renderCurrentView();
                 if (lastUpdate) {

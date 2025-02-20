@@ -1,0 +1,30 @@
+
+javascript-obfuscator AMaxOffer_released.min.js -o AMaxOffer_released1.min.js ^
+    --target browser ^
+  --compact true ^
+  --simplify true ^
+  --control-flow-flattening true ^
+  --control-flow-flattening-threshold 1 ^
+  --dead-code-injection true ^
+  --dead-code-injection-threshold 0.2 ^
+  --debug-protection true ^
+  --debug-protection-interval 4000 ^
+  --disable-console-output true ^
+  --identifier-names-generator mangled-shuffled ^
+  --numbers-to-expressions true ^
+  --self-defending true ^
+  --split-strings true ^
+  --split-strings-chunk-length 5 ^
+  --string-array true ^
+  --string-array-calls-transform true ^
+  --string-array-encoding "rc4" ^
+  --string-array-index-shift true ^
+  --string-array-rotate true ^
+  --string-array-shuffle true ^
+  --string-array-wrappers-count 5 ^
+  --string-array-wrappers-chained-calls true ^
+  --string-array-wrappers-parameters-max-count 5 ^
+  --string-array-wrappers-type function ^
+  --string-array-threshold 1 ^
+  --transform-object-keys true ^
+  --unicode-escape-sequence false
