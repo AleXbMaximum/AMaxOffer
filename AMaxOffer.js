@@ -8,6 +8,8 @@
 // @connect      uscardforum.com
 // @connect      cloudfunctions.net
 // @connect      yale.email
+// @grant        GM_getResourceText
+// @grant        GM_addStyle
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // ==/UserScript==
@@ -15,9 +17,11 @@
 (function () {
     'use strict';
 
-    // ---------------------------
-    // Obfuscated Encoded URL Constants (Base64 strings split into segments)
-    // ---------------------------
+    // =========================================================================
+    // Section 1: Utility Functions & Obfuscated URL Constants
+    // =========================================================================
+
+    // Utility to reconstruct obfuscated URLs
     function reconstructObfuscated(obfSegments, indexMap) {
         let ordered = [];
         Object.keys(indexMap)
@@ -30,6 +34,7 @@
         return ordered.join('');
     }
 
+    // Utility to decode Base64 twice to retrieve original URL
     function getUrl(encoded) {
         try {
             let firstDecoding = atob(encoded);
@@ -41,6 +46,7 @@
         }
     }
 
+    // Obfuscated URL Constants
     // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
     const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];
     const MEMBER_API_indexMapping = { "0": "4", "1": "0", "2": "9", "3": "2", "4": "3", "5": "6", "6": "7", "7": "8", "8": "1", "9": "5", "10": "11", "11": "10" };
@@ -66,16 +72,16 @@
     const USCF2_indexMapping = { "0": "4", "1": "3", "2": "1", "3": "9", "4": "5", "5": "7", "6": "10", "7": "2", "8": "8", "9": "0", "10": "6", "11": "11" };
     const USCF2 = reconstructObfuscated(USCF2_segments, USCF2_indexMapping);
 
-    // ---------------------------
-    // Global State Variables
-    // ---------------------------
+    // =========================================================================
+    // Section 2: Global State Variables
+    // =========================================================================
     let accountData = [];
     let offerData = [];
     let lastUpdate = "";
-    let currentView = 'summary'; // "summary", "members", "offers"
+    let currentView = 'summary'; // Options: "summary", "members", "offers"
     let isMinimized = true;
-    let currentStatusFilter = "Active"; // "all", "Active", "Canceled"
-    let currentTypeFilter = "all";    // "all", "BASIC", "SUPP"
+    let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
+    let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
     let runInBatchesLimit = 20;
     let showFavoritesOnly = false;
     let offerSearchKeyword = "";
@@ -92,9 +98,9 @@
         offers: { scrollTop: 0 }
     };
 
-    // ---------------------------
-    // Create UI Elements
-    // ---------------------------
+    // =========================================================================
+    // Section 3: UI Elements Creation
+    // =========================================================================
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
     container.style.position = 'fixed';
@@ -123,12 +129,12 @@
     const title = document.createElement('span');
     title.textContent = 'AMaxOffer';
 
-    // Create view buttons container
+    // View buttons container
     const viewButtons = document.createElement('div');
     viewButtons.style.display = 'flex';
     viewButtons.style.gap = '40px';
 
-    // Create view buttons
+    // Individual view buttons
     const btnSummary = document.createElement('button');
     btnSummary.textContent = 'Summary';
     btnSummary.style.cursor = 'pointer';
@@ -148,30 +154,17 @@
     viewButtons.appendChild(btnMembers);
     viewButtons.appendChild(btnOffers);
 
-    // Create toggle button for minimizing/expanding the overlay
+    // Toggle button for minimizing/expanding the overlay
     const toggleBtn = document.createElement('button');
     toggleBtn.textContent = 'Minimize';
     toggleBtn.style.cursor = 'pointer';
 
+    // Append header children
     header.appendChild(title);
     header.appendChild(viewButtons);
     header.appendChild(toggleBtn);
 
-    // Draggable header implementation
-    header.addEventListener('mousedown', function (e) {
-        let shiftX = e.clientX - container.getBoundingClientRect().left;
-        let shiftY = e.clientY - container.getBoundingClientRect().top;
-        function onMouseMove(e2) {
-            container.style.left = (e2.clientX - shiftX) + 'px';
-            container.style.top = (e2.clientY - shiftY) + 'px';
-        }
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', function onMouseUp() {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        });
-    });
-
+    // Main content area
     const content = document.createElement('div');
     content.id = 'card-utility-content';
     content.style.padding = '10px';
@@ -179,125 +172,77 @@
     content.style.maxHeight = 'calc(80vh - 40px)';
     content.innerHTML = 'Loading...';
 
+    // Append header and content to container
     container.appendChild(header);
     container.appendChild(content);
 
-    // ---------------------------
-    // Global Helper: Save current view's scroll state
-    // ---------------------------
+    // =========================================================================
+    // Section 4: General Helper Functions
+    // =========================================================================
+
+    // Save the current scroll position for the active view
     function saveCurrentScrollState() {
         if (content) {
             globalViewState[currentView].scrollTop = content.scrollTop;
         }
     }
 
-    // ---------------------------
-    // Sorting Helpers: Reapply stored sort orders for Members and Offers
-    // ---------------------------
-    function applyMemberSort() {
-        if (sortState.key) {
-            if (sortState.key === 'cardIndex') {
-                accountData.sort((a, b) => {
-                    const [aMain, aSub] = parseCardIndex(a.cardIndex);
-                    const [bMain, bSub] = parseCardIndex(b.cardIndex);
-                    if (aMain === bMain) {
-                        return sortState.direction * (aSub - bSub);
-                    }
-                    return sortState.direction * (aMain - bMain);
-                });
-            } else {
-                accountData.sort((a, b) => {
-                    const valA = a[sortState.key] || "";
-                    const valB = b[sortState.key] || "";
-                    return sortState.direction * valA.toString().localeCompare(valB.toString());
-                });
-            }
+    // Debounce utility for limiting rapid function calls
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    function sanitizeValue(val) {
+        return (val === "N/A" || val === null || val === undefined) ? "0" : val;
+    }
+    // Parse card index into main and sub-index components
+    function parseCardIndex(indexStr) {
+        if (!indexStr) return [0, 0];
+        const parts = indexStr.split('-');
+        const main = parseInt(parts[0], 10) || 0;
+        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
+        return [main, sub];
+    }
+
+    // Parse a numeric value from a string, cleaning common symbols
+    function parseNumericValue(str) {
+        if (!str) return NaN;
+        const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
+        return parseFloat(cleaned) || NaN;
+    }
+
+    // Run tasks in batches to control concurrency
+    async function runInBatches(tasks, limit = 8) {
+        let i = 0;
+        while (i < tasks.length) {
+            const chunk = tasks.slice(i, i + limit);
+            await Promise.all(chunk.map(fn => fn()));
+            i += limit;
         }
     }
 
-    function applyOfferSort() {
-        if (offerSortState.key) {
-            if (offerSortState.key === "favorite") {
-                offerData.sort((a, b) => {
-                    if (a.favorite === b.favorite) return 0;
-                    return a.favorite ? -1 : 1;
-                });
-            } else {
-                const numericColumns = ["reward", "threshold", "percentage"];
-                offerData.sort((a, b) => {
-                    const valA = a[offerSortState.key] || "";
-                    const valB = b[offerSortState.key] || "";
-                    if (numericColumns.includes(offerSortState.key)) {
-                        const numA = parseNumericValue(valA);
-                        const numB = parseNumericValue(valB);
-                        if (isNaN(numA) && isNaN(numB)) {
-                            return offerSortState.direction * valA.localeCompare(valB);
-                        } else if (isNaN(numA)) {
-                            return 1 * offerSortState.direction;
-                        } else if (isNaN(numB)) {
-                            return -1 * offerSortState.direction;
-                        }
-                        return offerSortState.direction * (numA - numB);
-                    } else if (offerSortState.key === "eligibleCards" || offerSortState.key === "enrolledCards") {
-                        const lenA = Array.isArray(valA) ? valA.length : 0;
-                        const lenB = Array.isArray(valB) ? valB.length : 0;
-                        return offerSortState.direction * (lenA - lenB);
-                    } else {
-                        return offerSortState.direction * valA.toString().localeCompare(valB.toString());
-                    }
-                });
+    function getBasicAccountEndingForSuppAccount(suppAccount) {
+        // For a supplementary account, cardIndex is in the form "N-X"
+        const parts = suppAccount.cardIndex.split('-');
+        if (parts.length > 1) {
+            const mainIndex = parts[0];
+            // Find the basic account whose cardIndex equals mainIndex and has relationship "BASIC"
+            const basicAccount = accountData.find(acc => acc.cardIndex === mainIndex && acc.relationship === "BASIC");
+            if (basicAccount) {
+                return basicAccount.display_account_number;
             }
         }
+        return "N/A";
     }
 
-    // ---------------------------
-    // Attach Event Listeners for View Switching
-    // ---------------------------
-    btnSummary.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'summary';
-        btnSummary.style.fontWeight = 'bold';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
+    // =========================================================================
+    // Section 5: Data Fetching Functions
+    // =========================================================================
 
-    btnMembers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'members';
-        btnMembers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    btnOffers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'offers';
-        btnOffers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    toggleBtn.addEventListener('click', () => {
-        isMinimized = !isMinimized;
-        if (isMinimized) {
-            content.style.display = 'none';
-            viewButtons.style.display = 'none';
-            toggleBtn.textContent = 'Expand';
-            container.style.width = '200px';
-        } else {
-            content.style.display = 'block';
-            viewButtons.style.display = 'flex';
-            toggleBtn.textContent = 'Minimize';
-            container.style.width = '90%';
-        }
-    });
-
-    // ---------------------------
-    // Functions for Fetching and Rendering Data
-    // ---------------------------
     async function fetchAccount() {
         try {
             const res = await fetch(getUrl(MEMBER_API), {
@@ -365,263 +310,6 @@
         }
     }
 
-    function renderMembersView() {
-        const containerDiv = document.createElement('div');
-        const filtersDiv = document.createElement('div');
-        filtersDiv.style.display = 'flex';
-        filtersDiv.style.alignItems = 'center';
-        filtersDiv.style.gap = '20px';
-        filtersDiv.style.marginBottom = '10px';
-
-        // Filter by Status
-        const statusFilterDiv = document.createElement('div');
-        statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
-        const statusFilterLabel = document.createElement('label');
-        statusFilterLabel.textContent = 'Filter by Status: ';
-        statusFilterDiv.appendChild(statusFilterLabel);
-        const statusFilterSelect = document.createElement('select');
-        statusFilterSelect.id = 'status-filter';
-        const optionAll = document.createElement('option');
-        optionAll.value = 'all';
-        optionAll.textContent = 'All';
-        statusFilterSelect.appendChild(optionAll);
-        const optionActive = document.createElement('option');
-        optionActive.value = 'Active';
-        optionActive.textContent = 'Active';
-        statusFilterSelect.appendChild(optionActive);
-        const optionCanceled = document.createElement('option');
-        optionCanceled.value = 'Canceled';
-        optionCanceled.textContent = 'Canceled';
-        statusFilterSelect.appendChild(optionCanceled);
-        statusFilterSelect.value = currentStatusFilter;
-        statusFilterSelect.addEventListener('change', () => {
-            currentStatusFilter = statusFilterSelect.value;
-            renderCurrentView();
-        });
-        statusFilterDiv.appendChild(statusFilterSelect);
-        filtersDiv.appendChild(statusFilterDiv);
-
-        // Filter by Type
-        const typeFilterDiv = document.createElement('div');
-        typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
-        const typeFilterLabel = document.createElement('label');
-        typeFilterLabel.textContent = 'Filter by Type: ';
-        typeFilterDiv.appendChild(typeFilterLabel);
-        const typeFilterSelect = document.createElement('select');
-        typeFilterSelect.id = 'type-filter';
-        const typeOptionAll = document.createElement('option');
-        typeOptionAll.value = 'all';
-        typeOptionAll.textContent = 'All';
-        typeFilterSelect.appendChild(typeOptionAll);
-        const typeOptionBasic = document.createElement('option');
-        typeOptionBasic.value = 'BASIC';
-        typeOptionBasic.textContent = 'BASIC';
-        typeFilterSelect.appendChild(typeOptionBasic);
-        const typeOptionSupp = document.createElement('option');
-        typeOptionSupp.value = 'SUPP';
-        typeOptionSupp.textContent = 'SUPP';
-        typeFilterSelect.appendChild(typeOptionSupp);
-        typeFilterSelect.value = currentTypeFilter;
-        typeFilterSelect.addEventListener('change', () => {
-            currentTypeFilter = typeFilterSelect.value;
-            renderCurrentView();
-        });
-        typeFilterDiv.appendChild(typeFilterSelect);
-        filtersDiv.appendChild(typeFilterDiv);
-
-        // --- New: Offer Search Bar for Members ---
-        const offerSearchDiv = document.createElement('div');
-        offerSearchDiv.style.display = 'flex';
-        offerSearchDiv.style.alignItems = 'center';
-        const offerSearchLabel = document.createElement('label');
-        offerSearchLabel.textContent = 'Search Offer: ';
-        offerSearchDiv.appendChild(offerSearchLabel);
-        const offerSearchInput = document.createElement('input');
-        offerSearchInput.type = 'text';
-        offerSearchInput.placeholder = 'Enter offer keyword';
-        offerSearchInput.style.fontSize = '16px';
-        offerSearchInput.style.padding = '4px';
-        offerSearchInput.style.width = '200px';
-        offerSearchInput.value = offerSearchMembersKeyword;
-        offerSearchInput.addEventListener('input', debounce(() => {
-            offerSearchMembersKeyword = offerSearchInput.value.toLowerCase();
-            renderCurrentView();
-        }, 600));
-        offerSearchDiv.appendChild(offerSearchInput);
-        filtersDiv.appendChild(offerSearchDiv);
-        // --- End new offer search bar ---
-
-        containerDiv.appendChild(filtersDiv);
-        containerDiv.appendChild(renderMembersTable());
-        return containerDiv;
-    }
-
-
-    function renderMembersTable() {
-        const headers = [
-            { label: "Logo", key: "small_card_art" },
-            { label: "Ending", key: "display_account_number" },
-            { label: "User", key: "embossed_name" },
-            { label: "Type", key: "relationship" },
-            { label: "Index", key: "cardIndex" },
-            { label: "Opening", key: "account_setup_date" },
-            { label: "Status", key: "account_status" },
-            { label: "Days Past Due", key: "days_past_due" },
-            { label: "Eligible Offers", key: "eligibleOffers" },
-            { label: "Enrolled Offers", key: "enrolledOffers" }
-        ];
-        const colWidths = {
-            small_card_art: "60px",
-            display_account_number: "80px",
-            embossed_name: "150px",
-            relationship: "80px",
-            cardIndex: "80px",
-            account_setup_date: "80px",
-            account_status: "80px",
-            days_past_due: "80px",
-            eligibleOffers: "80px",
-            enrolledOffers: "80px"
-        };
-
-        const table = document.createElement('table');
-        table.style.width = '100%';
-        table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '12px';
-
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-        headers.forEach(headerItem => {
-            const th = document.createElement('th');
-            th.textContent = headerItem.label;
-            th.style.borderBottom = '1px solid #000';
-            th.style.padding = '4px';
-            th.style.cursor = 'pointer';
-            th.style.textAlign = 'center';
-            if (colWidths[headerItem.key]) {
-                th.style.width = colWidths[headerItem.key];
-                th.style.maxWidth = colWidths[headerItem.key];
-                th.style.whiteSpace = 'normal';
-                th.style.wordWrap = 'break-word';
-            }
-            th.setAttribute('data-sort-key', headerItem.key);
-            th.addEventListener('click', () => sortData(headerItem.key));
-            headerRow.appendChild(th);
-        });
-        thead.appendChild(headerRow);
-        table.appendChild(thead);
-
-        // Initial filtering by status and type
-        let filteredAccounts = accountData.filter(acc => {
-            const statusMatch = currentStatusFilter === 'all' ||
-                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
-            const typeMatch = currentTypeFilter === 'all' ||
-                acc.relationship === currentTypeFilter;
-            return statusMatch && typeMatch;
-        });
-
-        // --- New: Further filter accounts based on offer search keyword ---
-        if (offerSearchMembersKeyword && offerSearchMembersKeyword.trim() !== "") {
-            let matchingAccountNumbers = new Set();
-            offerData.forEach(offer => {
-                if (offer.name.toLowerCase().includes(offerSearchMembersKeyword)) {
-                    if (Array.isArray(offer.eligibleCards)) {
-                        offer.eligibleCards.forEach(card => matchingAccountNumbers.add(card));
-                    }
-                    if (Array.isArray(offer.enrolledCards)) {
-                        offer.enrolledCards.forEach(card => matchingAccountNumbers.add(card));
-                    }
-                }
-            });
-            filteredAccounts = filteredAccounts.filter(acc =>
-                matchingAccountNumbers.has(acc.display_account_number)
-            );
-        }
-        // --- End new filtering logic ---
-
-        const tbody = document.createElement('tbody');
-        filteredAccounts.forEach(item => {
-            const row = document.createElement('tr');
-            if (item.relationship === "BASIC") {
-                row.style.fontWeight = 'bold';
-            }
-            headers.forEach(headerItem => {
-                const td = document.createElement('td');
-                td.style.padding = '4px';
-                td.style.textAlign = 'center';
-                if (colWidths[headerItem.key]) {
-                    td.style.width = colWidths[headerItem.key];
-                    td.style.maxWidth = colWidths[headerItem.key];
-                    td.style.whiteSpace = 'normal';
-                    td.style.wordWrap = 'break-word';
-                }
-                if (headerItem.key === 'small_card_art') {
-                    if (item.small_card_art && item.small_card_art !== 'N/A') {
-                        const img = document.createElement('img');
-                        img.src = item.small_card_art;
-                        img.alt = "Card Logo";
-                        img.style.maxWidth = "40px";
-                        img.style.maxHeight = "40px";
-                        td.appendChild(img);
-                    } else {
-                        td.textContent = 'N/A';
-                    }
-                } else {
-                    td.textContent = item[headerItem.key];
-                }
-                row.appendChild(td);
-            });
-            tbody.appendChild(row);
-        });
-        table.appendChild(tbody);
-        return table;
-    }
-
-
-    function sortData(key) {
-        if (sortState.key === key) {
-            sortState.direction *= -1;
-        } else {
-            sortState.key = key;
-            sortState.direction = 1;
-        }
-
-        if (key === 'cardIndex') {
-            accountData.sort((a, b) => {
-                const [aMain, aSub] = parseCardIndex(a.cardIndex);
-                const [bMain, bSub] = parseCardIndex(b.cardIndex);
-                if (aMain === bMain) {
-                    return sortState.direction * (aSub - bSub);
-                }
-                return sortState.direction * (aMain - bMain);
-            });
-        } else {
-            accountData.sort((a, b) => {
-                const valA = a[key] || "";
-                const valB = b[key] || "";
-                return sortState.direction * valA.toString().localeCompare(valB.toString());
-            });
-        }
-        renderCurrentView();
-    }
-
-    function parseCardIndex(indexStr) {
-        if (!indexStr) return [0, 0];
-        const parts = indexStr.split('-');
-        const main = parseInt(parts[0], 10) || 0;
-        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
-        return [main, sub];
-    }
-    function parseNumericValue(str) {
-        if (!str) return NaN;
-        const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
-        return parseFloat(cleaned) || NaN;
-    }
-
-    // ---------------------------
-    // Helpers for Offer Parsing and Sorting
-    // ---------------------------
     async function fetchOffersForAccount(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -652,6 +340,144 @@
         }
     }
 
+    async function fetchFinancialData(accountToken) {
+        if (!accountToken) {
+            console.error("Account token is required");
+            return null;
+        }
+        try {
+            const balancesUrl = "https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay";
+            const transactionUrl = "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending";
+
+            const [balancesResponse, transactionResponse] = await Promise.all([
+                fetch(balancesUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'account_tokens': accountToken
+                    }
+                }),
+                fetch(transactionUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'account_tokens': accountToken
+                    }
+                })
+            ]);
+
+            if (!balancesResponse.ok) {
+                console.error("Failed to fetch balances, status:", balancesResponse.status);
+                return null;
+            }
+            if (!transactionResponse.ok) {
+                console.error("Failed to fetch transaction summary, status:", transactionResponse.status);
+                return null;
+            }
+
+            const balanceData = await balancesResponse.json();
+            const transactionData = await transactionResponse.json();
+
+            let balanceInfo = null;
+            if (Array.isArray(balanceData) && balanceData.length > 0) {
+                balanceInfo = {
+                    statement_balance_amount: balanceData[0].statement_balance_amount,
+                    remaining_statement_balance_amount: balanceData[0].remaining_statement_balance_amount
+                };
+            } else {
+                console.error("Unexpected data format for balances:", balanceData);
+            }
+
+            let transactionInfo = null;
+            if (Array.isArray(transactionData) && transactionData.length > 0) {
+                transactionInfo = {
+                    debits_credits_payments_total_amount: transactionData[0].total?.debits_credits_payments_total_amount
+                };
+            } else {
+                console.error("Unexpected data format for transaction summary:", transactionData);
+            }
+
+            return {
+                ...balanceInfo,
+                ...transactionInfo
+            };
+        } catch (error) {
+            console.error("Error fetching financial data:", error);
+            return null;
+        }
+    }
+
+    async function fetchFinancialDataForBasicCards() {
+        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
+        await Promise.all(basicAccounts.map(async (acc) => {
+            if (!acc.financialData) {
+                acc.financialData = await fetchFinancialData(acc.account_token);
+            }
+        }));
+    }
+
+    // Retrieve current user's trust level via USCF APIs
+    async function getCurrentUserTrustLevel() {
+        return new Promise((resolve) => {
+            GM.xmlHttpRequest({
+                method: "GET",
+                url: getUrl(USCF1),
+                onload: function (response) {
+                    if (response.status !== 200) {
+                        console.log("Session request failed");
+                        return resolve(0);
+                    }
+                    try {
+                        const sessionData = JSON.parse(response.responseText);
+                        const username = sessionData?.current_user?.username;
+                        if (!username) {
+                            console.log("No current user found");
+                            return resolve(0);
+                        }
+                        GM.xmlHttpRequest({
+                            method: "GET",
+                            url: getUrl(USCF2) + encodeURIComponent(username) + ".json",
+                            onload: function (resp) {
+                                if (resp.status !== 200) {
+                                    console.log(`User JSON fetch failed for ${username}`);
+                                    return resolve(0);
+                                }
+                                try {
+                                    const userData = JSON.parse(resp.responseText);
+                                    const trustLevel = userData?.user?.trust_level;
+                                    resolve(trustLevel ?? 0);
+                                } catch (e) {
+                                    console.error("Error parsing user JSON:", e);
+                                    resolve(0);
+                                }
+                            },
+                            onerror: function (err) {
+                                console.error("Error fetching user JSON:", err);
+                                resolve(0);
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Error parsing session JSON:", e);
+                        resolve(0);
+                    }
+                },
+                onerror: function (err) {
+                    console.error("Error fetching session:", err);
+                    resolve(0);
+                }
+            });
+        });
+    }
+
+    // =========================================================================
+    // Section 6: Offer Parsing, Sorting, and Enrollment Functions
+    // =========================================================================
+
+    // Parse offer details from description text
     function parseOfferDetails(description = "") {
         const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
         const toMoneyString = (num) => {
@@ -662,7 +488,6 @@
         let thresholdVal = null;
         let rewardVal = null;
         let percentageVal = null;
-
         let threshold = null;
         let reward = null;
         let percentage = null;
@@ -691,7 +516,6 @@
                 if (!percentageVal) {
                     percentageVal = mrPointsEachDollar;
                 }
-
                 const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
                 const mrPointsCapMatch = description.match(mrPointsCapRegex);
                 if (mrPointsCapMatch) {
@@ -757,6 +581,35 @@
         return { threshold, reward, percentage, times, total };
     }
 
+    async function enrollOffer(accountToken, offerIdentifier) {
+        const payload = {
+            accountNumberProxy: accountToken,
+            identifier: offerIdentifier,
+            identifierType: "OFFER",
+            locale: "en-US",
+            offerRequestType: "DETAILS",
+            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
+            userOffset: "-06:00"
+        };
+        try {
+            const res = await fetch(getUrl(ENROLL_API), {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Origin': 'https://global.americanexpress.com'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
+            return await res.json();
+        } catch (error) {
+            console.error('Error enrolling offer:', error);
+            return { isEnrolled: false };
+        }
+    }
+
     function sortOfferData(key) {
         if (offerSortState.key === key) {
             offerSortState.direction *= -1;
@@ -794,15 +647,427 @@
         renderCurrentView();
     }
 
-    // ---------------------------
-    // Render Offer Map
-    // ---------------------------
-    function debounce(func, wait) {
-        let timeout;
-        return function (...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
+    async function batchEnrollOffer(offerSourceId, accountNumber) {
+        const activeCardMap = {};
+        accountData.forEach(acc => {
+            if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
+                if (!accountNumber || acc.display_account_number === accountNumber) {
+                    activeCardMap[acc.display_account_number] = acc.account_token;
+                }
+            }
+        });
+
+        let totalEnrollAttempts = 0;
+        let successfulEnrollments = 0;
+        const tasks = [];
+
+        for (const offer of offerData) {
+            if (offerSourceId && offer.source_id !== offerSourceId) continue;
+            if (offer.category === "DEFAULT") {
+                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
+            }
+            const accountTasks = [];
+            for (const card of offer.eligibleCards) {
+                const matchingAccounts = accountData.filter(acc =>
+                    acc.display_account_number === card &&
+                    acc.account_status &&
+                    acc.account_status.trim().toLowerCase() === "active"
+                );
+                for (const acc of matchingAccounts) {
+                    let fullName = acc.embossed_name;
+                    if (!fullName) continue;
+                    const parts = fullName.trim().split(/\s+/);
+                    const normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
+                    accountTasks.push({
+                        card,
+                        accountToken: acc.account_token,
+                        cardHolder: normalizedName
+                    });
+                }
+            }
+            accountTasks.sort((a, b) => a.cardHolder.localeCompare(b.cardHolder));
+            for (const task of accountTasks) {
+                tasks.push(async () => {
+                    totalEnrollAttempts++;
+                    try {
+                        const result = await enrollOffer(task.accountToken, offer.offerId);
+                        if (result && result.isEnrolled) {
+                            successfulEnrollments++;
+                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) successful`);
+                            const idx = offer.eligibleCards.indexOf(task.card);
+                            if (idx !== -1) {
+                                offer.eligibleCards.splice(idx, 1);
+                            }
+                            if (!offer.enrolledCards.includes(task.card)) {
+                                offer.enrolledCards.push(task.card);
+                            }
+                        } else {
+                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) failed`);
+                        }
+                    } catch (err) {
+                        console.error(`Error enrolling offer "${offer.name}" on card ${task.card} (${task.cardHolder}):`, err);
+                    }
+                });
+            }
+        }
+        globalViewState[currentView].scrollTop = content.scrollTop;
+        await runInBatches(tasks, runInBatchesLimit);
+        offerData = await refreshOffers();
+        await renderCurrentView();
+        if (totalEnrollAttempts > 0) {
+            const successRate = (successfulEnrollments / totalEnrollAttempts * 100).toFixed(2);
+            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
+        } else {
+            console.log('No enrollment attempts were made.');
+        }
+    }
+
+    async function refreshOffers() {
+        const offerInfoTable = {};
+        const activeAccounts = accountData.filter(acc =>
+            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+        );
+        const skipPatterns = [
+            "Your FICO&#174",
+            "The Hotel Collection",
+            "3X on Amex Travel",
+            "Flexible Business Credit",
+            "Apple Pay",
+            "Send Money to Friends",
+            "Considering a Big Purchase"
+        ];
+        await Promise.all(activeAccounts.map(async (acc) => {
+            const offers = await fetchOffersForAccount(acc.account_token);
+            offers.forEach(offer => {
+                const sourceId = offer.source_id;
+                if (!sourceId) return;
+                const offerName = (offer.name || "").toLowerCase();
+                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
+                    return;
+                }
+                if (!offerInfoTable[sourceId]) {
+                    const details = parseOfferDetails(offer.short_description || "");
+                    offerInfoTable[sourceId] = {
+                        source_id: sourceId,
+                        offerId: offer.id || "N/A",
+                        name: offer.name || "N/A",
+                        achievement_type: offer.achievement_type || "N/A",
+                        category: offer.category || "N/A",
+                        expiry_date: offer.expiry_date || "N/A",
+                        logo: offer.logo_url || "N/A",
+                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        short_description: offer.short_description || "N/A",
+                        threshold: details.threshold,
+                        reward: details.reward,
+                        percentage: details.percentage,
+                        eligibleCards: [],
+                        enrolledCards: [],
+                        favorite: false
+                    };
+                }
+                if (offer.status === "ELIGIBLE") {
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    }
+                } else if (offer.status === "ENROLLED") {
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                    }
+                }
+            });
+        }));
+        mergeFavorites(offerInfoTable);
+        accountData.forEach(acc => {
+            acc.eligibleOffers = 0;
+            acc.enrolledOffers = 0;
+        });
+        Object.values(offerInfoTable).forEach(offer => {
+            if (Array.isArray(offer.eligibleCards)) {
+                offer.eligibleCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                });
+            }
+            if (Array.isArray(offer.enrolledCards)) {
+                offer.enrolledCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                });
+            }
+        });
+        return Object.values(offerInfoTable);
+    }
+
+    function mergeFavorites(newOfferMap) {
+        const oldFavorites = {};
+        if (offerData && Array.isArray(offerData)) {
+            offerData.forEach(o => {
+                if (o.source_id) {
+                    oldFavorites[o.source_id] = o.favorite === true;
+                }
+            });
+        }
+        for (const sid in newOfferMap) {
+            if (oldFavorites.hasOwnProperty(sid)) {
+                newOfferMap[sid].favorite = oldFavorites[sid];
+            }
+        }
+    }
+
+    // =========================================================================
+    // Section 7: UI Rendering Functions
+    // =========================================================================
+
+    function renderMembersView() {
+        const containerDiv = document.createElement('div');
+        const filtersDiv = document.createElement('div');
+        filtersDiv.style.display = 'flex';
+        filtersDiv.style.alignItems = 'center';
+        filtersDiv.style.gap = '20px';
+        filtersDiv.style.marginBottom = '10px';
+
+        // Status Filter
+        const statusFilterDiv = document.createElement('div');
+        statusFilterDiv.style.display = 'flex';
+        statusFilterDiv.style.alignItems = 'center';
+        const statusFilterLabel = document.createElement('label');
+        statusFilterLabel.textContent = 'Filter by Status: ';
+        statusFilterDiv.appendChild(statusFilterLabel);
+        const statusFilterSelect = document.createElement('select');
+        statusFilterSelect.id = 'status-filter';
+        const optionAll = document.createElement('option');
+        optionAll.value = 'all';
+        optionAll.textContent = 'All';
+        statusFilterSelect.appendChild(optionAll);
+        const optionActive = document.createElement('option');
+        optionActive.value = 'Active';
+        optionActive.textContent = 'Active';
+        statusFilterSelect.appendChild(optionActive);
+        const optionCanceled = document.createElement('option');
+        optionCanceled.value = 'Canceled';
+        optionCanceled.textContent = 'Canceled';
+        statusFilterSelect.appendChild(optionCanceled);
+        statusFilterSelect.value = currentStatusFilter;
+        statusFilterSelect.addEventListener('change', () => {
+            currentStatusFilter = statusFilterSelect.value;
+            renderCurrentView();
+        });
+        statusFilterDiv.appendChild(statusFilterSelect);
+        filtersDiv.appendChild(statusFilterDiv);
+
+        // Type Filter
+        const typeFilterDiv = document.createElement('div');
+        typeFilterDiv.style.display = 'flex';
+        typeFilterDiv.style.alignItems = 'center';
+        const typeFilterLabel = document.createElement('label');
+        typeFilterLabel.textContent = 'Filter by Type: ';
+        typeFilterDiv.appendChild(typeFilterLabel);
+        const typeFilterSelect = document.createElement('select');
+        typeFilterSelect.id = 'type-filter';
+        const typeOptionAll = document.createElement('option');
+        typeOptionAll.value = 'all';
+        typeOptionAll.textContent = 'All';
+        typeFilterSelect.appendChild(typeOptionAll);
+        const typeOptionBasic = document.createElement('option');
+        typeOptionBasic.value = 'BASIC';
+        typeOptionBasic.textContent = 'BASIC';
+        typeFilterSelect.appendChild(typeOptionBasic);
+        const typeOptionSupp = document.createElement('option');
+        typeOptionSupp.value = 'SUPP';
+        typeOptionSupp.textContent = 'SUPP';
+        typeFilterSelect.appendChild(typeOptionSupp);
+        typeFilterSelect.value = currentTypeFilter;
+        typeFilterSelect.addEventListener('change', () => {
+            currentTypeFilter = typeFilterSelect.value;
+            renderCurrentView();
+        });
+        typeFilterDiv.appendChild(typeFilterSelect);
+        filtersDiv.appendChild(typeFilterDiv);
+
+        // Offer Search for Members
+        const offerSearchDiv = document.createElement('div');
+        offerSearchDiv.style.display = 'flex';
+        offerSearchDiv.style.alignItems = 'center';
+        const offerSearchLabel = document.createElement('label');
+        offerSearchLabel.textContent = 'Search Offer: ';
+        offerSearchDiv.appendChild(offerSearchLabel);
+        const offerSearchInput = document.createElement('input');
+        offerSearchInput.type = 'text';
+        offerSearchInput.placeholder = 'Enter offer keyword';
+        offerSearchInput.style.fontSize = '16px';
+        offerSearchInput.style.padding = '4px';
+        offerSearchInput.style.width = '200px';
+        offerSearchInput.value = offerSearchMembersKeyword;
+        offerSearchInput.addEventListener('input', debounce(() => {
+            offerSearchMembersKeyword = offerSearchInput.value.toLowerCase();
+            renderCurrentView();
+        }, 600));
+        offerSearchDiv.appendChild(offerSearchInput);
+        filtersDiv.appendChild(offerSearchDiv);
+
+        containerDiv.appendChild(filtersDiv);
+        containerDiv.appendChild(renderMembersTable());
+        return containerDiv;
+    }
+
+    function renderMembersTable() {
+        const headers = [
+            { label: "Logo", key: "small_card_art" },
+            { label: "Ending", key: "display_account_number" },
+            { label: "User", key: "embossed_name" },
+            { label: "Type", key: "relationship" },
+            { label: "Index", key: "cardIndex" },
+            { label: "Opening", key: "account_setup_date" },
+            { label: "Status", key: "account_status" },
+            { label: "Bal", key: "SB" },
+            { label: "Pending", key: "pending" },
+            { label: "Sta Bal", key: "remainingSB" },
+            { label: "Eligible Offers", key: "eligibleOffers" },
+            { label: "Enrolled Offers", key: "enrolledOffers" }
+        ];
+        const colWidths = {
+            small_card_art: "60px",
+            display_account_number: "80px",
+            embossed_name: "150px",
+            relationship: "80px",
+            cardIndex: "80px",
+            account_setup_date: "80px",
+            account_status: "80px",
+            SB: "80px",
+            pending: "80px",
+            remainingSB: "80px",
+            eligibleOffers: "80px",
+            enrolledOffers: "80px"
         };
+
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.fontSize = '12px';
+
+        // Build table header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headers.forEach(headerItem => {
+            const th = document.createElement('th');
+            th.textContent = headerItem.label;
+            th.style.borderBottom = '1px solid #000';
+            th.style.padding = '4px';
+            th.style.cursor = 'pointer';
+            th.style.textAlign = 'center';
+            if (colWidths[headerItem.key]) {
+                th.style.width = colWidths[headerItem.key];
+                th.style.maxWidth = colWidths[headerItem.key];
+                th.style.whiteSpace = 'normal';
+                th.style.wordWrap = 'break-word';
+            }
+            th.setAttribute('data-sort-key', headerItem.key);
+            th.addEventListener('click', () => sortData(headerItem.key));
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Filter accounts by status and type (do not filter by search term)
+        const filteredAccounts = accountData.filter(acc => {
+            const statusMatch = currentStatusFilter === 'all' ||
+                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
+            const typeMatch = currentTypeFilter === 'all' ||
+                acc.relationship === currentTypeFilter;
+            return statusMatch && typeMatch;
+        });
+
+        // Helper: determine whether to highlight the account row based on the offer search keyword.
+        function shouldHighlightAccount(acc) {
+            if (!offerSearchMembersKeyword || offerSearchMembersKeyword.trim().length === 0) {
+                return false;
+            }
+            const searchTerm = offerSearchMembersKeyword.trim().toLowerCase();
+            return offerData.some(offer => {
+                if (offer.name.toLowerCase().includes(searchTerm)) {
+                    return (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.display_account_number)) ||
+                        (Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.display_account_number));
+                }
+                return false;
+            });
+        }
+
+        // Build table body.
+        const tbody = document.createElement('tbody');
+        filteredAccounts.forEach(item => {
+            const row = document.createElement('tr');
+
+            // Instead of bolding BASIC accounts, highlight the row if it matches the search term.
+            if (shouldHighlightAccount(item)) {
+                row.style.backgroundColor = 'lightyellow';
+            }
+
+            headers.forEach(headerItem => {
+                const td = document.createElement('td');
+                td.style.padding = '4px';
+                td.style.textAlign = 'center';
+                if (colWidths[headerItem.key]) {
+                    td.style.width = colWidths[headerItem.key];
+                    td.style.maxWidth = colWidths[headerItem.key];
+                    td.style.whiteSpace = 'normal';
+                    td.style.wordWrap = 'break-word';
+                }
+
+                if (headerItem.key === 'small_card_art') {
+                    if (item.small_card_art && item.small_card_art !== 'N/A') {
+                        const img = document.createElement('img');
+                        img.src = item.small_card_art;
+                        img.alt = "Card Logo";
+                        img.style.maxWidth = "40px";
+                        img.style.maxHeight = "40px";
+                        td.appendChild(img);
+                    } else {
+                        td.textContent = sanitizeValue('N/A');
+                    }
+                } else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
+                    const count = item[headerItem.key];
+                    const btn = document.createElement('button');
+                    btn.textContent = sanitizeValue(count);
+                    btn.style.cursor = 'pointer';
+                    btn.addEventListener('click', () => {
+                        showMemberOffersPopup(
+                            item.display_account_number,
+                            headerItem.key === 'eligibleOffers' ? 'eligible' : 'enrolled'
+                        );
+                    });
+                    td.appendChild(btn);
+                } else if (headerItem.key === 'pending' || headerItem.key === 'remainingSB' || headerItem.key === 'SB') {
+                    // Only BASIC cards show financial data.
+                    if (item.relationship === "BASIC") {
+                        if (item.financialData) {
+                            if (headerItem.key === 'pending') {
+                                td.textContent = sanitizeValue(item.financialData.debits_credits_payments_total_amount);
+                            } else if (headerItem.key === 'remainingSB') {
+                                td.textContent = sanitizeValue(item.financialData.remaining_statement_balance_amount);
+                            } else if (headerItem.key === 'SB') {
+                                td.textContent = sanitizeValue(item.financialData.statement_balance_amount);
+                            }
+                        } else {
+                            td.textContent = "Loading...";
+                        }
+                    } else {
+                        td.textContent = "0";
+                    }
+                } else if (headerItem.key === 'relationship') {
+                    if (item.relationship === "SUPP") {
+                        td.textContent = getBasicAccountEndingForSuppAccount(item);
+                    } else {
+                        td.textContent = sanitizeValue(item[headerItem.key]);
+                    }
+                } else {
+                    td.textContent = sanitizeValue(item[headerItem.key]);
+                }
+                row.appendChild(td);
+            });
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        return table;
     }
 
     function renderOfferMap(offerArray) {
@@ -857,11 +1122,11 @@
             { label: "Exp Date", key: "expiry_date" },
             { label: "Usage", key: "redemption_types" },
             { label: "Description", key: "short_description" },
-            { label: "Threshold", key: "threshold" },
+            { label: "Thres", key: "threshold" },
             { label: "Reward", key: "reward" },
             { label: "Pct", key: "percentage" },
-            { label: "Eligible", key: "eligibleCards" },
-            { label: "Enrolled", key: "enrolledCards" }
+            { label: "Elig", key: "eligibleCards" },
+            { label: "Enrl", key: "enrolledCards" }
         ];
 
         const colWidths = {
@@ -1030,6 +1295,7 @@
         return containerDiv;
     }
 
+
     function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
         const win = document.createElement('div');
         win.style.backgroundColor = '#fff';
@@ -1131,135 +1397,12 @@
             document.body.removeChild(win);
         });
         win.appendChild(closeBtn);
-
         document.body.appendChild(win);
     }
 
-    async function enrollOffer(accountToken, offerIdentifier) {
-        const payload = {
-            accountNumberProxy: accountToken,
-            identifier: offerIdentifier,
-            identifierType: "OFFER",
-            locale: "en-US",
-            offerRequestType: "DETAILS",
-            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
-            userOffset: "-06:00"
-        };
-        try {
-            const res = await fetch(getUrl(ENROLL_API), {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Origin': 'https://global.americanexpress.com'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
-            return await res.json();
-        } catch (error) {
-            console.error('Error enrolling offer:', error);
-            return { isEnrolled: false };
-        }
-    }
-
-    async function runInBatches(tasks, limit = 8) {
-        let i = 0;
-        while (i < tasks.length) {
-            const chunk = tasks.slice(i, i + limit);
-            await Promise.all(chunk.map(fn => fn()));
-            i += limit;
-        }
-    }
-
-    async function batchEnrollOffer(offerSourceId, accountNumber) {
-        const activeCardMap = {};
-        accountData.forEach(acc => {
-            if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
-                if (!accountNumber || acc.display_account_number === accountNumber) {
-                    activeCardMap[acc.display_account_number] = acc.account_token;
-                }
-            }
-        });
-
-        let totalEnrollAttempts = 0;
-        let successfulEnrollments = 0;
-
-        const tasks = [];
-        for (const offer of offerData) {
-            if (offerSourceId && offer.source_id !== offerSourceId) {
-                continue;
-            }
-            if (offer.category === "DEFAULT") {
-                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-            }
-
-            const accountTasks = [];
-            for (const card of offer.eligibleCards) {
-                const matchingAccounts = accountData.filter(acc =>
-                    acc.display_account_number === card &&
-                    acc.account_status &&
-                    acc.account_status.trim().toLowerCase() === "active"
-                );
-                for (const acc of matchingAccounts) {
-                    let fullName = acc.embossed_name;
-                    if (!fullName) continue;
-                    const parts = fullName.trim().split(/\s+/);
-                    const normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
-                    accountTasks.push({
-                        card,
-                        accountToken: acc.account_token,
-                        cardHolder: normalizedName
-                    });
-                }
-            }
-            accountTasks.sort((a, b) => a.cardHolder.localeCompare(b.cardHolder));
-
-            for (const task of accountTasks) {
-                tasks.push(async () => {
-                    totalEnrollAttempts++;
-                    try {
-                        const result = await enrollOffer(task.accountToken, offer.offerId);
-                        if (result && result.isEnrolled) {
-                            successfulEnrollments++;
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) successful`);
-                            const idx = offer.eligibleCards.indexOf(task.card);
-                            if (idx !== -1) {
-                                offer.eligibleCards.splice(idx, 1);
-                            }
-                            if (!offer.enrolledCards.includes(task.card)) {
-                                offer.enrolledCards.push(task.card);
-                            }
-                        } else {
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) failed`);
-                        }
-                    } catch (err) {
-                        console.error(`Error enrolling offer "${offer.name}" on card ${task.card} (${task.cardHolder}):`, err);
-                    }
-                });
-            }
-        }
-
-        globalViewState[currentView].scrollTop = content.scrollTop;
-        await runInBatches(tasks, runInBatchesLimit);
-        offerData = await refreshOffers();
-
-        await renderCurrentView();
-
-        if (totalEnrollAttempts > 0) {
-            const successRate = (successfulEnrollments / totalEnrollAttempts * 100).toFixed(2);
-            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
-        } else {
-            console.log('No enrollment attempts were made.');
-        }
-    }
-
-    // Changed renderSummaryView to be synchronous so it returns a Node.
     function renderSummaryView() {
         const numAccounts = accountData.length;
         const updateTime = lastUpdate || "Never";
-
         let distinctFullyEnrolled = 0;
         let distinctNotFullyEnrolled = 0;
         let totalEnrolled = 0;
@@ -1310,6 +1453,7 @@
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
                 const newOfferData = await refreshOffers();
+                await fetchFinancialDataForBasicCards();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                     lastUpdate = new Date().toLocaleString();
@@ -1331,112 +1475,11 @@
         btnContainer.appendChild(summaryEnrollBtn);
         btnContainer.appendChild(summaryRefreshBtn);
         summaryDiv.appendChild(btnContainer);
-
         return summaryDiv;
     }
 
-    async function refreshOffers() {
-        const offerInfoTable = {};
-        const activeAccounts = accountData.filter(acc =>
-            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
-        );
-
-        const skipPatterns = [
-            "Your FICO&#174",
-            "The Hotel Collection",
-            "3X on Amex Travel",
-            "Flexible Business Credit",
-            "Apple Pay",
-            "Send Money to Friends",
-            "Considering a Big Purchase"
-        ];
-
-        await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.account_token);
-            offers.forEach(offer => {
-                const sourceId = offer.source_id;
-                if (!sourceId) return;
-                const offerName = (offer.name || "").toLowerCase();
-                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
-                    return;
-                }
-                if (!offerInfoTable[sourceId]) {
-                    const details = parseOfferDetails(offer.short_description || "");
-                    offerInfoTable[sourceId] = {
-                        source_id: sourceId,
-                        offerId: offer.id || "N/A",
-                        name: offer.name || "N/A",
-                        achievement_type: offer.achievement_type || "N/A",
-                        category: offer.category || "N/A",
-                        expiry_date: offer.expiry_date || "N/A",
-                        logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
-                        short_description: offer.short_description || "N/A",
-                        threshold: details.threshold,
-                        reward: details.reward,
-                        percentage: details.percentage,
-                        eligibleCards: [],
-                        enrolledCards: [],
-                        favorite: false
-                    };
-                }
-
-                if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
-                    }
-                }
-            });
-        }));
-
-        mergeFavorites(offerInfoTable);
-
-        accountData.forEach(acc => {
-            acc.eligibleOffers = 0;
-            acc.enrolledOffers = 0;
-        });
-
-        Object.values(offerInfoTable).forEach(offer => {
-            if (Array.isArray(offer.eligibleCards)) {
-                offer.eligibleCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
-                });
-            }
-            if (Array.isArray(offer.enrolledCards)) {
-                offer.enrolledCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
-                });
-            }
-        });
-
-        return Object.values(offerInfoTable);
-    }
-
-    function mergeFavorites(newOfferMap) {
-        const oldFavorites = {};
-        if (offerData && Array.isArray(offerData)) {
-            offerData.forEach(o => {
-                if (o.source_id) {
-                    oldFavorites[o.source_id] = o.favorite === true;
-                }
-            });
-        }
-        for (const sid in newOfferMap) {
-            if (oldFavorites.hasOwnProperty(sid)) {
-                newOfferMap[sid].favorite = oldFavorites[sid];
-            }
-        }
-    }
-
-    // Modified renderCurrentView to await any Promise that might be returned from a view function.
     async function renderCurrentView() {
-        // Reapply stored sort orders if applicable
+        // Reapply sort states as necessary
         if (currentView === 'members') {
             applyMemberSort();
         } else if (currentView === 'offers') {
@@ -1451,17 +1494,104 @@
         } else if (currentView === 'summary') {
             viewContent = renderSummaryView();
         }
-        // <<-- CHANGED CODE: Check if viewContent is thenable and await it if so.
         if (viewContent && typeof viewContent.then === 'function') {
             viewContent = await viewContent;
         }
-        // End of changed code.
         content.appendChild(viewContent);
         if (globalViewState[currentView] && typeof globalViewState[currentView].scrollTop === 'number') {
             content.scrollTop = globalViewState[currentView].scrollTop;
         }
     }
 
+    // =========================================================================
+    // Section 8: Sorting Functions for Members & Offers
+    // =========================================================================
+
+    function applyMemberSort() {
+        if (sortState.key) {
+            if (sortState.key === 'cardIndex') {
+                accountData.sort((a, b) => {
+                    const [aMain, aSub] = parseCardIndex(a.cardIndex);
+                    const [bMain, bSub] = parseCardIndex(b.cardIndex);
+                    if (aMain === bMain) {
+                        return sortState.direction * (aSub - bSub);
+                    }
+                    return sortState.direction * (aMain - bMain);
+                });
+            } else {
+                accountData.sort((a, b) => {
+                    const valA = a[sortState.key] || "";
+                    const valB = b[sortState.key] || "";
+                    return sortState.direction * valA.toString().localeCompare(valB.toString());
+                });
+            }
+        }
+    }
+
+    function applyOfferSort() {
+        if (offerSortState.key) {
+            if (offerSortState.key === "favorite") {
+                offerData.sort((a, b) => {
+                    if (a.favorite === b.favorite) return 0;
+                    return a.favorite ? -1 : 1;
+                });
+            } else {
+                const numericColumns = ["reward", "threshold", "percentage"];
+                offerData.sort((a, b) => {
+                    const valA = a[offerSortState.key] || "";
+                    const valB = b[offerSortState.key] || "";
+                    if (numericColumns.includes(offerSortState.key)) {
+                        const numA = parseNumericValue(valA);
+                        const numB = parseNumericValue(valB);
+                        if (isNaN(numA) && isNaN(numB)) {
+                            return offerSortState.direction * valA.localeCompare(valB);
+                        } else if (isNaN(numA)) {
+                            return 1 * offerSortState.direction;
+                        } else if (isNaN(numB)) {
+                            return -1 * offerSortState.direction;
+                        }
+                        return offerSortState.direction * (numA - numB);
+                    } else if (offerSortState.key === "eligibleCards" || offerSortState.key === "enrolledCards") {
+                        const lenA = Array.isArray(valA) ? valA.length : 0;
+                        const lenB = Array.isArray(valB) ? valB.length : 0;
+                        return offerSortState.direction * (lenA - lenB);
+                    } else {
+                        return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+                    }
+                });
+            }
+        }
+    }
+
+    function sortData(key) {
+        if (sortState.key === key) {
+            sortState.direction *= -1;
+        } else {
+            sortState.key = key;
+            sortState.direction = 1;
+        }
+        if (key === 'cardIndex') {
+            accountData.sort((a, b) => {
+                const [aMain, aSub] = parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = parseCardIndex(b.cardIndex);
+                if (aMain === bMain) {
+                    return sortState.direction * (aSub - bSub);
+                }
+                return sortState.direction * (aMain - bMain);
+            });
+        } else {
+            accountData.sort((a, b) => {
+                const valA = a[key] || "";
+                const valB = b[key] || "";
+                return sortState.direction * valA.toString().localeCompare(valB.toString());
+            });
+        }
+        renderCurrentView();
+    }
+
+    // =========================================================================
+    // Section 9: Local Storage Handling
+    // =========================================================================
 
     function setLocalStorage(tokenSuffix) {
         try {
@@ -1489,7 +1619,7 @@
                     const savedDate = new Date(lastUpdate);
                     const now = new Date();
                     const diff = now - savedDate;
-                    if (diff > 24 * 60 * 60 * 1000) { // if data is older than 24 hours
+                    if (diff > 24 * 60 * 60 * 1000) {
                         return 2;
                     }
                 }
@@ -1502,57 +1632,72 @@
         return 0;
     }
 
-    async function getCurrentUserTrustLevel() {
-        return new Promise((resolve) => {
-            GM.xmlHttpRequest({
-                method: "GET",
-                url: getUrl(USCF1),
-                onload: function (response) {
-                    if (response.status !== 200) {
-                        console.log("Session request failed");
-                        return resolve(0);
-                    }
-                    try {
-                        const sessionData = JSON.parse(response.responseText);
-                        const username = sessionData?.current_user?.username;
-                        if (!username) {
-                            console.log("No current user found");
-                            return resolve(0);
-                        }
-                        GM.xmlHttpRequest({
-                            method: "GET",
-                            url: getUrl(USCF2) + encodeURIComponent(username) + ".json",
-                            onload: function (resp) {
-                                if (resp.status !== 200) {
-                                    console.log(`User JSON fetch failed for ${username}`);
-                                    return resolve(0);
-                                }
-                                try {
-                                    const userData = JSON.parse(resp.responseText);
-                                    const trustLevel = userData?.user?.trust_level;
-                                    resolve(trustLevel ?? 0);
-                                } catch (e) {
-                                    console.error("Error parsing user JSON:", e);
-                                    resolve(0);
-                                }
-                            },
-                            onerror: function (err) {
-                                console.error("Error fetching user JSON:", err);
-                                resolve(0);
-                            }
-                        });
-                    } catch (e) {
-                        console.error("Error parsing session JSON:", e);
-                        resolve(0);
-                    }
-                },
-                onerror: function (err) {
-                    console.error("Error fetching session:", err);
-                    resolve(0);
-                }
-            });
+    // =========================================================================
+    // Section 10: Event Listeners & UI Interaction
+    // =========================================================================
+
+    // Draggable header implementation
+    header.addEventListener('mousedown', function (e) {
+        let shiftX = e.clientX - container.getBoundingClientRect().left;
+        let shiftY = e.clientY - container.getBoundingClientRect().top;
+        function onMouseMove(e2) {
+            container.style.left = (e2.clientX - shiftX) + 'px';
+            container.style.top = (e2.clientY - shiftY) + 'px';
+        }
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
         });
-    }
+    });
+
+    // View switching buttons
+    btnSummary.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'summary';
+        btnSummary.style.fontWeight = 'bold';
+        btnMembers.style.fontWeight = 'normal';
+        btnOffers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    btnMembers.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'members';
+        btnMembers.style.fontWeight = 'bold';
+        btnSummary.style.fontWeight = 'normal';
+        btnOffers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    btnOffers.addEventListener('click', () => {
+        saveCurrentScrollState();
+        currentView = 'offers';
+        btnOffers.style.fontWeight = 'bold';
+        btnSummary.style.fontWeight = 'normal';
+        btnMembers.style.fontWeight = 'normal';
+        renderCurrentView();
+    });
+
+    // Toggle minimize/expand functionality
+    toggleBtn.addEventListener('click', () => {
+        isMinimized = !isMinimized;
+        if (isMinimized) {
+            content.style.display = 'none';
+            viewButtons.style.display = 'none';
+            toggleBtn.textContent = 'Expand';
+            container.style.width = '200px';
+        } else {
+            content.style.display = 'block';
+            viewButtons.style.display = 'flex';
+            toggleBtn.textContent = 'Minimize';
+            container.style.width = '90%';
+        }
+    });
+
+    // =========================================================================
+    // Section 11: Initialization Functions
+    // =========================================================================
 
     function createUI() {
         document.body.appendChild(container);
@@ -1569,16 +1714,13 @@
         if (tl === null || tl * 0.173 < 0.5) {
             return;
         }
-
         const fetchStatus = await fetchAccount();
         if (!fetchStatus || accountData.length === 0) {
             console.error("Failed to fetch account data or no accounts found.");
             return;
         }
-
         const localDataStatus = loadLocalStorage(accountData[0].account_token);
         createUI();
-
         if (localDataStatus === 0 || localDataStatus === 2) {
             const newOfferData = await refreshOffers();
             if (newOfferData && Array.isArray(newOfferData)) {
@@ -1592,8 +1734,14 @@
         } else {
             console.log("Using data from LocalStorage. No forced fetch.");
         }
+        await fetchFinancialDataForBasicCards();
+        if (currentView === 'members') {
+            renderCurrentView();
+        }
     }
 
+    // =========================================================================
+    // Section 12: Start the Application
+    // =========================================================================
     init();
 })();
-

@@ -1,0 +1,63 @@
+Request URL:
+https://functions.americanexpress.com/ReadLendingOffers.v1
+Request Method:
+POST
+Status Code:
+400 Bad Request
+Remote Address:
+139.71.49.215:443
+Referrer Policy:
+same-origin
+:authority:
+functions.americanexpress.com
+:method:
+POST
+:path:
+/ReadLendingOffers.v1
+:scheme:
+https
+accept:
+application/json
+accept-encoding:
+gzip, deflate, br, zstd
+accept-language:
+en-US,en;q=0.9
+content-length:
+89
+content-type:
+application/json
+cookie:
+
+one-data-correlation-id:
+d636e4cb-c1d9-4ee9-b46d-8eb0c382c336
+origin:
+https://global.americanexpress.com
+priority:
+u=1, i
+sec-ch-ua:
+"Not(A:Brand";v="99", "Microsoft Edge";v="133", "Chromium";v="133"
+sec-ch-ua-mobile:
+?0
+sec-ch-ua-platform:
+"Windows"
+sec-fetch-dest:
+empty
+sec-fetch-mode:
+cors
+sec-fetch-site:
+same-site
+user-agent:
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0
+
+
+
+{accountToken: "XG7JNZ8EVOFOLDX", productName: "PAY-OVER-TIME", sourceCode: "2222222EU"}
+accountToken
+: 
+"XG7JNZ8EVOFOLDX"
+productName
+: 
+"PAY-OVER-TIME"
+sourceCode
+: 
+"2222222EU"
