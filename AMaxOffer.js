@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      2.0
 // @description  AMaxOffer utility with persistent sort, filter, and independent scroll state per view
 // @match        https://global.americanexpress.com/*
 // @connect      jsdelivr.net
