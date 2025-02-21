@@ -1,20 +1,14 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @license CC BY-NC-ND 4.0 (https://creativecommons.org/licenses/by-nc-nd/4.0/)
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  AMaxOffer utility with persistent sort, filter, and independent scroll state per view
+// @version      2.1
+// @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
-// @exclude      https://global.americanexpress.com/*/login*
-// @connect      jsdelivr.net
 // @connect      uscardforum.com
-// @connect      cloudfunctions.net
-// @connect      yale.email
-// @grant        GM_getResourceText
-// @grant        GM_addStyle
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // ==/UserScript==
+// @license CC BY-NC-ND 4.0 (https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 (function () {
     'use strict';
