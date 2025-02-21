@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // ==/UserScript==
+
+
 // @license CC BY-NC-ND 4.0 (https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 (function () {
