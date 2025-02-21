@@ -4,13 +4,10 @@ cd /d "%~dp0"  REM Ensure we start from the current directory
 
 echo. > 2encode\header.txt
 
-
 setlocal enabledelayedexpansion
-set "inHeader=false"
+set "inHeader=true"
 
 for /f "delims=" %%a in (2encode\AMaxOffer_released0.min.js) do (
-
-    if "%%a"=="// ==UserScript==" set inHeader=true
 
     if "%%a"=="// @license CC BY-NC-ND 4.0 (https://creativecommons.org/licenses/by-nc-nd/4.0/)" set inHeader=false
 

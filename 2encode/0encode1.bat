@@ -3,7 +3,7 @@ javascript-obfuscator ./2encode/AMaxOffer_released0.min.js -o ./2encode/AMaxOffe
   --seed 0^
   ^
   --disable-console-output true ^
-  --self-defending false ^
+  --self-defending true ^
   --debug-protection true ^
   --debug-protection-interval 4000 ^
   --domain-lock 'https://global.americanexpress.com/*' ^
