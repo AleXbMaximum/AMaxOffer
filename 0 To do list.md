@@ -3,7 +3,7 @@
 ## Tier 1
 * page anti kick off of in active
 * 易用性的反馈。在offer map搜索了以后，focus就不是输入框了。还需要手动再点搜索框来进行下一次搜索。最好可以在出了搜索结果以后，可以自动focus到搜索框
-
+* 并发请求进一步同步
 
 ## Tier 2
 * View card auto refresh after enroll

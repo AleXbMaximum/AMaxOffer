@@ -11,7 +11,7 @@ set "inHeader=true"
 for /f "delims=" %%a in (2encode\AMaxOffer_released0.min.js) do (
 
 
-    if "%%a"=="// @license CC BY-NC-ND 4.0" set inHeader=false
+    if "%%a"=="// @license    CC BY-NC-ND 4.0" set inHeader=false
 
     if !inHeader! == true (
         echo %%a >> 2encode\header.txt
