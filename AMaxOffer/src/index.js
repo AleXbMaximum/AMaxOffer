@@ -1,8 +1,9 @@
+// src/index.js
 import {
-    getCurrentUserTrustLevel,
     fetchAccount,
-    refreshOffers,
+    getCurrentUserTrustLevel,
     fetchFinancialDataForBasicCards,
+    refreshOffers,
     fetchBenefitTrackersForBasicCards
 } from './api.js';
 import { initUI, renderCurrentView } from './ui.js';
@@ -14,10 +15,7 @@ import { currentView, isMinimized, accountData, offerData, benefitTrackers } fro
 
 const ScriptVersion = "2.2";
 
-// =========================================================================
-// Section 3: UI Elements Creation
-// =========================================================================
-
+// --- UI Elements Creation ---
 const container = document.createElement('div');
 container.id = 'card-utility-overlay';
 container.style.position = 'fixed';
@@ -31,7 +29,7 @@ container.style.fontFamily = 'Arial, sans-serif';
 container.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
 container.style.maxHeight = '80vh';
 container.style.overflow = 'hidden';
-container.style.width = '90%'; // Overridden if minimized
+container.style.width = '90%'; // Will be overridden if minimized
 
 const header = document.createElement('div');
 header.id = 'card-utility-header';
@@ -46,12 +44,12 @@ header.style.cursor = 'move';
 const title = document.createElement('span');
 title.textContent = 'AMaxOffer';
 
-// View buttons container
+// Create view buttons container
 const viewButtons = document.createElement('div');
 viewButtons.style.display = 'flex';
 viewButtons.style.gap = '40px';
 
-// Individual view buttons
+// Create individual view buttons
 const btnSummary = document.createElement('button');
 btnSummary.textContent = 'Summary';
 btnSummary.style.cursor = 'pointer';
@@ -71,12 +69,10 @@ viewButtons.appendChild(btnSummary);
 viewButtons.appendChild(btnMembers);
 viewButtons.appendChild(btnOffers);
 
-// Toggle button for minimizing/expanding the overlay
 const toggleBtn = document.createElement('button');
 toggleBtn.textContent = 'Minimize';
 toggleBtn.style.cursor = 'pointer';
 
-// Append header children
 header.appendChild(title);
 header.appendChild(viewButtons);
 header.appendChild(toggleBtn);
@@ -98,11 +94,12 @@ btnBenefits.style.cursor = 'pointer';
 btnBenefits.style.fontSize = '20px';
 viewButtons.appendChild(btnBenefits);
 
-// Add event listener to switch to the Benefits view
+// --- Event Listeners ---
+// Switch to Benefits view
 btnBenefits.addEventListener('click', () => {
     saveCurrentScrollState();
     currentView = 'benefits';
-    // Update button styles to reflect active view
+    // Update button styles
     btnBenefits.style.fontWeight = 'bold';
     btnSummary.style.fontWeight = 'normal';
     btnMembers.style.fontWeight = 'normal';
@@ -110,7 +107,7 @@ btnBenefits.addEventListener('click', () => {
     renderCurrentView();
 });
 
-// Draggable header implementation
+// Draggable header
 header.addEventListener('mousedown', function (e) {
     let shiftX = e.clientX - container.getBoundingClientRect().left;
     let shiftY = e.clientY - container.getBoundingClientRect().top;
@@ -125,7 +122,7 @@ header.addEventListener('mousedown', function (e) {
     });
 });
 
-// View switching buttons
+// Switch view buttons
 btnSummary.addEventListener('click', () => {
     saveCurrentScrollState();
     currentView = 'summary';
@@ -169,6 +166,7 @@ toggleBtn.addEventListener('click', () => {
     }
 });
 
+// Append the container to document body
 function createUI() {
     document.body.appendChild(container);
     if (isMinimized) {
@@ -179,6 +177,7 @@ function createUI() {
     }
 }
 
+// --- Initialization ---
 async function init() {
     const tl = await getCurrentUserTrustLevel();
     if (tl === null || tl * 0.173 < 0.5) {
@@ -194,6 +193,7 @@ async function init() {
     createUI();
 
     if (localDataStatus === 0 || localDataStatus === 2) {
+        // Refresh offers and benefit trackers
         const newOfferData = await refreshOffers();
         const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
 
