@@ -1,7 +1,6 @@
 // ==UserScript==
 // @name         AMaxOffer
 // @version      2.2
-// @license    CC BY-NC-ND 4.0
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
@@ -9,6 +8,7 @@
 // @grant        unsafeWindow
 // ==/UserScript==
 
+// @license    CC BY-NC-ND 4.0
 
 (function () {
     'use strict';
@@ -80,38 +80,48 @@
     const FINANCIAL_TRANSACTION_indexMapping = { "0": "2", "1": "10", "2": "0", "3": "9", "4": "6", "5": "11", "6": "5", "7": "4", "8": "1", "9": "3", "10": "7", "11": "8" };
     const FINANCIAL_TRANSACTION_API = getUrl(reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping));
 
+    // BENEFIT_API: https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1
+    const BENEFIT_API_segments = ["ZMeTltZFc*", "VzVsZ_", "1amRHbHZibk11WVcxbGNtbGpZ#", "Z6ZEV4dmVXRnNkSGxDWlc1bFptbDBjMVJ5WVdOclpYSnpM!", "b+", "l@", "UhCeVpYTnpMbU52Y$", "ll4+", "YUhSMGNI#", "M5U1p@", "TT)", "XRmtRbV!"];
+    const BENEFIT_API_indexMapping = { "0": "8", "1": "10", "2": "0", "3": "2", "4": "1", "5": "6", "6": "5", "7": "9", "8": "11", "9": "3", "10": "4", "11": "7" };
+    const BENEFIT_API = getUrl(reconstructObfuscated(BENEFIT_API_segments, BENEFIT_API_indexMapping));
+
     // =========================================================================
     // Section 2: Global State Variables
     // =========================================================================
-    let accountData = [];
-    let offerData = [];
-    let lastUpdate = "";
-    let currentView = 'summary'; // Options: "summary", "members", "offers"
-    let isMinimized = true;
-    let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
-    let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
-    let runInBatchesLimit = 50;
-    let showFavoritesOnly = false;
-    let offerSearchKeyword = "";
-    let offerSearchMembersKeyword = "";
-    let benefitTrackers = [];
 
-    // Global sort states for members & offers
-    let sortState = { key: "", direction: 1 };
-    let offerSortState = { key: "", direction: 1 };
+    //  1) PRIMARY DATA & TRACKERS
+    let accountData = [];       // Holds all account/member info from the API
+    let offerData = [];         // Holds all offers (eligible and enrolled status)
+    let benefitTrackers = [];   // Holds benefit tracker info for each card
+    let priorityCards = [];  // List of card endings that have top priority
+    let excludedCards = [];  // List of card endings to skip automatically
 
-    // Global variables for card priority and exclusion
-    let priorityCards = [];   // Array of card endings that should be added immediately
-    let excludedCards = [];   // Array of card endings that should be skipped
+    //  2) TIMESTAMPS & BATCH CONFIG
+    let lastUpdate = "";        // Last time data was fetched
+    let runInBatchesLimit = 50; // Concurrency limit when enrolling in batches
 
+    //  3) VIEW / UI STATES
+    let currentView = "summary";  // Possible: "summary", "members", "offers", "benefits"
+    let isMinimized = true;       // Whether the main container is collapsed
 
-    // Global object to store independent scroll positions per view
+    //  4) FILTER STATES
+    let currentStatusFilter = "Active"; // "all", "Active", "Canceled"
+    let currentTypeFilter = "all";     // "all", "BASIC", "SUPP"
+    let showFavoritesOnly = false;     // Hide non-favorite offers
+    let offerSearchKeyword = "";       // Merchant/offer text search
+    let offerSearchMembersKeyword = "";// Searching among members (by offer name)
+    let offerSearchCardEnding = "";    // Searching among offers by card ending
+
+    //  5) SORTING STATES SCROLL POSITIONS PER VIEW
+    let sortState = { key: "", direction: 1 };      // For member table
+    let offerSortState = { key: "", direction: 1 }; // For offer table
     const globalViewState = {
         summary: { scrollTop: 0 },
         members: { scrollTop: 0 },
         offers: { scrollTop: 0 },
-        benefits: { scrollTop: 0 }
+        benefits: { scrollTop: 0 },
     };
+
 
     // =========================================================================
     // Section 3: UI Elements Creation
@@ -261,13 +271,17 @@
     }
 
     // Run tasks in batches to control concurrency
-    async function runInBatches(tasks, limit = 8) {
+    async function runInBatches(tasks, limit) {
+        const results = [];
         let i = 0;
         while (i < tasks.length) {
             const chunk = tasks.slice(i, i + limit);
-            await Promise.all(chunk.map(fn => fn()));
+            // Each “task” returns a single object: { offerId, accountToken, result: boolean }
+            const chunkResults = await Promise.all(chunk.map(fn => fn()));
+            results.push(...chunkResults);
             i += limit;
         }
+        return results;
     }
 
     function getBasicAccountEndingForSuppAccount(suppAccount) {
@@ -537,7 +551,7 @@
     }
 
     async function fetchBenefit_Data(accountToken, locale = "en-US", limit = "ALL") {
-        const url = "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1";
+        const url = BENEFIT_API;
         const payload = [{ accountToken, locale, limit }];
 
         try {
@@ -552,36 +566,74 @@
             });
 
             if (!response.ok) {
-                console.error("Failed to fetch Best Loyalty Benefits Trackers, status:", response.status);
+                console.error("Failed to fetch Best Loyalty Benefits Trackers. Status:", response.status);
                 return null;
             }
 
+            // The response is expected to be an array of objects, each containing a .trackers array.
             const data = await response.json();
-            // data is expected to be an array of objects, each with a "trackers" array.
             const trackers = [];
+
             data.forEach(item => {
                 if (Array.isArray(item.trackers)) {
                     item.trackers.forEach(trackerObj => {
+                        // Capture all possible properties here
+                        const {
+                            benefitId,
+                            sorBenefitId,
+                            category,
+                            periodStartDate,
+                            periodEndDate,
+                            trackerDuration,
+                            benefitName,
+                            qualifiedDetailAvailable,
+                            status,
+                            terms,
+                            tracker,   // subobject: { targetAmount, spentAmount, remainingAmount, targetUnit, targetCurrency, targetCurrencySymbol }
+                            progress   // subobject: { updateInterval, title, message, usedLabel, togoLabel, totalSavingsYearToDate, hideProgressBar }
+                        } = trackerObj;
+
+                        // Push everything into an array with a standardized structure
                         trackers.push({
-                            benefitId: trackerObj.benefitId,
-                            periodStartDate: trackerObj.periodStartDate,
-                            periodEndDate: trackerObj.periodEndDate,
-                            trackerDuration: trackerObj.trackerDuration, // e.g., "Monthly", "HalfYear", "CalenderYear", etc.
-                            benefitName: trackerObj.benefitName,
-                            status: trackerObj.status,
-                            targetAmount: trackerObj.tracker?.targetAmount,
-                            spentAmount: trackerObj.tracker?.spentAmount,
-                            remainingAmount: trackerObj.tracker?.remainingAmount
+                            benefitId,
+                            sorBenefitId,
+                            category,
+                            periodStartDate,
+                            periodEndDate,
+                            trackerDuration,        // e.g., "Monthly", "HalfYear", "CalenderYear", etc.
+                            benefitName,
+                            qualifiedDetailAvailable,
+                            status,
+                            terms,                  // array of HTML strings
+                            tracker: tracker ? {
+                                targetAmount: tracker.targetAmount,
+                                spentAmount: tracker.spentAmount,
+                                remainingAmount: tracker.remainingAmount,
+                                targetUnit: tracker.targetUnit,
+                                targetCurrency: tracker.targetCurrency,
+                                targetCurrencySymbol: tracker.targetCurrencySymbol
+                            } : null,
+                            progress: progress ? {
+                                updateInterval: progress.updateInterval,
+                                title: progress.title,
+                                message: progress.message,
+                                usedLabel: progress.usedLabel,
+                                togoLabel: progress.togoLabel,
+                                totalSavingsYearToDate: progress.totalSavingsYearToDate,
+                                hideProgressBar: progress.hideProgressBar
+                            } : null
                         });
                     });
                 }
             });
+
             return trackers;
         } catch (error) {
             console.error("Error fetching Best Loyalty Benefits Trackers:", error);
             return null;
         }
     }
+
 
     async function fetchBenefit() {
         const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
@@ -773,6 +825,7 @@
             requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
             userOffset: "-06:00"
         };
+
         try {
             const res = await fetch(ENROLL_API, {
                 method: 'POST',
@@ -784,13 +837,19 @@
                 },
                 body: JSON.stringify(payload)
             });
-            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
-            return await res.json();
+            if (!res.ok) {
+                console.error(`Enrollment fetch error: ${res.status}`);
+                return { offerId: offerIdentifier, accountToken: accountToken, result: false };
+            }
+            const json = await res.json();
+            return { offerId: offerIdentifier, accountToken: accountToken, result: json.isEnrolled };
         } catch (error) {
             console.error('Error enrolling offer:', error);
-            return { isEnrolled: false };
+            return { offerId: offerIdentifier, accountToken: accountToken, result: false };
         }
     }
+
+
 
     function sortOfferData(key) {
         if (offerSortState.key === key) {
@@ -829,89 +888,103 @@
         renderCurrentView();
     }
 
-    async function batchEnrollOffer(offerSourceId, accountNumber) {
-        const activeCardMap = {};
-        accountData.forEach(acc => {
-            if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
-                if (!accountNumber || acc.display_account_number === accountNumber) {
-                    activeCardMap[acc.display_account_number] = acc.account_token;
-                }
-            }
-        });
+    // Modified runInBatches that returns an array of results from each task
+    async function runInBatches(tasks, limit) {
+        const results = [];
+        let i = 0;
+        while (i < tasks.length) {
+            const chunk = tasks.slice(i, i + limit);
+            const chunkResults = await Promise.all(chunk.map(fn => fn()));
+            results.push(...chunkResults);
+            i += limit;
+        }
+        return results;
+    }
 
+    async function batchEnrollOffer(offerSourceId, accountNumber) {
+        // Collect tasks for each eligible card in each offer
+        const tasks = [];
         let totalEnrollAttempts = 0;
         let successfulEnrollments = 0;
-        const tasks = [];
 
+        // Build tasks from offerData
         for (const offer of offerData) {
+            // If a specific offer is targeted, skip others.
             if (offerSourceId && offer.source_id !== offerSourceId) continue;
+            // Skip DEFAULT category offers.
             if (offer.category === "DEFAULT") {
                 console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
+                continue;
             }
-            const accountTasks = [];
+            // For each eligible card
             for (const card of offer.eligibleCards) {
+                // Find matching accounts that are active
                 const matchingAccounts = accountData.filter(acc =>
                     acc.display_account_number === card &&
-                    acc.account_status &&
-                    acc.account_status.trim().toLowerCase() === "active"
+                    acc.account_status?.trim().toLowerCase() === "active"
                 );
                 for (const acc of matchingAccounts) {
-                    let fullName = acc.embossed_name;
-                    if (!fullName) continue;
-                    const parts = fullName.trim().split(/\s+/);
-                    const normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
-                    accountTasks.push({
-                        card,
-                        accountToken: acc.account_token,
-                        cardHolder: normalizedName
+                    // If a specific card (accountNumber) is requested, skip others.
+                    if (accountNumber && acc.display_account_number !== accountNumber) {
+                        continue;
+                    }
+                    // Create a task for each matching account.
+                    tasks.push(async () => {
+                        totalEnrollAttempts++;
+
+                        // Skip if the card is in the excluded list.
+                        if (excludedCards.includes(acc.display_account_number)) {
+                            console.log(`Skipping card ${acc.display_account_number} as it is excluded.`);
+                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                        }
+                        // For non-priority cards, wait 0.5 seconds.
+                        if (!priorityCards.includes(acc.display_account_number)) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                        try {
+                            const enrollResult = await enrollOffer(acc.account_token, offer.offerId);
+                            if (enrollResult.result) {
+                                successfulEnrollments++;
+                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} successful`);
+                                // Update offerData: remove from eligibleCards and add to enrolledCards
+                                const idx = offer.eligibleCards.indexOf(acc.display_account_number);
+                                if (idx !== -1) {
+                                    offer.eligibleCards.splice(idx, 1);
+                                }
+                                if (!offer.enrolledCards.includes(acc.display_account_number)) {
+                                    offer.enrolledCards.push(acc.display_account_number);
+                                }
+                                return { offerId: offer.offerId, accountToken: acc.account_token, result: true };
+                            } else {
+                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} failed`);
+                                return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                            }
+                        } catch (err) {
+                            console.error(`Error enrolling offer "${offer.name}" on card ${acc.display_account_number}:`, err);
+                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                        }
                     });
                 }
             }
-            accountTasks.sort((a, b) => a.cardHolder.localeCompare(b.cardHolder));
-            for (const task of accountTasks) {
-                tasks.push(async () => {
-                    totalEnrollAttempts++;
-                    // If the card is in the excluded list, skip it
-                    if (excludedCards.includes(task.card)) {
-                        console.log(`Skipping card ${task.card} as it is excluded.`);
-                        return;
-                    }
-                    // If the card is NOT in the priority list, wait 0.5 seconds before proceeding
-                    if (!priorityCards.includes(task.card)) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                    try {
-                        const result = await enrollOffer(task.accountToken, offer.offerId);
-                        if (result && result.isEnrolled) {
-                            successfulEnrollments++;
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) successful`);
-                            const idx = offer.eligibleCards.indexOf(task.card);
-                            if (idx !== -1) {
-                                offer.eligibleCards.splice(idx, 1);
-                            }
-                            if (!offer.enrolledCards.includes(task.card)) {
-                                offer.enrolledCards.push(task.card);
-                            }
-                        } else {
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) failed`);
-                        }
-                    } catch (err) {
-                        console.error(`Error enrolling offer "${offer.name}" on card ${task.card} (${task.cardHolder}):`, err);
-                    }
-                });
-            }
         }
-        globalViewState[currentView].scrollTop = content.scrollTop;
-        await runInBatches(tasks, runInBatchesLimit);
+
+        // Run all tasks in batches and collect results.
+        const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
+
+        // Refresh the offer data and re-render the UI.
         offerData = await refreshOffers();
         await renderCurrentView();
+
         if (totalEnrollAttempts > 0) {
-            const successRate = (successfulEnrollments / totalEnrollAttempts * 100).toFixed(2);
+            const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
             console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
         } else {
             console.log('No enrollment attempts were made.');
         }
+        // [ { offerId: "OFFER123", accountToken: "TOKEN_ABC", result: true }, ... ]
+        return enrollmentResults;
     }
+
 
 
     async function refreshOffers() {
@@ -1017,6 +1090,7 @@
         let totalEnrolled = 0;
         let totalEligible = 0;
 
+        // Aggregate some stats about your offers
         offerData.forEach(offer => {
             if (offer.category === "DEFAULT") return;
             const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
@@ -1031,32 +1105,98 @@
             }
         });
 
+        // Create a container for the summary
         const summaryDiv = document.createElement('div');
         summaryDiv.style.fontSize = '16px';
         summaryDiv.style.lineHeight = '1.5';
-        summaryDiv.style.padding = '10px';
+        summaryDiv.style.padding = '16px';
         summaryDiv.style.textAlign = 'center';
-        summaryDiv.style.backgroundColor = '#f0f8ff';
+        summaryDiv.style.backgroundColor = '#f8fbff'; // slightly lighter than #f0f8ff
         summaryDiv.style.border = '1px solid #ccc';
-        summaryDiv.style.borderRadius = '8px';
+        summaryDiv.style.borderRadius = '12px';
+        summaryDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
 
-        summaryDiv.innerHTML = `
-            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${updateTime}</p>
-            <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
-            <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
+        // Add summary stats
+        // Using template literal HTML so it can remain simple
+        const statsHtml = `
+            <p style="margin: 8px 0;">
+              <strong style="color: #555;">Number of Accounts:</strong> ${numAccounts}
+              &nbsp;&nbsp;&nbsp;
+              <strong style="color: #555;">Last Update:</strong> ${updateTime}
+            </p>
+            <p style="margin: 8px 0;">
+              <strong style="color: #555;">Fully Enrolled Offers:</strong> ${distinctFullyEnrolled}
+              &nbsp;&nbsp;&nbsp;
+              <strong style="color: #555;">Total Offers Enrolled:</strong> ${totalEnrolled}
+            </p>
+            <p style="margin: 8px 0;">
+              <strong style="color: #555;">Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled}
+              &nbsp;&nbsp;&nbsp;
+              <strong style="color: #555;">Total Offers Eligible:</strong> ${totalEligible}
+            </p>
         `;
+        const statsContainer = document.createElement('div');
+        statsContainer.innerHTML = statsHtml;
+        summaryDiv.appendChild(statsContainer);
 
+        // Container for the buttons
         const btnContainer = document.createElement('div');
         btnContainer.style.marginTop = '20px';
         btnContainer.style.display = 'flex';
         btnContainer.style.justifyContent = 'center';
-        btnContainer.style.gap = '60px';
+        btnContainer.style.gap = '40px';
 
+        // Common button style
+        const buttonStyle = `
+          cursor: pointer;
+          font-size: 18px;
+          padding: 10px 20px;
+          background-color: #007bff;
+          color: #fff;
+          border: none;
+          outline: none;
+          border-radius: 6px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+          transition: background-color 0.3s ease, transform 0.2s ease;
+        `;
+
+        // Create the "Enroll All" button
+        const summaryEnrollBtn = document.createElement('button');
+        summaryEnrollBtn.textContent = 'Enroll All';
+        summaryEnrollBtn.style.cssText = buttonStyle;
+        // Hover & active effects (requires some inline event or style injection):
+        summaryEnrollBtn.addEventListener('mouseover', () => {
+            summaryEnrollBtn.style.backgroundColor = '#0056b3';  // darker shade
+        });
+        summaryEnrollBtn.addEventListener('mouseout', () => {
+            summaryEnrollBtn.style.backgroundColor = '#007bff';
+        });
+        summaryEnrollBtn.addEventListener('mousedown', () => {
+            summaryEnrollBtn.style.transform = 'scale(0.97)';
+        });
+        summaryEnrollBtn.addEventListener('mouseup', () => {
+            summaryEnrollBtn.style.transform = 'scale(1)';
+        });
+        summaryEnrollBtn.addEventListener('click', async () => {
+            await batchEnrollOffer();
+        });
+
+        // Create the "Refresh" button
         const summaryRefreshBtn = document.createElement('button');
         summaryRefreshBtn.textContent = 'Refresh';
-        summaryRefreshBtn.style.cursor = 'pointer';
-        summaryRefreshBtn.style.fontSize = '22px';
-        summaryRefreshBtn.style.padding = '8px 16px';
+        summaryRefreshBtn.style.cssText = buttonStyle;
+        summaryRefreshBtn.addEventListener('mouseover', () => {
+            summaryRefreshBtn.style.backgroundColor = '#0056b3';
+        });
+        summaryRefreshBtn.addEventListener('mouseout', () => {
+            summaryRefreshBtn.style.backgroundColor = '#007bff';
+        });
+        summaryRefreshBtn.addEventListener('mousedown', () => {
+            summaryRefreshBtn.style.transform = 'scale(0.97)';
+        });
+        summaryRefreshBtn.addEventListener('mouseup', () => {
+            summaryRefreshBtn.style.transform = 'scale(1)';
+        });
         summaryRefreshBtn.addEventListener('click', async () => {
             console.log("Refreshing data...");
             const fetchStatus = await fetchAccount();
@@ -1072,178 +1212,276 @@
                 }
                 lastUpdate = new Date().toLocaleString();
                 await renderCurrentView();
-                setLocalStorage(accountData[0].account_token, ["accountData", "offerData", "lastUpdate", "benefitTrackers"]);
+
+                // Save updated data
+                setLocalStorage(accountData[0].account_token, [
+                    "accountData",
+                    "offerData",
+                    "lastUpdate",
+                    "benefitTrackers"
+                ]);
             }
         });
 
-        const summaryEnrollBtn = document.createElement('button');
-        summaryEnrollBtn.textContent = 'Enroll All';
-        summaryEnrollBtn.style.cursor = 'pointer';
-        summaryEnrollBtn.style.fontSize = '22px';
-        summaryEnrollBtn.style.padding = '8px 16px';
-        summaryEnrollBtn.addEventListener('click', async () => {
-            await batchEnrollOffer();
-        });
-
+        // Append both buttons to the button container
         btnContainer.appendChild(summaryEnrollBtn);
         btnContainer.appendChild(summaryRefreshBtn);
+
+        // Finally, append the button container to the summary
         summaryDiv.appendChild(btnContainer);
+
         return summaryDiv;
     }
 
 
     function renderMembersView() {
+        // Main container
         const containerDiv = document.createElement('div');
+        containerDiv.style.display = 'flex';
+        containerDiv.style.flexDirection = 'column';
+        containerDiv.style.gap = '14px';
+        containerDiv.style.margin = '10px';
+
+        // ────────────── FILTERS CARD ──────────────
+        const filtersCard = document.createElement('div');
+        filtersCard.style.position = 'relative';
+        filtersCard.style.border = '1px solid #ccc';
+        filtersCard.style.borderRadius = '10px';
+        filtersCard.style.padding = '14px';
+        filtersCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        filtersCard.style.background = 'linear-gradient(to bottom, #fcfcfd, #f0f0f5)';
+        filtersCard.style.transition = 'box-shadow 0.3s ease';
+
+        // Optional subtle hover effect
+        filtersCard.addEventListener('mouseover', () => {
+            filtersCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+        filtersCard.addEventListener('mouseout', () => {
+            filtersCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        });
+
+        // Filters container
         const filtersDiv = document.createElement('div');
         filtersDiv.style.display = 'flex';
-        filtersDiv.style.alignItems = 'center';
+        filtersDiv.style.alignItems = 'flex-start';
         filtersDiv.style.gap = '20px';
-        filtersDiv.style.marginBottom = '10px';
+        filtersDiv.style.flexWrap = 'wrap';
 
-        // Status Filter
+        // ────────── Status Filter ──────────
         const statusFilterDiv = document.createElement('div');
         statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
+        statusFilterDiv.style.flexDirection = 'column';
+        statusFilterDiv.style.gap = '4px';
+
         const statusFilterLabel = document.createElement('label');
-        statusFilterLabel.textContent = 'Filter by Status: ';
-        statusFilterDiv.appendChild(statusFilterLabel);
+        statusFilterLabel.textContent = 'Filter by Status:';
+        statusFilterLabel.style.fontWeight = 'bold';
+
         const statusFilterSelect = document.createElement('select');
         statusFilterSelect.id = 'status-filter';
+        statusFilterSelect.style.padding = '6px';
+        statusFilterSelect.style.borderRadius = '6px';
+        statusFilterSelect.style.border = '1px solid #ccc';
+        statusFilterSelect.style.fontSize = '14px';
+        statusFilterSelect.style.cursor = 'pointer';
+
         const optionAll = document.createElement('option');
         optionAll.value = 'all';
         optionAll.textContent = 'All';
-        statusFilterSelect.appendChild(optionAll);
+
         const optionActive = document.createElement('option');
         optionActive.value = 'Active';
         optionActive.textContent = 'Active';
-        statusFilterSelect.appendChild(optionActive);
+
         const optionCanceled = document.createElement('option');
         optionCanceled.value = 'Canceled';
         optionCanceled.textContent = 'Canceled';
+
+        statusFilterSelect.appendChild(optionAll);
+        statusFilterSelect.appendChild(optionActive);
         statusFilterSelect.appendChild(optionCanceled);
         statusFilterSelect.value = currentStatusFilter;
         statusFilterSelect.addEventListener('change', () => {
             currentStatusFilter = statusFilterSelect.value;
             renderCurrentView();
         });
+
+        statusFilterDiv.appendChild(statusFilterLabel);
         statusFilterDiv.appendChild(statusFilterSelect);
         filtersDiv.appendChild(statusFilterDiv);
 
-        // Type Filter
+        // ────────── Type Filter ──────────
         const typeFilterDiv = document.createElement('div');
         typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
+        typeFilterDiv.style.flexDirection = 'column';
+        typeFilterDiv.style.gap = '4px';
+
         const typeFilterLabel = document.createElement('label');
-        typeFilterLabel.textContent = 'Filter by Type: ';
-        typeFilterDiv.appendChild(typeFilterLabel);
+        typeFilterLabel.textContent = 'Filter by Type:';
+        typeFilterLabel.style.fontWeight = 'bold';
+
         const typeFilterSelect = document.createElement('select');
         typeFilterSelect.id = 'type-filter';
+        typeFilterSelect.style.padding = '6px';
+        typeFilterSelect.style.borderRadius = '6px';
+        typeFilterSelect.style.border = '1px solid #ccc';
+        typeFilterSelect.style.fontSize = '14px';
+        typeFilterSelect.style.cursor = 'pointer';
+
         const typeOptionAll = document.createElement('option');
         typeOptionAll.value = 'all';
         typeOptionAll.textContent = 'All';
-        typeFilterSelect.appendChild(typeOptionAll);
+
         const typeOptionBasic = document.createElement('option');
         typeOptionBasic.value = 'BASIC';
         typeOptionBasic.textContent = 'BASIC';
-        typeFilterSelect.appendChild(typeOptionBasic);
+
         const typeOptionSupp = document.createElement('option');
         typeOptionSupp.value = 'SUPP';
         typeOptionSupp.textContent = 'SUPP';
+
+        typeFilterSelect.appendChild(typeOptionAll);
+        typeFilterSelect.appendChild(typeOptionBasic);
         typeFilterSelect.appendChild(typeOptionSupp);
         typeFilterSelect.value = currentTypeFilter;
         typeFilterSelect.addEventListener('change', () => {
             currentTypeFilter = typeFilterSelect.value;
             renderCurrentView();
         });
+
+        typeFilterDiv.appendChild(typeFilterLabel);
         typeFilterDiv.appendChild(typeFilterSelect);
         filtersDiv.appendChild(typeFilterDiv);
 
-        // Offer Search for Members
+        // ────────── Offer Search Filter ──────────
         const offerSearchDiv = document.createElement('div');
         offerSearchDiv.style.display = 'flex';
-        offerSearchDiv.style.alignItems = 'center';
+        offerSearchDiv.style.flexDirection = 'column';
+        offerSearchDiv.style.gap = '4px';
+
         const offerSearchLabel = document.createElement('label');
-        offerSearchLabel.textContent = 'Search Offer: ';
-        offerSearchDiv.appendChild(offerSearchLabel);
+        offerSearchLabel.textContent = 'Search Offer:';
+        offerSearchLabel.style.fontWeight = 'bold';
+
         const offerSearchInput = document.createElement('input');
         offerSearchInput.type = 'text';
         offerSearchInput.placeholder = 'Enter offer keyword';
-        offerSearchInput.style.fontSize = '16px';
-        offerSearchInput.style.padding = '4px';
-        offerSearchInput.style.width = '200px';
+        offerSearchInput.style.fontSize = '14px';
+        offerSearchInput.style.padding = '6px';
+        offerSearchInput.style.borderRadius = '6px';
+        offerSearchInput.style.border = '1px solid #ccc';
+        offerSearchInput.style.width = '220px';
         offerSearchInput.value = offerSearchMembersKeyword;
         offerSearchInput.addEventListener('input', debounce(() => {
             offerSearchMembersKeyword = offerSearchInput.value.toLowerCase();
             renderCurrentView();
         }, 600));
+
+        offerSearchDiv.appendChild(offerSearchLabel);
         offerSearchDiv.appendChild(offerSearchInput);
         filtersDiv.appendChild(offerSearchDiv);
 
-        containerDiv.appendChild(filtersDiv);
-        containerDiv.appendChild(renderMembersTable());
+        // Append the filters to the card
+        filtersCard.appendChild(filtersDiv);
+
+        // Add filtersCard to container
+        containerDiv.appendChild(filtersCard);
+
+        // ────────── MEMBERS TABLE ──────────
+        const membersTable = renderMembersTable();
+        containerDiv.appendChild(membersTable);
+
         return containerDiv;
     }
 
-
     function renderMembersTable() {
+        // Reordered so that "Index" (cardIndex) is now the first column
         const headers = [
+            { label: "Index", key: "cardIndex" },
             { label: "Logo", key: "small_card_art" },
             { label: "Ending", key: "display_account_number" },
             { label: "User", key: "embossed_name" },
             { label: "Type", key: "relationship" },
-            { label: "Index", key: "cardIndex" },
             { label: "Opening", key: "account_setup_date" },
             { label: "Status", key: "account_status" },
-            { label: "Bal", key: "SB" },
+            { label: "Bal", key: "StatementBalance" },
             { label: "Pending", key: "pending" },
-            { label: "Sta Bal", key: "remainingSB" },
-            { label: "Eligible", key: "eligibleOffers" },
-            { label: "Enrolled", key: "enrolledOffers" },
-            // New columns for per-account priority/exclusion
-            { label: "Priority", key: "priority" },
-            { label: "Excluded", key: "exclude" }
+            { label: "Rem StBl", key: "remainingStaBal" },
+            { label: "Elig", key: "eligibleOffers" },
+            { label: "Enrled", key: "enrolledOffers" },
+            { label: "Prior", key: "priority" },
+            { label: "Excld", key: "exclude" }
         ];
+
         const colWidths = {
+            cardIndex: "50px",
             small_card_art: "60px",
             display_account_number: "80px",
             embossed_name: "150px",
             relationship: "80px",
-            cardIndex: "80px",
             account_setup_date: "80px",
             account_status: "80px",
-            SB: "80px",
+            StatementBalance: "80px",
             pending: "80px",
-            remainingSB: "80px",
-            eligibleOffers: "80px",
-            enrolledOffers: "80px",
+            remainingStaBal: "85px",
+            eligibleOffers: "60px",
+            enrolledOffers: "60px",
             priority: "60px",
             exclude: "60px"
         };
 
+        // Create table
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
+        table.style.marginTop = '8px';
+        table.style.borderRadius = '8px';
+        table.style.overflow = 'hidden';
+        table.style.backgroundColor = '#fff';
+        table.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
 
-        // Build table header
+        // Table header
         const thead = document.createElement('thead');
+        thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
         const headerRow = document.createElement('tr');
+
+        // Define which columns are sortable
+        const sortableKeys = [
+            "cardIndex",
+            "small_card_art",
+            "display_account_number",
+            "embossed_name",
+            "relationship",
+            "account_setup_date",
+            "account_status",
+            "StatementBalance",
+            "pending",
+            "remainingStaBal",
+            "eligibleOffers",
+            "enrolledOffers"
+        ];
+
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
-            th.style.borderBottom = '1px solid #000';
-            th.style.padding = '4px';
+            th.style.padding = '6px';
             th.style.cursor = 'pointer';
             th.style.textAlign = 'center';
+            th.style.borderBottom = '1px solid #ccc';
+            th.style.fontWeight = 'bold';
+            th.style.color = '#333';
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
                 th.style.maxWidth = colWidths[headerItem.key];
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
-            // Only add sort behavior for columns that exist in your data
-            if (["small_card_art", "display_account_number", "embossed_name", "relationship", "cardIndex", "account_setup_date", "account_status", "SB", "pending", "remainingSB", "eligibleOffers", "enrolledOffers"].includes(headerItem.key)) {
+
+            // Add click-to-sort if key is in sortableKeys
+            if (sortableKeys.includes(headerItem.key)) {
                 th.setAttribute('data-sort-key', headerItem.key);
+                // Removed the sorting icon, per your request
                 th.addEventListener('click', () => sortData(headerItem.key));
             }
             headerRow.appendChild(th);
@@ -1251,16 +1489,16 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Filter accounts by status and type (do not filter by search term)
+        // Filter accounts by status and type
         const filteredAccounts = accountData.filter(acc => {
-            const statusMatch = currentStatusFilter === 'all' ||
-                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
-            const typeMatch = currentTypeFilter === 'all' ||
-                acc.relationship === currentTypeFilter;
+            const statusMatch = (currentStatusFilter === 'all') ||
+                (acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase());
+            const typeMatch = (currentTypeFilter === 'all') ||
+                (acc.relationship === currentTypeFilter);
             return statusMatch && typeMatch;
         });
 
-        // Helper: determine whether to highlight the account row based on the offer search keyword.
+        // Helper: highlight if it matches the offer search
         function shouldHighlightAccount(acc) {
             if (!offerSearchMembersKeyword || offerSearchMembersKeyword.trim().length === 0) {
                 return false;
@@ -1268,27 +1506,46 @@
             const searchTerm = offerSearchMembersKeyword.trim().toLowerCase();
             return offerData.some(offer => {
                 if (offer.name.toLowerCase().includes(searchTerm)) {
-                    return (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.display_account_number)) ||
-                        (Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.display_account_number));
+                    return (
+                        (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.display_account_number)) ||
+                        (Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.display_account_number))
+                    );
                 }
                 return false;
             });
         }
 
-        // Build table body.
         const tbody = document.createElement('tbody');
-        filteredAccounts.forEach(item => {
-            const row = document.createElement('tr');
 
-            // Highlight row if account matches search
+        filteredAccounts.forEach((item, idx) => {
+            const row = document.createElement('tr');
+            row.style.transition = 'background-color 0.3s ease, box-shadow 0.3s ease';
+
+            // On hover
+            row.addEventListener('mouseover', () => {
+                row.style.backgroundColor = '#fefefe';
+                row.style.boxShadow = 'inset 0 0 6px rgba(0,0,0,0.1)';
+            });
+            row.addEventListener('mouseout', () => {
+                row.style.boxShadow = 'none';
+                row.style.backgroundColor = shouldHighlightAccount(item)
+                    ? '#fff9c2'  // pale yellow highlight
+                    : (idx % 2 === 0 ? '#fff' : '#fdfdfd');
+            });
+
+            // If search highlight
             if (shouldHighlightAccount(item)) {
-                row.style.backgroundColor = 'lightyellow';
+                row.style.backgroundColor = '#fff9c2';
+            } else {
+                row.style.backgroundColor = (idx % 2 === 0 ? '#fff' : '#fdfdfd');
             }
 
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.style.padding = '4px';
+                td.style.padding = '6px';
                 td.style.textAlign = 'center';
+                td.style.borderBottom = '1px solid #eee';
+
                 if (colWidths[headerItem.key]) {
                     td.style.width = colWidths[headerItem.key];
                     td.style.maxWidth = colWidths[headerItem.key];
@@ -1296,7 +1553,7 @@
                     td.style.wordWrap = 'break-word';
                 }
 
-                // Render existing columns
+                // Render cells
                 if (headerItem.key === 'small_card_art') {
                     if (item.small_card_art && item.small_card_art !== 'N/A') {
                         const img = document.createElement('img');
@@ -1308,27 +1565,40 @@
                     } else {
                         td.textContent = sanitizeValue('N/A');
                     }
-                } else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
+                }
+                else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
                     const count = item[headerItem.key];
                     const btn = document.createElement('button');
                     btn.textContent = sanitizeValue(count);
                     btn.style.cursor = 'pointer';
+                    btn.style.border = '1px solid #ccc';
+                    btn.style.borderRadius = '4px';
+                    btn.style.padding = '2px 6px';
+                    btn.style.fontSize = '12px';
+                    btn.style.backgroundColor = '#fafafa';
+                    btn.addEventListener('mouseover', () => {
+                        btn.style.backgroundColor = '#f0f0f0';
+                    });
+                    btn.addEventListener('mouseout', () => {
+                        btn.style.backgroundColor = '#fafafa';
+                    });
                     btn.addEventListener('click', () => {
-                        showMemberOffersPopup(
+                        renderMember_CardOffers(
                             item.display_account_number,
-                            headerItem.key === 'eligibleOffers' ? 'eligible' : 'enrolled'
+                            (headerItem.key === 'eligibleOffers') ? 'eligible' : 'enrolled'
                         );
                     });
                     td.appendChild(btn);
-                } else if (headerItem.key === 'pending' || headerItem.key === 'remainingSB' || headerItem.key === 'SB') {
+                }
+                else if (headerItem.key === 'pending' || headerItem.key === 'remainingStaBal' || headerItem.key === 'StatementBalance') {
                     // Only BASIC cards show financial data.
                     if (item.relationship === "BASIC") {
                         if (item.financialData) {
                             if (headerItem.key === 'pending') {
                                 td.textContent = sanitizeValue(item.financialData.debits_credits_payments_total_amount);
-                            } else if (headerItem.key === 'remainingSB') {
+                            } else if (headerItem.key === 'remainingStaBal') {
                                 td.textContent = sanitizeValue(item.financialData.remaining_statement_balance_amount);
-                            } else if (headerItem.key === 'SB') {
+                            } else if (headerItem.key === 'StatementBalance') {
                                 td.textContent = sanitizeValue(item.financialData.statement_balance_amount);
                             }
                         } else {
@@ -1337,14 +1607,14 @@
                     } else {
                         td.textContent = "0";
                     }
-                } else if (headerItem.key === 'relationship') {
+                }
+                else if (headerItem.key === 'relationship') {
                     if (item.relationship === "SUPP") {
                         td.textContent = getBasicAccountEndingForSuppAccount(item);
                     } else {
                         td.textContent = sanitizeValue(item[headerItem.key]);
                     }
                 }
-                // Render new columns for Priority and Excluded
                 else if (headerItem.key === 'priority') {
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
@@ -1360,7 +1630,8 @@
                         setLocalStorage(accountData[0].account_token, ['priorityCards']);
                     });
                     td.appendChild(chk);
-                } else if (headerItem.key === 'exclude') {
+                }
+                else if (headerItem.key === 'exclude') {
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = excludedCards.includes(item.display_account_number);
@@ -1378,164 +1649,368 @@
                 } else {
                     td.textContent = sanitizeValue(item[headerItem.key]);
                 }
+
                 row.appendChild(td);
             });
             tbody.appendChild(row);
         });
+
         table.appendChild(tbody);
         return table;
     }
 
 
+    function renderMember_CardOffers(accountNumber, offerType) {
+        // Create the overlay
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.zIndex = '10000';
+
+        const popup = document.createElement('div');
+        popup.style.position = 'fixed';
+        popup.style.top = '50%';
+        popup.style.left = '50%';
+        popup.style.transform = 'translate(-50%, -50%)';
+        popup.style.width = '400px';
+
+        popup.style.maxHeight = '80vh';
+        popup.style.overflowY = 'auto';
+
+        popup.style.backgroundColor = '#fff';
+        popup.style.border = '1px solid #ccc';
+        popup.style.borderRadius = '6px';
+        popup.style.padding = '16px';
+        popup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+
+        overlay.appendChild(popup);
+
+        // ───────── Top row: leftTitle, closeBtn ─────────
+        const topRow = document.createElement('div');
+        topRow.style.display = 'flex';
+        topRow.style.justifyContent = 'space-between';
+        topRow.style.alignItems = 'center';
+        topRow.style.marginBottom = '10px';
+
+        const leftTitle = document.createElement('div');
+        leftTitle.textContent = `Offers ${offerType} for card ending ${accountNumber}`;
+        leftTitle.style.fontWeight = 'bold';
+        leftTitle.style.fontSize = '16px';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'X';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.border = 'none';
+        closeBtn.style.backgroundColor = 'transparent';
+        closeBtn.style.fontWeight = 'bold';
+        closeBtn.style.fontSize = '16px';
+
+        closeBtn.addEventListener('mouseover', () => {
+            closeBtn.style.color = 'red';
+        });
+        closeBtn.addEventListener('mouseout', () => {
+            closeBtn.style.color = 'inherit';
+        });
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+        });
+
+        topRow.appendChild(leftTitle);
+        topRow.appendChild(closeBtn);
+        popup.appendChild(topRow);
+
+        // ───────── Content Area ─────────
+        const contentDiv = document.createElement('div');
+        contentDiv.style.fontSize = '14px';
+        contentDiv.style.lineHeight = '1.4';
+        popup.appendChild(contentDiv);
+
+        let relevantOffers = [];
+        if (offerType === 'eligible') {
+            relevantOffers = offerData.filter(offer =>
+                Array.isArray(offer.eligibleCards) &&
+                offer.eligibleCards.includes(accountNumber)
+            );
+        } else if (offerType === 'enrolled') {
+            relevantOffers = offerData.filter(offer =>
+                Array.isArray(offer.enrolledCards) &&
+                offer.enrolledCards.includes(accountNumber)
+            );
+        }
+
+        if (relevantOffers.length === 0) {
+            contentDiv.textContent = `No ${offerType} offers found for card ${accountNumber}.`;
+        } else {
+            relevantOffers.forEach(offer => {
+                const offerPara = document.createElement('p');
+                offerPara.style.margin = '6px 0';
+                offerPara.textContent = offer.name;
+                contentDiv.appendChild(offerPara);
+            });
+        }
+
+        document.body.appendChild(overlay);
+    }
+
     function renderOfferMap(offerArray) {
+        // Main container
         const containerDiv = document.createElement('div');
+        containerDiv.style.display = 'flex';
+        containerDiv.style.flexDirection = 'column';
+        containerDiv.style.gap = '12px';
+        containerDiv.style.margin = '10px';
+
+        // ────────── FILTERS CARD ──────────
+        const filterCard = document.createElement('div');
+        filterCard.style.position = 'relative';
+        filterCard.style.border = '1px solid #ccc';
+        filterCard.style.borderRadius = '8px';
+        filterCard.style.padding = '10px';
+        filterCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        filterCard.style.background = 'linear-gradient(to bottom, #fcfcfc, #f0f0f3)';
+        filterCard.style.transition = 'box-shadow 0.3s ease';
+
+        // Optional subtle hover effect
+        filterCard.addEventListener('mouseover', () => {
+            filterCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+        filterCard.addEventListener('mouseout', () => {
+            filterCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        });
+
+        // Filters container row
         const filterRow = document.createElement('div');
         filterRow.style.display = 'flex';
         filterRow.style.alignItems = 'center';
         filterRow.style.gap = '20px';
-        filterRow.style.margin = '10px';
+        filterRow.style.flexWrap = 'wrap';  // allow wrapping on small screens
+        filterRow.style.margin = '10px 0';
 
+        // Favorites Checkbox
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
         favCheckbox.checked = showFavoritesOnly;
+        favCheckbox.style.cursor = 'pointer';
         favCheckbox.addEventListener('change', () => {
             showFavoritesOnly = favCheckbox.checked;
             renderCurrentView();
         });
+
+        // Favorites Label
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
-        favLabel.style.fontSize = '16px';
+        favLabel.style.fontSize = '14px';
         favLabel.style.cursor = 'pointer';
+        favLabel.style.marginLeft = '4px';
 
+        // Combine checkbox & label in a small container
+        const favContainer = document.createElement('div');
+        favContainer.style.display = 'flex';
+        favContainer.style.alignItems = 'center';
+        favContainer.appendChild(favCheckbox);
+        favContainer.appendChild(favLabel);
+
+        // Merchant search
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.placeholder = 'Search Merchants...';
-        searchInput.style.fontSize = '16px';
-        searchInput.style.padding = '4px';
-        searchInput.style.width = '200px';
+        searchInput.style.fontSize = '14px';
+        searchInput.style.padding = '6px';
+        searchInput.style.borderRadius = '6px';
+        searchInput.style.border = '1px solid #ccc';
+        searchInput.style.width = '160px';
         searchInput.value = offerSearchKeyword;
         searchInput.addEventListener('input', debounce(() => {
             offerSearchKeyword = searchInput.value.toLowerCase();
             renderCurrentView();
         }, 600));
 
-        filterRow.appendChild(favCheckbox);
-        filterRow.appendChild(favLabel);
-        filterRow.appendChild(searchInput);
-        containerDiv.appendChild(filterRow);
+        // Card Ending search
+        const cardSearchInput = document.createElement('input');
+        cardSearchInput.type = 'text';
+        cardSearchInput.placeholder = 'Search by Card Ending...';
+        cardSearchInput.style.fontSize = '14px';
+        cardSearchInput.style.padding = '6px';
+        cardSearchInput.style.borderRadius = '6px';
+        cardSearchInput.style.border = '1px solid #ccc';
+        cardSearchInput.style.width = '160px';
+        cardSearchInput.value = offerSearchCardEnding;
+        cardSearchInput.addEventListener('input', debounce(() => {
+            offerSearchCardEnding = cardSearchInput.value.trim();
+            renderCurrentView();
+        }, 600));
 
+        // Append filters
+        filterRow.appendChild(favContainer);
+        filterRow.appendChild(searchInput);
+        filterRow.appendChild(cardSearchInput);
+        filterCard.appendChild(filterRow);
+        containerDiv.appendChild(filterCard);
+
+        // ────────── FILTER THE OFFERS ──────────
         const filteredOffers = offerArray.filter(o => {
+            // 1) If "Favorites Only" is on, ensure o.favorite === true
             if (showFavoritesOnly && !o.favorite) return false;
-            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
+
+            // 2) If offerSearchKeyword is nonempty, check in o.name
+            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) {
+                return false;
+            }
+
+            // 3) If user typed a card ending, ensure that card is in either eligibleCards or enrolledCards
+            if (offerSearchCardEnding) {
+                const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(offerSearchCardEnding);
+                const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(offerSearchCardEnding);
+                if (!eligible && !enrolled) return false;
+            }
+
             return true;
         });
 
+        // ────────── TABLE SETUP ──────────
         const headers = [
             { label: "Fav", key: "favorite" },
             { label: "Logo", key: "logo" },
-            { label: "Name", key: "name" },
+            { label: "Offer", key: "name" },
             { label: "Type", key: "achievement_type" },
-            { label: "Category", key: "category" },
-            { label: "Exp Date", key: "expiry_date" },
-            { label: "Usage", key: "redemption_types" },
+            { label: "Cat", key: "category" },
+            { label: "Exp", key: "expiry_date" },
+            { label: "Usg", key: "redemption_types" },
             { label: "Description", key: "short_description" },
             { label: "Thres", key: "threshold" },
-            { label: "Reward", key: "reward" },
+            { label: "Rwd", key: "reward" },
             { label: "Pct", key: "percentage" },
             { label: "Elig", key: "eligibleCards" },
             { label: "Enrl", key: "enrolledCards" }
         ];
 
         const colWidths = {
-            favorite: "60px",
-            logo: "60px",
+            favorite: "35px",
+            logo: "70px",
             name: "220px",
-            achievement_type: "50px",
-            category: "60px",
+            achievement_type: "60px",
+            category: "75px",
             expiry_date: "80px",
             redemption_types: "45px",
-            short_description: "300px",
+            short_description: "330px",
             threshold: "80px",
-            reward: "80px",
-            percentage: "80px",
-            eligibleCards: "50px",
-            enrolledCards: "50px"
+            reward: "70px",
+            percentage: "60px",
+            eligibleCards: "40px",
+            enrolledCards: "40px"
         };
 
+        // Create table
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.fontSize = '12px';
+        table.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        table.style.border = '1px solid #ccc';
+        table.style.borderRadius = '6px';
+        table.style.overflow = 'hidden';
+        table.style.marginTop = '8px';
 
+        // Thead
         const thead = document.createElement('thead');
+        thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
         const headerRow = document.createElement('tr');
+
+        // Sorting is optional. If you have a function sortOfferData, you can preserve it:
         headers.forEach(headerItem => {
             const th = document.createElement('th');
-            th.style.borderBottom = '1px solid #000';
-            th.style.padding = '4px';
-            th.style.cursor = 'pointer';
+            th.style.padding = '6px';
             th.style.textAlign = 'center';
+            th.style.borderBottom = '1px solid #ccc';
+            th.style.fontWeight = 'bold';
+            th.style.color = '#333';
+            th.style.cursor = 'pointer';
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
                 th.style.maxWidth = colWidths[headerItem.key];
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
+
+            // Label
             const labelSpan = document.createElement('span');
             labelSpan.textContent = headerItem.label;
             labelSpan.style.cursor = 'pointer';
-            labelSpan.addEventListener('click', (event) => {
-                sortOfferData(headerItem.key);
-                event.stopPropagation();
-            });
+            if (typeof sortOfferData === 'function') {
+                // Provide a sorting functionality if you wish
+                labelSpan.addEventListener('click', (event) => {
+                    sortOfferData(headerItem.key);
+                    event.stopPropagation();
+                });
+            }
             th.appendChild(labelSpan);
-            th.dataset.colKey = headerItem.key;
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
+        // Tbody
         const tbody = document.createElement('tbody');
         filteredOffers.forEach(item => {
             const row = document.createElement('tr');
+            row.style.borderBottom = '1px solid #eee';
+            row.style.transition = 'background-color 0.3s ease';
+
+            // Hover effect
+            row.addEventListener('mouseover', () => {
+                row.style.backgroundColor = '#fafafa';
+            });
+            row.addEventListener('mouseout', () => {
+                row.style.backgroundColor = '#fff';
+            });
+
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.style.padding = '4px';
+                td.style.padding = '6px';
                 td.style.textAlign = 'center';
-                td.dataset.colKey = headerItem.key;
                 if (colWidths[headerItem.key]) {
                     td.style.width = colWidths[headerItem.key];
                     td.style.maxWidth = colWidths[headerItem.key];
                     td.style.whiteSpace = 'normal';
                     td.style.wordWrap = 'break-word';
                 }
+
                 let cellValue = item[headerItem.key];
+
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
                         const img = document.createElement('img');
                         img.src = cellValue;
-                        img.alt = "Logo";
+                        img.alt = "Offer Logo";
                         img.style.maxWidth = "60px";
                         img.style.maxHeight = "60px";
                         td.appendChild(img);
                     } else {
                         td.textContent = 'N/A';
                     }
-                } else if (headerItem.key === 'achievement_type') {
+                }
+                else if (headerItem.key === 'achievement_type') {
+                    // Convert STATEMENT_CREDIT -> "Cash", MEMBERSHIP_REWARDS -> "MR"
                     if (cellValue === "STATEMENT_CREDIT") {
                         cellValue = "Cash";
                     } else if (cellValue === "MEMBERSHIP_REWARDS") {
                         cellValue = "MR";
                     }
                     td.textContent = cellValue;
-                } else if (headerItem.key === 'category') {
+                }
+                else if (headerItem.key === 'category') {
                     if (cellValue && cellValue !== "N/A") {
                         const str = cellValue.toString().toLowerCase();
                         td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
                     } else {
                         td.textContent = 'N/A';
                     }
-                } else if (headerItem.key === 'redemption_types') {
+                }
+                else if (headerItem.key === 'redemption_types') {
                     if (cellValue && cellValue !== "N/A") {
                         let parts = cellValue.toString().split(",");
                         let abbreviatedParts = parts.map(val => {
@@ -1548,36 +2023,29 @@
                     } else {
                         td.textContent = "N/A";
                     }
-                } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
+                }
+                else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
+                    // Show array of card endings as a clickable count
                     const cards = Array.isArray(cellValue) ? cellValue : [];
                     const count = cards.length;
-                    const containerDiv = document.createElement('div');
-                    containerDiv.style.display = 'flex';
-                    containerDiv.style.alignItems = 'center';
-                    containerDiv.style.justifyContent = 'center';
 
                     const countSpan = document.createElement('span');
                     countSpan.textContent = count;
-                    containerDiv.appendChild(countSpan);
+                    countSpan.style.cursor = (count > 0) ? 'pointer' : 'default';
+                    countSpan.style.color = (count > 0) ? '#007bff' : '#999';
+                    countSpan.style.textDecoration = (count > 0) ? 'underline' : 'none';
 
-                    const viewBtn = document.createElement('button');
-                    viewBtn.textContent = 'View';
-                    viewBtn.style.marginLeft = '5px';
-                    viewBtn.style.fontSize = '10px';
-                    viewBtn.addEventListener('click', (e) => {
+                    countSpan.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        WindowrRender_ViewCard(
-                            cards,
-                            item.offerId,
-                            headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
-                            e.clientX,
-                            e.clientY,
-                            headerItem.key === 'eligibleCards'
-                        );
+                        if (count > 0) {
+                            renderOffer2Card(
+                                item.offerId,
+                            );
+                        }
                     });
-                    containerDiv.appendChild(viewBtn);
-                    td.appendChild(containerDiv);
-                } else if (headerItem.key === 'expiry_date') {
+                    td.appendChild(countSpan);
+                }
+                else if (headerItem.key === 'expiry_date') {
                     if (cellValue && cellValue !== 'N/A') {
                         const d = new Date(cellValue);
                         if (!isNaN(d)) {
@@ -1591,131 +2059,621 @@
                     } else {
                         td.textContent = 'N/A';
                     }
-                } else if (headerItem.key === 'favorite') {
+                }
+                else if (headerItem.key === 'favorite') {
                     const favCheckbox = document.createElement('input');
                     favCheckbox.type = 'checkbox';
                     favCheckbox.checked = item.favorite === true;
+                    favCheckbox.style.cursor = 'pointer';
                     favCheckbox.addEventListener('change', () => {
                         item.favorite = favCheckbox.checked;
                         setLocalStorage(accountData[0].account_token, ["offerData"]);
                     });
                     td.appendChild(favCheckbox);
-                } else {
+                }
+                else {
                     td.textContent = cellValue;
                 }
+
                 row.appendChild(td);
             });
+
             tbody.appendChild(row);
         });
+
         table.appendChild(tbody);
         containerDiv.appendChild(table);
+
         return containerDiv;
     }
 
+    async function renderOffer2Card(offerId) {
+        // Remove any existing popup overlay, so we can re-create it fresh.
+        const existingOverlay = document.getElementById('offer-details-overlay');
+        if (existingOverlay) {
+            document.body.removeChild(existingOverlay);
+        }
 
-    function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
-        const win = document.createElement('div');
-        win.style.backgroundColor = '#fff';
-        win.style.border = '2px solid #000';
-        win.style.padding = '10px';
-        win.style.zIndex = '11000';
-        win.style.width = '400px';
-        win.style.maxWidth = '500px';
-        win.style.maxHeight = '400px';
-        win.style.overflowY = 'auto';
-        win.style.position = 'fixed';
-        win.style.top = clickY + 'px';
-        win.style.left = (clickX - 400) + 'px';
+        // Create a new overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'offer-details-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.zIndex = '10000';
+        document.body.appendChild(overlay);
+
+        // Create the popup container, centered in the viewport
+        const popup = document.createElement('div');
+        popup.style.position = 'fixed';
+        popup.style.top = '50%';
+        popup.style.left = '50%';
+        popup.style.transform = 'translate(-50%, -50%)';
+        popup.style.width = '410px';
+        popup.style.maxWidth = '500px';
+        popup.style.maxHeight = '80vh';
+        popup.style.overflowY = 'auto';
+        popup.style.backgroundColor = '#fff';
+        popup.style.border = '1px solid #ccc';
+        popup.style.borderRadius = '6px';
+        popup.style.padding = '14px';
+        popup.style.boxShadow = '0 2px 5px rgba(0,0,0,0.4)';
+        overlay.appendChild(popup);
+
+        // Retrieve the offer from offerData
+        const foundOffer = offerData.find(o => o.offerId === offerId);
+        const offerName = foundOffer ? foundOffer.name : 'Unknown Offer';
+
+        // Top row: Offer name (center) and close button (right)
+        const topRow = document.createElement('div');
+        topRow.style.display = 'flex';
+        topRow.style.justifyContent = 'space-between';
+        topRow.style.alignItems = 'center';
+        topRow.style.marginBottom = '10px';
 
         const header = document.createElement('div');
+        header.style.flex = '1';
+        header.style.textAlign = 'center';
         header.style.fontWeight = 'bold';
-        header.style.marginBottom = '10px';
-        header.textContent = winTitle;
-        win.appendChild(header);
+        header.style.fontSize = '16px';
+        header.textContent = offerName;
 
-        const contentDiv = document.createElement('div');
-        const sortedCards = cards.slice();
-        sortedCards.sort((a, b) => {
-            const accA = accountData.find(acc => acc.display_account_number === a);
-            const accB = accountData.find(acc => acc.display_account_number === b);
-            if (accA && accB) {
-                const [aMain, aSub] = parseCardIndex(accA.cardIndex);
-                const [bMain, bSub] = parseCardIndex(accB.cardIndex);
-                if (aMain === bMain) {
-                    return aSub - bSub;
-                }
-                return aMain - bMain;
-            }
-            return 0;
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'X';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.border = 'none';
+        closeBtn.style.backgroundColor = 'transparent';
+        closeBtn.style.fontWeight = 'bold';
+        closeBtn.style.fontSize = '16px';
+        closeBtn.style.marginLeft = 'auto';
+        closeBtn.addEventListener('mouseover', () => {
+            closeBtn.style.color = 'red';
+        });
+        closeBtn.addEventListener('mouseout', () => {
+            closeBtn.style.color = 'inherit';
+        });
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(overlay);
         });
 
-        if (Array.isArray(sortedCards)) {
+        topRow.appendChild(header);
+        topRow.appendChild(closeBtn);
+        popup.appendChild(topRow);
+
+        // If the offer is valid and has at least one eligible card, show "Enroll All" button
+        if (foundOffer && Array.isArray(foundOffer.eligibleCards) && foundOffer.eligibleCards.length > 0) {
+            const enrollAllBtn = document.createElement('button');
+            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
+            enrollAllBtn.style.display = 'block';
+            enrollAllBtn.style.margin = '0 auto 12px auto';
+            enrollAllBtn.style.cursor = 'pointer';
+            enrollAllBtn.style.padding = '6px 12px';
+            enrollAllBtn.style.fontSize = '12px';
+            enrollAllBtn.style.border = '1px solid #ccc';
+            enrollAllBtn.style.borderRadius = '4px';
+            enrollAllBtn.style.backgroundColor = '#f5f5f5';
+
+            enrollAllBtn.addEventListener('mouseover', () => {
+                enrollAllBtn.style.backgroundColor = '#e9e9e9';
+            });
+            enrollAllBtn.addEventListener('mouseout', () => {
+                enrollAllBtn.style.backgroundColor = '#f5f5f5';
+            });
+
+            // Batch enroll all eligible cards
+            enrollAllBtn.addEventListener('click', async () => {
+                if (!foundOffer) return;
+                const sourceId = foundOffer.source_id;
+                console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
+
+                // Get the results of the batch enroll
+                const results = await batchEnrollOffer(sourceId);
+
+                // Color code the updated cards for 3 seconds
+                highlightBatchEnrollmentResults(results);
+
+                // Re-render the popup to reflect updated enrollments after 3 seconds
+                setTimeout(() => renderOffer2Card(offerId), 3000);
+            });
+            popup.appendChild(enrollAllBtn);
+        }
+
+        // Container for the “Eligible” and “Enrolled” sections
+        const contentDiv = document.createElement('div');
+        contentDiv.style.display = 'flex';
+        contentDiv.style.flexDirection = 'column';
+        contentDiv.style.gap = '16px';
+        contentDiv.style.fontSize = '14px';
+        popup.appendChild(contentDiv);
+
+        // Helper to chunk & display card endings in row sets of up to 6
+        function displayCardEndings(sectionTitle, cardEndings) {
+            const container = document.createElement('div');
+
+            const titleDiv = document.createElement('div');
+            titleDiv.textContent = sectionTitle;
+            titleDiv.style.textAlign = 'center';
+            titleDiv.style.fontWeight = 'bold';
+            titleDiv.style.fontSize = '15px';
+            titleDiv.style.marginBottom = '6px';
+            container.appendChild(titleDiv);
+
+            // If no cards, show (None)
+            if (!cardEndings || cardEndings.length === 0) {
+                const noneDiv = document.createElement('div');
+                noneDiv.textContent = '(None)';
+                noneDiv.style.textAlign = 'center';
+                noneDiv.style.color = '#777';
+                container.appendChild(noneDiv);
+                return container;
+            }
+
+            // Sort the card endings by main-sub index
+            const sorted = cardEndings.slice().sort((a, b) => {
+                const accA = accountData.find(acc => acc.display_account_number === a);
+                const accB = accountData.find(acc => acc.display_account_number === b);
+                if (accA && accB) {
+                    const [aMain, aSub] = parseCardIndex(accA.cardIndex);
+                    const [bMain, bSub] = parseCardIndex(accB.cardIndex);
+                    if (aMain === bMain) {
+                        return aSub - bSub;
+                    }
+                    return aMain - bMain;
+                }
+                return 0;
+            });
+
+            // chunk in groups of 6
             const chunkSize = 6;
-            for (let i = 0; i < sortedCards.length; i += chunkSize) {
-                const chunk = sortedCards.slice(i, i + chunkSize);
-                const lineDiv = document.createElement('div');
-                lineDiv.style.display = 'flex';
-                lineDiv.style.flexWrap = 'wrap';
-                lineDiv.style.marginBottom = '8px';
+            for (let i = 0; i < sorted.length; i += chunkSize) {
+                const chunk = sorted.slice(i, i + chunkSize);
+
+                const rowDiv = document.createElement('div');
+                rowDiv.style.display = 'flex';
+                rowDiv.style.flexWrap = 'wrap';
+                rowDiv.style.marginBottom = '8px';
+
                 chunk.forEach(cardEnd => {
-                    const cardSpan = document.createElement('span');
-                    cardSpan.textContent = cardEnd;
-                    cardSpan.style.marginRight = '12px';
-                    cardSpan.style.marginBottom = '4px';
-                    if (isEligibleView) {
-                        cardSpan.style.cursor = 'pointer';
-                        cardSpan.addEventListener('click', async () => {
+                    const span = document.createElement('span');
+                    span.id = `offerCard_${offerId}_${cardEnd}`;
+                    span.textContent = cardEnd;
+                    span.style.marginRight = '12px';
+                    span.style.marginBottom = '4px';
+                    span.style.padding = '4px 6px';
+                    span.style.backgroundColor = '#f2f2f2';
+                    span.style.borderRadius = '4px';
+
+                    // If this card is in eligible, allow single-card enroll
+                    if (foundOffer && foundOffer.eligibleCards && foundOffer.eligibleCards.includes(cardEnd)) {
+                        span.style.cursor = 'pointer';
+                        span.addEventListener('click', async () => {
                             const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
                             if (!matchingAcc) {
                                 console.log(`No matching account token for card ending ${cardEnd}`);
                                 return;
                             }
-                            const accountToken = matchingAcc.account_token;
-                            const foundOffer = offerData.find(o => o.offerId === offerId);
-                            const result = await enrollOffer(accountToken, offerId);
-                            console.log(result && result.isEnrolled
-                                ? `Enrollment successful for card ${cardEnd}, offer "${foundOffer.name}"`
-                                : `Enrollment failed for card ${cardEnd}, offer "${foundOffer.name}"`);
+
+                            // Single enrollment
+                            const singleResult = await enrollOffer(matchingAcc.account_token, offerId);
+                            if (singleResult.result) {
+                                console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
+                                // Temporarily highlight green
+                                highlightCard(span, true);
+
+                                // Move the card from eligible to enrolled
+                                const idx = foundOffer.eligibleCards.indexOf(cardEnd);
+                                if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
+                                if (!foundOffer.enrolledCards.includes(cardEnd)) {
+                                    foundOffer.enrolledCards.push(cardEnd);
+                                }
+                            } else {
+                                console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
+                                // Temporarily highlight red
+                                highlightCard(span, false);
+                            }
+
+                            // After 3 seconds, re-render the entire popup
+                            setTimeout(() => renderOffer2Card(offerId), 3000);
                         });
                     } else {
-                        cardSpan.style.cursor = 'default';
+                        span.style.cursor = 'default';
                     }
-                    lineDiv.appendChild(cardSpan);
+                    rowDiv.appendChild(span);
                 });
-                contentDiv.appendChild(lineDiv);
+                container.appendChild(rowDiv);
             }
-        } else {
-            contentDiv.textContent = cards;
+            return container;
         }
-        win.appendChild(contentDiv);
 
-        if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
-            const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
-            enrollAllBtn.style.display = 'block';
-            enrollAllBtn.style.margin = '10px auto 0';
-            enrollAllBtn.addEventListener('click', async () => {
-                const foundOffer = offerData.find(o => o.offerId === offerId);
-                if (!foundOffer) return;
-                const sourceId = foundOffer.source_id;
-                console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
-                await batchEnrollOffer(sourceId);
-                currentView = 'offers';
-                renderCurrentView();
+        // If we didn't find the offer, show an error
+        if (!foundOffer) {
+            const notFoundDiv = document.createElement('div');
+            notFoundDiv.style.textAlign = 'center';
+            notFoundDiv.style.color = 'red';
+            notFoundDiv.textContent = 'Offer not found';
+            contentDiv.appendChild(notFoundDiv);
+            return;
+        }
+
+        // Eligible cards
+        const eligibleSection = displayCardEndings('Eligible Cards', foundOffer.eligibleCards);
+        contentDiv.appendChild(eligibleSection);
+
+        // Enrolled cards
+        const enrolledSection = displayCardEndings('Enrolled Cards', foundOffer.enrolledCards);
+        contentDiv.appendChild(enrolledSection);
+
+        // Temporarily highlight a single card span as green/red for 3 seconds
+        function highlightCard(spanElem, success) {
+            spanElem.style.backgroundColor = success ? '#c0ffc0' : '#ffc0c0';
+            setTimeout(() => {
+                spanElem.style.backgroundColor = '#f2f2f2';
+            }, 3000);
+        }
+
+        // For “Enroll All” scenario, we highlight success/fail cards
+        // in green/red for 3 seconds
+        function highlightBatchEnrollmentResults(results) {
+            // results is an array of { offerId, accountToken, result: true/false }
+            // We'll look up the cardEnd from accountData
+            results.forEach(r => {
+                if (r.offerId !== offerId) return; // only highlight for this offer
+                // find the display_account_number for that account token
+                const matchingAcc = accountData.find(a => a.account_token === r.accountToken);
+                if (!matchingAcc) return;
+                const cardEnd = matchingAcc.display_account_number;
+
+                // find the span element
+                const spanId = `offerCard_${offerId}_${cardEnd}`;
+                const spanElem = document.getElementById(spanId);
+                if (spanElem) {
+                    spanElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
+                    setTimeout(() => {
+                        spanElem.style.backgroundColor = '#f2f2f2';
+                    }, 3000);
+                }
+
+                if (r.result) {
+                    // success => move the card from eligible to enrolled
+                    const idx = foundOffer.eligibleCards.indexOf(cardEnd);
+                    if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
+                    if (!foundOffer.enrolledCards.includes(cardEnd)) {
+                        foundOffer.enrolledCards.push(cardEnd);
+                    }
+                }
             });
-            win.appendChild(enrollAllBtn);
+        }
+    }
+
+
+    async function renderBenefitsView() {
+        // Ensure trackers are loaded
+        const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
+        if (!benefitTrackers || benefitTrackers.length === 0) {
+            benefitTrackers = await fetchBenefit();
+            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
         }
 
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close';
-        closeBtn.style.display = 'block';
-        closeBtn.style.margin = '10px auto 0';
-        closeBtn.addEventListener('click', () => {
-            document.body.removeChild(win);
+        // Container
+        const containerDiv = document.createElement('div');
+        containerDiv.style.display = 'flex';
+        containerDiv.style.flexDirection = 'column';
+        containerDiv.style.gap = '16px';
+        containerDiv.style.padding = '16px';
+        containerDiv.style.fontFamily = 'Arial, sans-serif';
+
+        // ───────────── TOP BAR ─────────────
+        // This top bar has a "Benefit Trackers" title on the left,
+        // plus a "Refresh" button on the right.
+        const topBar = document.createElement('div');
+        topBar.style.display = 'flex';
+        topBar.style.alignItems = 'center';
+        topBar.style.justifyContent = 'space-between';
+        topBar.style.marginBottom = '12px';
+
+        const title = document.createElement('h1');
+        title.textContent = 'Your Benefit Trackers';
+        title.style.margin = '0';
+        title.style.fontSize = '22px';
+        title.style.color = '#333';
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.textContent = 'Refresh Trackers';
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.style.border = '1px solid #ccc';
+        refreshBtn.style.borderRadius = '6px';
+        refreshBtn.style.padding = '6px 12px';
+        refreshBtn.style.fontSize = '14px';
+        refreshBtn.style.backgroundColor = '#f0f0f0';
+        refreshBtn.addEventListener('mouseover', () => {
+            refreshBtn.style.backgroundColor = '#e9e9e9';
         });
-        win.appendChild(closeBtn);
-        document.body.appendChild(win);
+        refreshBtn.addEventListener('mouseout', () => {
+            refreshBtn.style.backgroundColor = '#f0f0f0';
+        });
+        refreshBtn.addEventListener('click', async () => {
+            // Re-fetch the trackers and re-render
+            benefitTrackers = await fetchBenefit();
+            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
+            await renderCurrentView();
+        });
+
+        topBar.appendChild(title);
+        topBar.appendChild(refreshBtn);
+
+        containerDiv.appendChild(topBar);
+
+        // ───────────── GROUP & SORT TRACKERS ─────────────
+        const grouped = {};
+        benefitTrackers.forEach(trackerObj => {
+            const key = trackerObj.benefitId;
+            if (!grouped[key]) {
+                grouped[key] = [];
+            }
+            grouped[key].push(trackerObj);
+        });
+
+        // Known or custom mapping for sorting / renaming
+        const benefitSortMapping = {
+            "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
+            "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
+            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit" },
+            "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
+            "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
+            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)" },
+            "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
+            "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
+            "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
+            "digital entertainment": { order: 10, newName: "$20 Digital Entertainment" },
+            "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
+            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit" },
+            "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
+            "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
+            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" }
+        };
+
+        function getGroupSortData(trackerGroup) {
+            const first = trackerGroup[0];
+            const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
+            const benefitNameKey = (first.benefitName || "").toLowerCase().trim();
+            let sortData = benefitSortMapping[benefitIdKey];
+            if (!sortData) {
+                sortData = benefitSortMapping[benefitNameKey];
+            }
+            if (!sortData) {
+                return { order: Infinity, displayName: first.benefitName || "" };
+            }
+            return { order: sortData.order, displayName: sortData.newName };
+        }
+
+        // Build an array of groups for sorting
+        const groupArray = [];
+        for (const key in grouped) {
+            const group = grouped[key];
+            const sortData = getGroupSortData(group);
+            groupArray.push({
+                key,
+                trackers: group,
+                order: sortData.order,
+                displayName: sortData.displayName
+            });
+        }
+
+        // Sort them
+        groupArray.sort((a, b) => {
+            if (a.order !== b.order) return a.order - b.order;
+            return a.displayName.localeCompare(b.displayName);
+        });
+
+        // ───────────── RENDER GROUPS (ACCORDION-STYLE) ─────────────
+        groupArray.forEach(groupObj => {
+            const trackersGroup = groupObj.trackers;
+            const durationText =
+                trackersGroup[0].trackerDuration ||
+                (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
+                "";
+
+            // Each group is an "accordion" container
+            const accordionItem = document.createElement('div');
+            accordionItem.style.border = '1px solid #ccc';
+            accordionItem.style.borderRadius = '8px';
+            accordionItem.style.marginBottom = '12px';
+            accordionItem.style.overflow = 'hidden';
+            accordionItem.style.transition = 'max-height 0.3s ease';
+
+            // Accordion Header
+            const headerDiv = document.createElement('div');
+            headerDiv.style.display = 'flex';
+            headerDiv.style.justifyContent = 'space-between';
+            headerDiv.style.alignItems = 'center';
+            headerDiv.style.cursor = 'pointer';
+            headerDiv.style.padding = '10px';
+            headerDiv.style.background = '#f0f0f0';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.style.fontSize = '16px';
+            titleSpan.style.fontWeight = 'bold';
+            titleSpan.style.color = '#333';
+            titleSpan.textContent = groupObj.displayName + (durationText ? ` (${durationText})` : "");
+
+            // A small expand/collapse icon
+            const arrowSpan = document.createElement('span');
+            arrowSpan.textContent = '▼';
+            arrowSpan.style.marginLeft = '8px';
+            arrowSpan.style.transition = 'transform 0.3s ease';
+
+            headerDiv.appendChild(titleSpan);
+            headerDiv.appendChild(arrowSpan);
+
+            // Body container for the group items
+            const bodyDiv = document.createElement('div');
+            bodyDiv.style.padding = '10px';
+            bodyDiv.style.display = 'none'; // hidden by default
+
+            // Render each tracker in the group
+            trackersGroup.forEach(trackerObj => {
+                const t = trackerObj.tracker || trackerObj;
+
+                // A card for each tracker
+                const trackerCard = document.createElement('div');
+                trackerCard.style.border = '1px solid #ddd';
+                trackerCard.style.borderRadius = '6px';
+                trackerCard.style.padding = '12px';
+                trackerCard.style.marginBottom = '10px';
+                trackerCard.style.backgroundColor = '#fafafa';
+                trackerCard.style.transition = 'background-color 0.3s ease';
+
+                // Top row: card ending + date range
+                const topRow = document.createElement('div');
+                topRow.style.display = 'flex';
+                topRow.style.justifyContent = 'space-between';
+                topRow.style.marginBottom = '8px';
+
+                const leftSpan = document.createElement('span');
+                leftSpan.textContent = `Card Ending: ${trackerObj.cardEnding}`;
+                leftSpan.style.fontWeight = 'bold';
+
+                // Format dates
+                const startFormatted = formatDate(trackerObj.periodStartDate);
+                const endFormatted = formatDate(trackerObj.periodEndDate, true);
+                const dateRangeSpan = document.createElement('span');
+                dateRangeSpan.textContent = `${startFormatted} - ${endFormatted}`;
+                dateRangeSpan.style.fontStyle = 'italic';
+
+                topRow.appendChild(leftSpan);
+                topRow.appendChild(dateRangeSpan);
+
+                // Middle row: progress bar + usage
+                const middleRow = document.createElement('div');
+                middleRow.style.display = 'flex';
+                middleRow.style.alignItems = 'center';
+                middleRow.style.gap = '10px';
+                middleRow.style.marginBottom = '8px';
+
+                const progressLabel = document.createElement('span');
+                progressLabel.style.fontWeight = 'bold';
+                progressLabel.style.color = '#555';
+                progressLabel.textContent = 'Progress:';
+
+                const progressBarWrapper = document.createElement('div');
+                progressBarWrapper.style.flex = '1';
+                progressBarWrapper.style.background = '#eee';
+                progressBarWrapper.style.borderRadius = '7px';
+                progressBarWrapper.style.position = 'relative';
+                progressBarWrapper.style.height = '14px';
+                progressBarWrapper.style.overflow = 'hidden';
+                progressBarWrapper.style.border = '1px solid #ccc';
+
+                let percent = 0;
+                const targetAmountNum = parseFloat(t.targetAmount);
+                const spentAmountNum = parseFloat(t.spentAmount);
+                if (targetAmountNum > 0) {
+                    percent = (spentAmountNum / targetAmountNum) * 100;
+                    if (percent > 100) percent = 100;
+                }
+
+                const progressFill = document.createElement('div');
+                progressFill.style.height = '100%';
+                progressFill.style.width = percent + '%';
+                progressFill.style.position = 'absolute';
+                progressFill.style.top = '0';
+                progressFill.style.left = '0';
+                progressFill.style.transition = 'width 0.3s ease';
+                if (trackerObj.status === 'ACHIEVED') {
+                    progressFill.style.backgroundColor = '#90ee90'; // green
+                } else if (trackerObj.status === 'IN_PROGRESS') {
+                    progressFill.style.backgroundColor = '#add8e6'; // light blue
+                } else {
+                    progressFill.style.backgroundColor = '#ccc'; // gray
+                }
+                progressBarWrapper.appendChild(progressFill);
+
+                middleRow.appendChild(progressLabel);
+                middleRow.appendChild(progressBarWrapper);
+
+                // Right side: usage label
+                const usageSpan = document.createElement('span');
+                usageSpan.style.fontWeight = 'bold';
+
+                const spentStr = parseFloat(t.spentAmount).toFixed(2);
+                const targetStr = parseFloat(t.targetAmount).toFixed(2);
+                let usageLabel;
+                if (t.targetUnit === 'MONETARY') {
+                    if (t.targetCurrencySymbol === '$') {
+                        usageLabel = `Spent: $${spentStr} / $${targetStr}`;
+                    } else {
+                        usageLabel = `Spent: ${t.targetCurrencySymbol}${spentStr} / ${t.targetCurrencySymbol}${targetStr}`;
+                    }
+                } else if (t.targetUnit === 'PASSES') {
+                    usageLabel = `Used: ${parseInt(t.spentAmount)} / ${parseInt(t.targetAmount)} passes`;
+                } else {
+                    usageLabel = `Spent: ${t.spentAmount} / ${t.targetAmount}`;
+                }
+                usageSpan.textContent = usageLabel;
+
+                middleRow.appendChild(usageSpan);
+
+                // If there's a message from trackerObj.progress
+                const bottomRow = document.createElement('div');
+                if (trackerObj.progress && trackerObj.progress.message) {
+                    bottomRow.style.marginTop = '6px';
+                    bottomRow.style.fontSize = '13px';
+                    bottomRow.style.color = '#555';
+                    bottomRow.innerHTML = trackerObj.progress.message;
+                }
+
+                trackerCard.appendChild(topRow);
+                trackerCard.appendChild(middleRow);
+                trackerCard.appendChild(bottomRow);
+
+                bodyDiv.appendChild(trackerCard);
+            });
+
+            // Initially collapsed
+            bodyDiv.style.display = 'none';
+
+            // Accordion logic
+            headerDiv.addEventListener('click', () => {
+                const isOpen = (bodyDiv.style.display === 'block');
+                bodyDiv.style.display = isOpen ? 'none' : 'block';
+                arrowSpan.textContent = isOpen ? '▼' : '▲';
+            });
+
+            accordionItem.appendChild(headerDiv);
+            accordionItem.appendChild(bodyDiv);
+
+            // Insert into the container
+            containerDiv.appendChild(accordionItem);
+        });
+
+        return containerDiv;
     }
+
+
+
 
     async function renderCurrentView() {
         if (currentView === 'members') {
@@ -1743,158 +2701,6 @@
         }
     }
 
-    // ==================== Updated Benefits Tracker View with Refined UI ====================
-
-    async function renderBenefitsView() {
-
-        const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
-
-        if (!benefitTrackers || benefitTrackers.length === 0) {
-            benefitTrackers = await fetchBenefit();
-            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
-        }
-
-        const containerDiv = document.createElement('div');
-        containerDiv.style.padding = '10px';
-        containerDiv.style.fontFamily = 'Arial, sans-serif';
-
-
-        const grouped = {};
-        benefitTrackers.forEach(trackerObj => {
-            const key = trackerObj.benefitId;
-            if (!grouped[key]) {
-                grouped[key] = [];
-            }
-            grouped[key].push(trackerObj);
-        });
-
-        const benefitSortMapping = {
-            "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
-            "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
-            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400-hilton-aspire-resort-credit" },
-            "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
-            "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
-            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit for Gold Card" },
-            "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
-            "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
-            "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
-            "digital entertainment": { order: 10, newName: "20 $Digital Entertainment" },
-            "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
-            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Monthly Membership Credit" },
-            "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
-            "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
-            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" },
-        };
-
-        // Helper: return sort order and display name for a benefit group.
-        function getGroupSortData(trackerGroup) {
-            const first = trackerGroup[0];
-            const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
-            const benefitNameKey = (first.benefitName || "").toLowerCase().trim();
-            let sortData = benefitSortMapping[benefitIdKey];
-            if (!sortData) {
-                sortData = benefitSortMapping[benefitNameKey];
-            }
-            if (!sortData) {
-                return { order: Infinity, displayName: first.benefitName || "" };
-            }
-            return { order: sortData.order, displayName: sortData.newName };
-        }
-
-        // Build an array of groups with sort data.
-        const groupArray = [];
-        for (const key in grouped) {
-            const group = grouped[key];
-            const sortData = getGroupSortData(group);
-            // Use sortData.displayName here to ensure it's defined.
-            groupArray.push({ key, trackers: group, order: sortData.order, displayName: sortData.displayName });
-        }
-
-        // Sort groups by the custom order, then alphabetically by displayName.
-        groupArray.sort((a, b) => {
-            if (a.order !== b.order) return a.order - b.order;
-            return a.displayName.localeCompare(b.displayName);
-        });
-
-        // Render each group.
-        groupArray.forEach(groupObj => {
-            const trackersGroup = groupObj.trackers;
-            const groupDiv = document.createElement('div');
-            groupDiv.style.marginBottom = '30px';
-
-            // Retrieve trackerDuration (either as top-level or nested).
-            let durationText =
-                trackersGroup[0].trackerDuration ||
-                (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
-                "";
-            const title = document.createElement('h3');
-            title.textContent = groupObj.displayName + (durationText ? ` (${durationText})` : "");
-            groupDiv.appendChild(title);
-
-            // Render each tracker in the group.
-            trackersGroup.forEach(trackerObj => {
-                const t = trackerObj.tracker || trackerObj;
-                const barContainer = document.createElement('div');
-                barContainer.style.marginBottom = '10px';
-
-                // Determine amount label based on targetUnit.
-                let amountLabel = "";
-                if (t.targetUnit === "MONETARY") {
-                    amountLabel = `Spent: ${t.targetCurrencySymbol}${parseFloat(t.spentAmount).toFixed(2)} / ${t.targetCurrencySymbol}${parseFloat(t.targetAmount).toFixed(2)}`;
-                } else if (t.targetUnit === "PASSES") {
-                    amountLabel = `Used: ${parseInt(t.spentAmount)} / ${parseInt(t.targetAmount)} passes`;
-                } else {
-                    amountLabel = `Spent: ${t.spentAmount} / ${t.targetAmount}`;
-                }
-
-                // Info label: card ending, period dates, and amounts.
-                const infoLabel = document.createElement('div');
-                infoLabel.style.fontSize = '14px';
-                infoLabel.style.marginBottom = '4px';
-                infoLabel.textContent = `Card Ending: ${trackerObj.cardEnding} | ${formatDate(trackerObj.periodStartDate)} - ${formatDate(trackerObj.periodEndDate, true)} | ${amountLabel}`;
-                barContainer.appendChild(infoLabel);
-
-                // Create a refined progress bar.
-                const progressBar = document.createElement('div');
-                progressBar.style.width = '300px';
-                progressBar.style.height = '12px';
-                progressBar.style.backgroundColor = '#f0f0f0';
-                progressBar.style.border = '1px solid #ccc';
-                progressBar.style.borderRadius = '6px';
-                progressBar.style.overflow = 'hidden';
-                progressBar.style.marginTop = '4px';
-
-                let percent = 0;
-                const targetAmount = parseFloat(t.targetAmount);
-                const spentAmount = parseFloat(t.spentAmount);
-                if (targetAmount > 0) {
-                    percent = (spentAmount / targetAmount) * 100;
-                    percent = Math.min(100, percent);
-                }
-                const progressFill = document.createElement('div');
-                progressFill.style.height = '100%';
-                progressFill.style.width = percent + '%';
-                progressFill.style.borderRadius = '6px';
-                // Set fill color based on status.
-                if (trackerObj.status === "ACHIEVED") {
-                    progressFill.style.backgroundColor = "#90ee90"; // light green
-                } else if (trackerObj.status === "IN_PROGRESS") {
-                    progressFill.style.backgroundColor = "#add8e6"; // light blue
-                } else {
-                    progressFill.style.backgroundColor = "#cccccc"; // default gray
-                }
-                progressBar.appendChild(progressFill);
-                barContainer.appendChild(progressBar);
-                groupDiv.appendChild(barContainer);
-            });
-            containerDiv.appendChild(groupDiv);
-        });
-        return containerDiv;
-    }
-
-
-
-
     // =========================================================================
     // Section 8: Local Storage Handling
     // =========================================================================
@@ -1916,7 +2722,7 @@
         }
         try {
             keys.forEach(key => {
-                localStorage.setItem(key + "_" + tokenSuffix, JSON.stringify(allData[key]));
+                localStorage.setItem("AMaxOffer_" + key + "_" + tokenSuffix, JSON.stringify(allData[key]));
             });
             console.log("Data saved to localStorage with token: " + tokenSuffix + " for keys: " + keys.join(", "));
         } catch (e) {
@@ -1925,7 +2731,6 @@
     }
 
     function loadLocalStorage(tokenSuffix, keys) {
-
         const allKeys = ["accountData", "offerData", "lastUpdate", "priorityCards", "excludedCards", "benefitTrackers", "ScriptVersion"];
         if (!keys || keys.length === 0) {
             keys = allKeys;
@@ -1933,7 +2738,7 @@
         const loaded = {};
         let allExist = true;
         keys.forEach(key => {
-            const item = localStorage.getItem(key + "_" + tokenSuffix);
+            const item = localStorage.getItem("AMaxOffer_" + key + "_" + tokenSuffix);
             if (item === null) {
                 allExist = false;
             } else {
@@ -1972,6 +2777,7 @@
             return 0;
         }
     }
+
 
 
     // =========================================================================

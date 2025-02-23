@@ -1013,8 +1013,6 @@
     // Section 7: UI Rendering Functions
     // =========================================================================
 
-
-
     function renderMembersView() {
         const containerDiv = document.createElement('div');
         const filtersDiv = document.createElement('div');

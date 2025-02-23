@@ -1,4 +1,0 @@
- 
-// ==UserScript== 
-// @name         AMaxOffer 
-// @version      2.2 

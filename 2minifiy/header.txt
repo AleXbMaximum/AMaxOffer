@@ -1,0 +1,10 @@
+ 
+// ==UserScript== 
+// @name         AMaxOffer 
+// @version      2.2 
+// @description  AMaxOffer Offers and Account Management Tool for American Express Site 
+// @match        https://global.americanexpress.com/* 
+// @connect      uscardforum.com 
+// @grant        GM.xmlHttpRequest 
+// @grant        unsafeWindow 
+// ==/UserScript== 

@@ -1,4 +1,4 @@
-javascript-obfuscator ./2encode/AMaxOffer_released0.min.js -o ./2encode/AMaxOffer_released1.min.js ^
+javascript-obfuscator ./2minifiy/AMaxOffer_released0.min.js -o ./2minifiy/AMaxOffer_released1.min.js ^
   --target browser ^
   --seed 0^
   ^
@@ -10,7 +10,7 @@ javascript-obfuscator ./2encode/AMaxOffer_released0.min.js -o ./2encode/AMaxOffe
   --string-array true ^
   --string-array-rotate true ^
   --string-array-shuffle true ^
-  --string-array-threshold 0.3 ^
+  --string-array-threshold 0.7 ^
   --string-array-index-shift true ^
   --string-array-indexes-type hexadecimal-numeric-string ^
   ^
@@ -28,9 +28,9 @@ javascript-obfuscator ./2encode/AMaxOffer_released0.min.js -o ./2encode/AMaxOffe
   --transform-object-keys true ^
   --numbers-to-expressions true ^
   --control-flow-flattening true ^
-  --control-flow-flattening-threshold 0.3 ^
+  --control-flow-flattening-threshold 0.7 ^
   --dead-code-injection true ^
-  --dead-code-injection-threshold 0.3 ^
+  --dead-code-injection-threshold 0.7 ^
   --disable-console-output true ^
   --rename-globals true ^
 

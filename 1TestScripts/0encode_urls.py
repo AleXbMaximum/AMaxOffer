@@ -64,7 +64,8 @@ if __name__ == "__main__":
         "https://www.uscardforum.com/session/current.json",
         "https://www.uscardforum.com/u/",
         "https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay",
-        "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending"
+        "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending",
+        "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1"
     ]
 
     for url in urls:
