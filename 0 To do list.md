@@ -6,7 +6,6 @@
 * 并发请求进一步同步
 
 ## Tier 2
-* View card auto refresh after enroll
 
 ## Tier 3
 * Only add main cards offer
@@ -23,6 +22,8 @@
 * Offers sorted by Favorite 
 * View Card sort by Card index
 * 重写逻辑
+* View card auto refresh after enroll
+* 关掉 View card 的时候 rendercurrent view
 
 https://functions.americanexpress.com/ReadLoyaltyTransactions.v1
 https://functions.americanexpress.com/ReadLoyaltyTransactionSummaries.v1

@@ -4,9 +4,11 @@
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
+
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // @resource materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
+
 // ==/UserScript==
 
 // @license    CC BY-NC-ND 4.0
@@ -137,7 +139,7 @@
     container.style.maxHeight = '80vh';
     container.style.overflow = 'hidden';
     container.style.width = '90%'; // Overridden if minimized
-    container.style.maxWidth = '1080px';
+    container.style.maxWidth = '1344px';
 
     const content = document.createElement('div');
     content.id = 'card-utility-content';
@@ -1311,30 +1313,29 @@
         containerDiv.style.display = 'flex';
         containerDiv.style.flexDirection = 'column';
         containerDiv.style.gap = '16px';
-        containerDiv.style.margin = '10px';
+        containerDiv.style.padding = '16px';
+        containerDiv.style.maxWidth = '1400px';
+        containerDiv.style.margin = '0 auto';
+        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
 
-        // FILTERS CARD (without a separate header label)
+        // Add custom font
+        const fontLink = document.createElement('link');
+        fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap';
+        fontLink.rel = 'stylesheet';
+        document.head.appendChild(fontLink);
+
+        // ────────── FILTERS SECTION ──────────
         const filtersCard = document.createElement('div');
-        filtersCard.style.position = 'relative';
-        filtersCard.style.border = '1px solid #ccc';
-        filtersCard.style.borderRadius = '10px';
+        filtersCard.style.background = '#ffffff';
+        filtersCard.style.borderRadius = '12px';
         filtersCard.style.padding = '16px';
-        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
-        filtersCard.style.background = 'linear-gradient(to bottom, #fcfcfd, #f7f7fa)';
-        filtersCard.style.transition = 'box-shadow 0.3s ease';
-
-        filtersCard.addEventListener('mouseover', () => {
-            filtersCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-        });
-        filtersCard.addEventListener('mouseout', () => {
-            filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
-        });
-
-        const filtersDiv = document.createElement('div');
-        filtersDiv.style.display = 'flex';
-        filtersDiv.style.flexWrap = 'wrap';
-        filtersDiv.style.alignItems = 'flex-start';
-        filtersDiv.style.gap = '20px';
+        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        filtersCard.style.display = 'flex';
+        filtersCard.style.gap = '20px';
+        filtersCard.style.flexWrap = 'wrap';
+        // Constrain filters card to container width
+        filtersCard.style.width = '100%';
+        filtersCard.style.boxSizing = 'border-box';
 
         // Status Filter
         const statusFilterDiv = document.createElement('div');
@@ -1349,9 +1350,9 @@
 
         const statusFilterSelect = document.createElement('select');
         statusFilterSelect.id = 'status-filter';
-        statusFilterSelect.style.padding = '6px';
-        statusFilterSelect.style.borderRadius = '6px';
-        statusFilterSelect.style.border = '1px solid #ccc';
+        statusFilterSelect.style.padding = '8px';
+        statusFilterSelect.style.borderRadius = '8px';
+        statusFilterSelect.style.border = '1px solid #e0e0e0';
         statusFilterSelect.style.fontSize = '0.9rem';
         statusFilterSelect.style.cursor = 'pointer';
 
@@ -1376,7 +1377,7 @@
 
         statusFilterDiv.appendChild(statusFilterLabel);
         statusFilterDiv.appendChild(statusFilterSelect);
-        filtersDiv.appendChild(statusFilterDiv);
+        filtersCard.appendChild(statusFilterDiv);
 
         // Type Filter
         const typeFilterDiv = document.createElement('div');
@@ -1391,9 +1392,9 @@
 
         const typeFilterSelect = document.createElement('select');
         typeFilterSelect.id = 'type-filter';
-        typeFilterSelect.style.padding = '6px';
-        typeFilterSelect.style.borderRadius = '6px';
-        typeFilterSelect.style.border = '1px solid #ccc';
+        typeFilterSelect.style.padding = '8px';
+        typeFilterSelect.style.borderRadius = '8px';
+        typeFilterSelect.style.border = '1px solid #e0e0e0';
         typeFilterSelect.style.fontSize = '0.9rem';
         typeFilterSelect.style.cursor = 'pointer';
 
@@ -1418,7 +1419,7 @@
 
         typeFilterDiv.appendChild(typeFilterLabel);
         typeFilterDiv.appendChild(typeFilterSelect);
-        filtersDiv.appendChild(typeFilterDiv);
+        filtersCard.appendChild(typeFilterDiv);
 
         // Offer Search Filter
         const offerSearchDiv = document.createElement('div');
@@ -1434,9 +1435,9 @@
         const offerSearchInput = document.createElement('input');
         offerSearchInput.type = 'text';
         offerSearchInput.placeholder = 'Enter keyword';
-        offerSearchInput.style.padding = '6px';
-        offerSearchInput.style.borderRadius = '6px';
-        offerSearchInput.style.border = '1px solid #ccc';
+        offerSearchInput.style.padding = '8px';
+        offerSearchInput.style.borderRadius = '8px';
+        offerSearchInput.style.border = '1px solid #e0e0e0';
         offerSearchInput.style.fontSize = '0.9rem';
         offerSearchInput.style.width = '220px';
         offerSearchInput.value = offerSearchMembersKeyword;
@@ -1447,18 +1448,18 @@
 
         offerSearchDiv.appendChild(offerSearchLabel);
         offerSearchDiv.appendChild(offerSearchInput);
-        filtersDiv.appendChild(offerSearchDiv);
+        filtersCard.appendChild(offerSearchDiv);
 
-        // Append filters into the filters card and then add to the container
-        filtersCard.appendChild(filtersDiv);
+        // Append filters card into the main container
         containerDiv.appendChild(filtersCard);
 
-        // Append the members table below filters
+        // Append the members table (logic preserved)
         const membersTable = renderMembersTable();
         containerDiv.appendChild(membersTable);
 
         return containerDiv;
     }
+
 
     function renderMembersTable() {
         // Define headers with "Index" as the first column
@@ -1496,18 +1497,18 @@
             exclude: "60px"
         };
 
-        // Create table element
+        // Create table element with new style
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '12px';
+        table.style.fontSize = '14px';
         table.style.marginTop = '8px';
         table.style.borderRadius = '8px';
         table.style.overflow = 'hidden';
         table.style.backgroundColor = '#fff';
-        table.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        table.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
 
-        // Create table header
+        // Create table header with updated style
         const thead = document.createElement('thead');
         thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
         const headerRow = document.createElement('tr');
@@ -1522,17 +1523,15 @@
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
-            th.style.padding = '6px';
+            th.style.padding = '12px';
             th.style.textAlign = 'center';
-            th.style.borderBottom = '1px solid #ccc';
-            th.style.fontWeight = 'bold';
+            th.style.verticalAlign = 'middle';
+            th.style.fontWeight = '600';
             th.style.color = '#333';
-            th.style.cursor = 'pointer';
+            th.style.background = '#f8f9fa';
+            th.style.borderBottom = '2px solid #e0e0e0';
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
-                th.style.maxWidth = colWidths[headerItem.key];
-                th.style.whiteSpace = 'normal';
-                th.style.wordWrap = 'break-word';
             }
             if (sortableKeys.includes(headerItem.key)) {
                 th.setAttribute('data-sort-key', headerItem.key);
@@ -1569,19 +1568,17 @@
             });
         }
 
-        // Create table body
+        // Create table body with updated zebra stripes and hover effects
         const tbody = document.createElement('tbody');
-
         filteredAccounts.forEach((item, idx) => {
             const row = document.createElement('tr');
             row.style.transition = 'background-color 0.3s ease, box-shadow 0.3s ease';
 
-            // Set zebra stripes and hover effect
-            row.addEventListener('mouseover', () => {
-                row.style.backgroundColor = '#fefefe';
+            row.addEventListener('mouseenter', () => {
+                row.style.backgroundColor = '#fafafa';
                 row.style.boxShadow = 'inset 0 0 6px rgba(0,0,0,0.1)';
             });
-            row.addEventListener('mouseout', () => {
+            row.addEventListener('mouseleave', () => {
                 row.style.boxShadow = 'none';
                 row.style.backgroundColor = shouldHighlightAccount(item)
                     ? '#fff9c2'
@@ -1593,7 +1590,7 @@
 
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.style.padding = '6px';
+                td.style.padding = '12px';
                 td.style.textAlign = 'center';
                 td.style.borderBottom = '1px solid #eee';
                 if (colWidths[headerItem.key]) {
@@ -1702,63 +1699,82 @@
 
 
 
+
     function renderMember_CardOffers(accountNumber, offerType) {
-        // Create the overlay
+        // Create the overlay with backdrop blur
         const overlay = document.createElement('div');
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100vw';
-        overlay.style.height = '100vh';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '10000';
+        overlay.id = 'offer-details-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        `;
 
+        // Modern popup container
         const popup = document.createElement('div');
-        popup.style.position = 'fixed';
-        popup.style.top = '50%';
-        popup.style.left = '50%';
-        popup.style.transform = 'translate(-50%, -50%)';
-        popup.style.width = '400px';
-
-        popup.style.maxHeight = '80vh';
-        popup.style.overflowY = 'auto';
-
-        popup.style.backgroundColor = '#fff';
-        popup.style.border = '1px solid #ccc';
-        popup.style.borderRadius = '6px';
-        popup.style.padding = '16px';
-        popup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        popup.style.cssText = `
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            position: relative;
+        `;
 
         overlay.appendChild(popup);
 
-        // ───────── Top row: leftTitle, closeBtn ─────────
+        // ───────── Top row: Title and Close Button ─────────
         const topRow = document.createElement('div');
-        topRow.style.display = 'flex';
-        topRow.style.justifyContent = 'space-between';
-        topRow.style.alignItems = 'center';
-        topRow.style.marginBottom = '10px';
+        topRow.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        `;
 
-        const leftTitle = document.createElement('div');
+        const leftTitle = document.createElement('h3');
         leftTitle.textContent = `Offers ${offerType} for card ending ${accountNumber}`;
-        leftTitle.style.fontWeight = 'bold';
-        leftTitle.style.fontSize = '16px';
+        leftTitle.style.cssText = `
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(45deg, #2c3e50, #4CAF50);
+            -webkit-background-clip: text;
+            color: transparent;
+        `;
 
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'X';
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.border = 'none';
-        closeBtn.style.backgroundColor = 'transparent';
-        closeBtn.style.fontWeight = 'bold';
-        closeBtn.style.fontSize = '16px';
-
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        `;
         closeBtn.addEventListener('mouseover', () => {
-            closeBtn.style.color = 'red';
+            closeBtn.style.color = '#ff4444';
         });
         closeBtn.addEventListener('mouseout', () => {
-            closeBtn.style.color = 'inherit';
+            closeBtn.style.color = '#666';
         });
         closeBtn.addEventListener('click', () => {
-            document.body.removeChild(overlay);
+            overlay.remove();
         });
 
         topRow.appendChild(leftTitle);
@@ -1767,10 +1783,13 @@
 
         // ───────── Content Area ─────────
         const contentDiv = document.createElement('div');
-        contentDiv.style.fontSize = '14px';
-        contentDiv.style.lineHeight = '1.4';
+        contentDiv.style.cssText = `
+            font-size: 14px;
+            line-height: 1.4;
+        `;
         popup.appendChild(contentDiv);
 
+        // Determine relevant offers based on offerType
         let relevantOffers = [];
         if (offerType === 'eligible') {
             relevantOffers = offerData.filter(offer =>
@@ -1789,7 +1808,11 @@
         } else {
             relevantOffers.forEach(offer => {
                 const offerPara = document.createElement('p');
-                offerPara.style.margin = '6px 0';
+                offerPara.style.cssText = `
+                    margin: 6px 0;
+                    font-size: 14px;
+                    color: #333;
+                `;
                 offerPara.textContent = offer.name;
                 contentDiv.appendChild(offerPara);
             });
@@ -1798,41 +1821,32 @@
         document.body.appendChild(overlay);
     }
 
+
     function renderOfferMap(offerArray) {
-        // Main container
+        // Main container with new style
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
         containerDiv.style.flexDirection = 'column';
-        containerDiv.style.gap = '12px';
-        containerDiv.style.margin = '10px';
+        containerDiv.style.gap = '16px';
+        containerDiv.style.padding = '16px';
+        containerDiv.style.maxWidth = '1200px';
+        containerDiv.style.margin = '0 auto';
+        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
 
-        // ────────── FILTERS CARD ──────────
+        // ────────── FILTERS SECTION ──────────
         const filterCard = document.createElement('div');
-        filterCard.style.position = 'relative';
-        filterCard.style.border = '1px solid #ccc';
-        filterCard.style.borderRadius = '8px';
-        filterCard.style.padding = '10px';
-        filterCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        filterCard.style.background = 'linear-gradient(to bottom, #fcfcfc, #f0f0f3)';
-        filterCard.style.transition = 'box-shadow 0.3s ease';
+        filterCard.style.background = '#ffffff';
+        filterCard.style.borderRadius = '12px';
+        filterCard.style.padding = '16px';
+        filterCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        filterCard.style.display = 'flex';
+        filterCard.style.gap = '20px';
+        filterCard.style.flexWrap = 'wrap';
+        // Constrain the filter card to container width
+        filterCard.style.width = '100%';
+        filterCard.style.boxSizing = 'border-box';
 
-        // Optional subtle hover effect
-        filterCard.addEventListener('mouseover', () => {
-            filterCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-        });
-        filterCard.addEventListener('mouseout', () => {
-            filterCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        });
-
-        // Filters container row
-        const filterRow = document.createElement('div');
-        filterRow.style.display = 'flex';
-        filterRow.style.alignItems = 'center';
-        filterRow.style.gap = '20px';
-        filterRow.style.flexWrap = 'wrap';  // allow wrapping on small screens
-        filterRow.style.margin = '10px 0';
-
-        // Favorites Checkbox
+        // Favorites Toggle (logic unchanged)
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
         favCheckbox.checked = showFavoritesOnly;
@@ -1841,188 +1855,159 @@
             showFavoritesOnly = favCheckbox.checked;
             renderCurrentView();
         });
-
-        // Favorites Label
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
         favLabel.style.fontSize = '14px';
         favLabel.style.cursor = 'pointer';
         favLabel.style.marginLeft = '4px';
-
-        // Combine checkbox & label in a small container
         const favContainer = document.createElement('div');
         favContainer.style.display = 'flex';
         favContainer.style.alignItems = 'center';
         favContainer.appendChild(favCheckbox);
         favContainer.appendChild(favLabel);
 
-        // Merchant search
-        const searchInput = document.createElement('input');
-        searchInput.type = 'text';
-        searchInput.placeholder = 'Search Merchants...';
-        searchInput.style.fontSize = '14px';
-        searchInput.style.padding = '6px';
-        searchInput.style.borderRadius = '6px';
-        searchInput.style.border = '1px solid #ccc';
-        searchInput.style.width = '160px';
-        searchInput.value = offerSearchKeyword;
-        searchInput.addEventListener('input', debounce(() => {
-            offerSearchKeyword = searchInput.value.toLowerCase();
-            renderCurrentView();
-        }, 600));
+        // Search Inputs helper (logic unchanged)
+        function createSearchInput(placeholder, value, callback) {
+            const container = document.createElement('div');
+            container.style.position = 'relative';
+            container.style.flex = '1';
+            container.style.minWidth = '240px';
 
-        // Card Ending search
-        const cardSearchInput = document.createElement('input');
-        cardSearchInput.type = 'text';
-        cardSearchInput.placeholder = 'Search by Card Ending...';
-        cardSearchInput.style.fontSize = '14px';
-        cardSearchInput.style.padding = '6px';
-        cardSearchInput.style.borderRadius = '6px';
-        cardSearchInput.style.border = '1px solid #ccc';
-        cardSearchInput.style.width = '160px';
-        cardSearchInput.value = offerSearchCardEnding;
-        cardSearchInput.addEventListener('input', debounce(() => {
-            offerSearchCardEnding = cardSearchInput.value.trim();
-            renderCurrentView();
-        }, 600));
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = placeholder;
+            input.value = value;
+            input.style.width = '100%';
+            input.style.padding = '8px 32px 8px 12px';
+            input.style.borderRadius = '8px';
+            input.style.border = '1px solid #e0e0e0';
+            input.style.fontSize = '14px';
+            input.style.transition = 'all 0.3s ease';
 
-        // Append filters
-        filterRow.appendChild(favContainer);
-        filterRow.appendChild(searchInput);
-        filterRow.appendChild(cardSearchInput);
-        filterCard.appendChild(filterRow);
+            input.addEventListener('input', debounce(() => {
+                callback(input.value.trim());
+                renderCurrentView();
+            }, 500));
+
+            // Search icon
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            icon.setAttribute('viewBox', '0 0 24 24');
+            icon.setAttribute('width', '18');
+            icon.setAttribute('height', '18');
+            icon.style.position = 'absolute';
+            icon.style.right = '10px';
+            icon.style.top = '50%';
+            icon.style.transform = 'translateY(-50%)';
+            icon.style.opacity = '0.6';
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z');
+            path.setAttribute('fill', 'currentColor');
+            icon.appendChild(path);
+
+            container.appendChild(input);
+            container.appendChild(icon);
+            return container;
+        }
+
+        const merchantSearch = createSearchInput('Search merchants...', offerSearchKeyword,
+            val => offerSearchKeyword = val.toLowerCase());
+        const cardSearch = createSearchInput('Card ending...', offerSearchCardEnding,
+            val => offerSearchCardEnding = val);
+
+        // Append search inputs into filter card
+        filterCard.appendChild(favContainer);
+        filterCard.appendChild(merchantSearch);
+        filterCard.appendChild(cardSearch);
         containerDiv.appendChild(filterCard);
 
         // ────────── FILTER THE OFFERS ──────────
         const filteredOffers = offerArray.filter(o => {
-            // 1) If "Favorites Only" is on, ensure o.favorite === true
             if (showFavoritesOnly && !o.favorite) return false;
-
-            // 2) If offerSearchKeyword is nonempty, check in o.name
-            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) {
-                return false;
-            }
-
-            // 3) If user typed a card ending, ensure that card is in either eligibleCards or enrolledCards
+            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
             if (offerSearchCardEnding) {
                 const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(offerSearchCardEnding);
                 const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(offerSearchCardEnding);
                 if (!eligible && !enrolled) return false;
             }
-
             return true;
         });
 
         // ────────── TABLE SETUP ──────────
-        const headers = [
-            { label: "Fav", key: "favorite" },
-            { label: "Logo", key: "logo" },
-            { label: "Offer", key: "name" },
-            { label: "Type", key: "achievement_type" },
-            { label: "Cat", key: "category" },
-            { label: "Exp", key: "expiry_date" },
-            { label: "Usg", key: "redemption_types" },
-            { label: "Description", key: "short_description" },
-            { label: "Thres", key: "threshold" },
-            { label: "Rwd", key: "reward" },
-            { label: "Pct", key: "percentage" },
-            { label: "Elig", key: "eligibleCards" },
-            { label: "Enrl", key: "enrolledCards" }
-        ];
+        const tableContainer = document.createElement('div');
+        tableContainer.style.overflowX = 'auto';
+        tableContainer.style.borderRadius = '12px';
+        tableContainer.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
 
-        const colWidths = {
-            favorite: "35px",
-            logo: "70px",
-            name: "220px",
-            achievement_type: "60px",
-            category: "75px",
-            expiry_date: "80px",
-            redemption_types: "45px",
-            short_description: "330px",
-            threshold: "80px",
-            reward: "70px",
-            percentage: "60px",
-            eligibleCards: "40px",
-            enrolledCards: "40px"
-        };
-
-        // Create table
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '12px';
-        table.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        table.style.border = '1px solid #ccc';
-        table.style.borderRadius = '6px';
-        table.style.overflow = 'hidden';
-        table.style.marginTop = '8px';
+        table.style.fontSize = '14px';
+        table.style.tableLayout = 'fixed';
 
-        // Thead
+        // Sticky header with centered text
         const thead = document.createElement('thead');
-        thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
-        const headerRow = document.createElement('tr');
+        thead.style.position = 'sticky';
+        thead.style.top = '0';
+        thead.style.background = '#ffffff';
+        thead.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
 
-        // Sorting is optional. If you have a function sortOfferData, you can preserve it:
+        // Use original headers array
+        const headers = [
+            { label: "❤️", key: "favorite", width: "35px" },
+            { label: "Logo", key: "logo", width: "70px" },
+            { label: "Offer", key: "name", width: "220px" },
+            { label: "Type", key: "achievement_type", width: "60px" },
+            { label: "Cat", key: "category", width: "75px" },
+            { label: "Exp", key: "expiry_date", width: "80px" },
+            { label: "Usg", key: "redemption_types", width: "45px" },
+            { label: "Desc", key: "short_description", width: "260px" },
+            { label: "Thres", key: "threshold", width: "80px" },
+            { label: "Rwd", key: "reward", width: "70px" },
+            { label: "Pct", key: "percentage", width: "60px" },
+            { label: "Elig", key: "eligibleCards", width: "40px" },
+            { label: "Enrl", key: "enrolledCards", width: "45px" }
+        ];
+
+        const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
             const th = document.createElement('th');
-            th.style.padding = '6px';
+            th.textContent = headerItem.label;
+            th.style.padding = '12px';
             th.style.textAlign = 'center';
-            th.style.borderBottom = '1px solid #ccc';
-            th.style.fontWeight = 'bold';
-            th.style.color = '#333';
-            th.style.cursor = 'pointer';
-            if (colWidths[headerItem.key]) {
-                th.style.width = colWidths[headerItem.key];
-                th.style.maxWidth = colWidths[headerItem.key];
-                th.style.whiteSpace = 'normal';
-                th.style.wordWrap = 'break-word';
+            th.style.verticalAlign = 'middle';
+            th.style.fontWeight = '600';
+            th.style.color = '#424242';
+            th.style.background = '#f8f9fa';
+            th.style.borderBottom = '2px solid #e0e0e0';
+            if (headerItem.width) {
+                th.style.width = headerItem.width;
             }
-
-            // Label
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = headerItem.label;
-            labelSpan.style.cursor = 'pointer';
-            if (typeof sortOfferData === 'function') {
-                // Provide a sorting functionality if you wish
-                labelSpan.addEventListener('click', (event) => {
-                    sortOfferData(headerItem.key);
-                    event.stopPropagation();
-                });
-            }
-            th.appendChild(labelSpan);
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Tbody
+        // Table body (logic unchanged)
         const tbody = document.createElement('tbody');
         filteredOffers.forEach(item => {
             const row = document.createElement('tr');
-            row.style.borderBottom = '1px solid #eee';
+            row.style.borderBottom = '1px solid #f0f0f0';
             row.style.transition = 'background-color 0.3s ease';
-
-            // Hover effect
-            row.addEventListener('mouseover', () => {
+            row.addEventListener('mouseenter', () => {
                 row.style.backgroundColor = '#fafafa';
             });
-            row.addEventListener('mouseout', () => {
-                row.style.backgroundColor = '#fff';
+            row.addEventListener('mouseleave', () => {
+                row.style.backgroundColor = 'transparent';
             });
-
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.style.padding = '6px';
+                td.style.padding = '12px';
                 td.style.textAlign = 'center';
-                if (colWidths[headerItem.key]) {
-                    td.style.width = colWidths[headerItem.key];
-                    td.style.maxWidth = colWidths[headerItem.key];
-                    td.style.whiteSpace = 'normal';
-                    td.style.wordWrap = 'break-word';
+                if (headerItem.width) {
+                    td.style.width = headerItem.width;
                 }
-
                 let cellValue = item[headerItem.key];
-
                 if (headerItem.key === 'logo') {
                     if (cellValue && cellValue !== "N/A") {
                         const img = document.createElement('img');
@@ -2034,25 +2019,21 @@
                     } else {
                         td.textContent = 'N/A';
                     }
-                }
-                else if (headerItem.key === 'achievement_type') {
-                    // Convert STATEMENT_CREDIT -> "Cash", MEMBERSHIP_REWARDS -> "MR"
+                } else if (headerItem.key === 'achievement_type') {
                     if (cellValue === "STATEMENT_CREDIT") {
                         cellValue = "Cash";
                     } else if (cellValue === "MEMBERSHIP_REWARDS") {
                         cellValue = "MR";
                     }
                     td.textContent = cellValue;
-                }
-                else if (headerItem.key === 'category') {
+                } else if (headerItem.key === 'category') {
                     if (cellValue && cellValue !== "N/A") {
                         const str = cellValue.toString().toLowerCase();
                         td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
                     } else {
                         td.textContent = 'N/A';
                     }
-                }
-                else if (headerItem.key === 'redemption_types') {
+                } else if (headerItem.key === 'redemption_types') {
                     if (cellValue && cellValue !== "N/A") {
                         let parts = cellValue.toString().split(",");
                         let abbreviatedParts = parts.map(val => {
@@ -2065,29 +2046,22 @@
                     } else {
                         td.textContent = "N/A";
                     }
-                }
-                else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
-                    // Show array of card endings as a clickable count
+                } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
                     const cards = Array.isArray(cellValue) ? cellValue : [];
                     const count = cards.length;
-
                     const countSpan = document.createElement('span');
                     countSpan.textContent = count;
-                    countSpan.style.cursor = (count > 0) ? 'pointer' : 'default';
-                    countSpan.style.color = (count > 0) ? '#007bff' : '#999';
-                    countSpan.style.textDecoration = (count > 0) ? 'underline' : 'none';
-
+                    countSpan.style.cursor = count > 0 ? 'pointer' : 'default';
+                    countSpan.style.color = count > 0 ? '#007bff' : '#999';
+                    countSpan.style.textDecoration = count > 0 ? 'underline' : 'none';
                     countSpan.addEventListener('click', (e) => {
                         e.stopPropagation();
                         if (count > 0) {
-                            renderOffer2Card(
-                                item.offerId,
-                            );
+                            renderOffer2Card(item.offerId);
                         }
                     });
                     td.appendChild(countSpan);
-                }
-                else if (headerItem.key === 'expiry_date') {
+                } else if (headerItem.key === 'expiry_date') {
                     if (cellValue && cellValue !== 'N/A') {
                         const d = new Date(cellValue);
                         if (!isNaN(d)) {
@@ -2101,8 +2075,7 @@
                     } else {
                         td.textContent = 'N/A';
                     }
-                }
-                else if (headerItem.key === 'favorite') {
+                } else if (headerItem.key === 'favorite') {
                     const favCheckbox = document.createElement('input');
                     favCheckbox.type = 'checkbox';
                     favCheckbox.checked = item.favorite === true;
@@ -2112,292 +2085,277 @@
                         setLocalStorage(accountData[0].account_token, ["offerData"]);
                     });
                     td.appendChild(favCheckbox);
-                }
-                else {
+                } else {
                     td.textContent = cellValue;
                 }
-
                 row.appendChild(td);
             });
-
             tbody.appendChild(row);
         });
-
         table.appendChild(tbody);
-        containerDiv.appendChild(table);
-
+        tableContainer.appendChild(table);
+        containerDiv.appendChild(tableContainer);
         return containerDiv;
     }
 
+
     async function renderOffer2Card(offerId) {
-        // Remove any existing popup overlay, so we can re-create it fresh.
+        // Remove existing overlay
         const existingOverlay = document.getElementById('offer-details-overlay');
-        if (existingOverlay) {
-            document.body.removeChild(existingOverlay);
-        }
-
-        // Create a new overlay
-        const overlay = document.createElement('div');
-        overlay.id = 'offer-details-overlay';
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100vw';
-        overlay.style.height = '100vh';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '10000';
-        document.body.appendChild(overlay);
-
-        // Create the popup container, centered in the viewport
-        const popup = document.createElement('div');
-        popup.style.position = 'fixed';
-        popup.style.top = '50%';
-        popup.style.left = '50%';
-        popup.style.transform = 'translate(-50%, -50%)';
-        popup.style.width = '410px';
-        popup.style.maxWidth = '500px';
-        popup.style.maxHeight = '80vh';
-        popup.style.overflowY = 'auto';
-        popup.style.backgroundColor = '#fff';
-        popup.style.border = '1px solid #ccc';
-        popup.style.borderRadius = '6px';
-        popup.style.padding = '14px';
-        popup.style.boxShadow = '0 2px 5px rgba(0,0,0,0.4)';
-        overlay.appendChild(popup);
+        if (existingOverlay) existingOverlay.remove();
 
         // Retrieve the offer from offerData
         const foundOffer = offerData.find(o => o.offerId === offerId);
         const offerName = foundOffer ? foundOffer.name : 'Unknown Offer';
 
-        // Top row: Offer name (center) and close button (right)
-        const topRow = document.createElement('div');
-        topRow.style.display = 'flex';
-        topRow.style.justifyContent = 'space-between';
-        topRow.style.alignItems = 'center';
-        topRow.style.marginBottom = '10px';
+        // Create overlay with backdrop blur
+        const overlay = document.createElement('div');
+        overlay.id = 'offer-details-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        `;
 
+        // Modern popup container
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            position: relative;
+        `;
+
+        // Header section
         const header = document.createElement('div');
-        header.style.flex = '1';
-        header.style.textAlign = 'center';
-        header.style.fontWeight = 'bold';
-        header.style.fontSize = '16px';
-        header.textContent = offerName;
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        `;
 
+        // Title with gradient text
+        const title = document.createElement('h3');
+        title.textContent = foundOffer?.name || 'Unknown Offer';
+        title.style.cssText = `
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(45deg, #2c3e50, #4CAF50);
+            -webkit-background-clip: text;
+            color: transparent;
+        `;
+
+        // Modern close button
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'X';
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.border = 'none';
-        closeBtn.style.backgroundColor = 'transparent';
-        closeBtn.style.fontWeight = 'bold';
-        closeBtn.style.fontSize = '16px';
-        closeBtn.style.marginLeft = 'auto';
-        closeBtn.addEventListener('mouseover', () => {
-            closeBtn.style.color = 'red';
-        });
-        closeBtn.addEventListener('mouseout', () => {
-            closeBtn.style.color = 'inherit';
-        });
-        closeBtn.addEventListener('click', () => {
-            document.body.removeChild(overlay);
-        });
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        `;
+        closeBtn.addEventListener('mouseover', () => closeBtn.style.color = '#ff4444');
+        closeBtn.addEventListener('mouseout', () => closeBtn.style.color = '#666');
+        closeBtn.addEventListener('click', () => overlay.remove());
 
-        topRow.appendChild(header);
-        topRow.appendChild(closeBtn);
-        popup.appendChild(topRow);
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        popup.appendChild(header);
 
-        // If the offer is valid and has at least one eligible card, show "Enroll All" button
-        if (foundOffer && Array.isArray(foundOffer.eligibleCards) && foundOffer.eligibleCards.length > 0) {
+        // Enroll All Button
+        if (foundOffer?.eligibleCards?.length) {
             const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
-            enrollAllBtn.style.display = 'block';
-            enrollAllBtn.style.margin = '0 auto 12px auto';
-            enrollAllBtn.style.cursor = 'pointer';
-            enrollAllBtn.style.padding = '6px 12px';
-            enrollAllBtn.style.fontSize = '12px';
-            enrollAllBtn.style.border = '1px solid #ccc';
-            enrollAllBtn.style.borderRadius = '4px';
-            enrollAllBtn.style.backgroundColor = '#f5f5f5';
+            enrollAllBtn.textContent = 'Enroll All Cards';
+            enrollAllBtn.style.cssText = `
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                padding: 12px;
+                margin: 0 0 20px 0;
+                background: linear-gradient(45deg, rgb(84, 99, 86), rgb(27, 66, 29));
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            `;
+            // Add icon
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            icon.setAttribute('viewBox', '0 0 24 24');
+            icon.setAttribute('width', '18');
+            icon.setAttribute('height', '18');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
+            path.setAttribute('fill', 'currentColor');
+            icon.appendChild(path);
+            enrollAllBtn.prepend(icon);
 
-            enrollAllBtn.addEventListener('mouseover', () => {
-                enrollAllBtn.style.backgroundColor = '#e9e9e9';
-            });
-            enrollAllBtn.addEventListener('mouseout', () => {
-                enrollAllBtn.style.backgroundColor = '#f5f5f5';
-            });
-
-            // Batch enroll all eligible cards
+            enrollAllBtn.addEventListener('mouseover', () => enrollAllBtn.style.transform = 'scale(1.02)');
+            enrollAllBtn.addEventListener('mouseout', () => enrollAllBtn.style.transform = 'none');
             enrollAllBtn.addEventListener('click', async () => {
                 if (!foundOffer) return;
                 const sourceId = foundOffer.source_id;
                 console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
-
-                // Get the results of the batch enroll
                 const results = await batchEnrollOffer(sourceId);
-
-                // Color code the updated cards for 3 seconds
                 highlightBatchEnrollmentResults(results);
-
-                // Re-render the popup to reflect updated enrollments after 3 seconds
                 setTimeout(() => renderOffer2Card(offerId), 3000);
             });
             popup.appendChild(enrollAllBtn);
         }
 
-        // Container for the “Eligible” and “Enrolled” sections
-        const contentDiv = document.createElement('div');
-        contentDiv.style.display = 'flex';
-        contentDiv.style.flexDirection = 'column';
-        contentDiv.style.gap = '16px';
-        contentDiv.style.fontSize = '14px';
-        popup.appendChild(contentDiv);
-
-        // Helper to chunk & display card endings in row sets of up to 6
-        function displayCardEndings(sectionTitle, cardEndings) {
-            const container = document.createElement('div');
-
-            const titleDiv = document.createElement('div');
-            titleDiv.textContent = sectionTitle;
-            titleDiv.style.textAlign = 'center';
-            titleDiv.style.fontWeight = 'bold';
-            titleDiv.style.fontSize = '15px';
-            titleDiv.style.marginBottom = '6px';
-            container.appendChild(titleDiv);
-
-            // If no cards, show (None)
-            if (!cardEndings || cardEndings.length === 0) {
-                const noneDiv = document.createElement('div');
-                noneDiv.textContent = '(None)';
-                noneDiv.style.textAlign = 'center';
-                noneDiv.style.color = '#777';
-                container.appendChild(noneDiv);
-                return container;
-            }
-
-            // Sort the card endings by main-sub index
-            const sorted = cardEndings.slice().sort((a, b) => {
-                const accA = accountData.find(acc => acc.display_account_number === a);
-                const accB = accountData.find(acc => acc.display_account_number === b);
-                if (accA && accB) {
-                    const [aMain, aSub] = parseCardIndex(accA.cardIndex);
-                    const [bMain, bSub] = parseCardIndex(accB.cardIndex);
-                    if (aMain === bMain) {
-                        return aSub - bSub;
-                    }
-                    return aMain - bMain;
-                }
-                return 0;
-            });
-
-            // chunk in groups of 6
-            const chunkSize = 6;
-            for (let i = 0; i < sorted.length; i += chunkSize) {
-                const chunk = sorted.slice(i, i + chunkSize);
-
-                const rowDiv = document.createElement('div');
-                rowDiv.style.display = 'flex';
-                rowDiv.style.flexWrap = 'wrap';
-                rowDiv.style.marginBottom = '8px';
-
-                chunk.forEach(cardEnd => {
-                    const span = document.createElement('span');
-                    span.id = `offerCard_${offerId}_${cardEnd}`;
-                    span.textContent = cardEnd;
-                    span.style.marginRight = '12px';
-                    span.style.marginBottom = '4px';
-                    span.style.padding = '4px 6px';
-                    span.style.backgroundColor = '#f2f2f2';
-                    span.style.borderRadius = '4px';
-
-                    // If this card is in eligible, allow single-card enroll
-                    if (foundOffer && foundOffer.eligibleCards && foundOffer.eligibleCards.includes(cardEnd)) {
-                        span.style.cursor = 'pointer';
-                        span.addEventListener('click', async () => {
-                            const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                            if (!matchingAcc) {
-                                console.log(`No matching account token for card ending ${cardEnd}`);
-                                return;
-                            }
-
-                            // Single enrollment
-                            const singleResult = await enrollOffer(matchingAcc.account_token, offerId);
-                            if (singleResult.result) {
-                                console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
-                                // Temporarily highlight green
-                                highlightCard(span, true);
-
-                                // Move the card from eligible to enrolled
-                                const idx = foundOffer.eligibleCards.indexOf(cardEnd);
-                                if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
-                                if (!foundOffer.enrolledCards.includes(cardEnd)) {
-                                    foundOffer.enrolledCards.push(cardEnd);
-                                }
-                            } else {
-                                console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
-                                // Temporarily highlight red
-                                highlightCard(span, false);
-                            }
-
-                            // After 3 seconds, re-render the entire popup
-                            setTimeout(() => renderOffer2Card(offerId), 3000);
-                        });
-                    } else {
-                        span.style.cursor = 'default';
-                    }
-                    rowDiv.appendChild(span);
-                });
-                container.appendChild(rowDiv);
-            }
-            return container;
-        }
-
-        // If we didn't find the offer, show an error
-        if (!foundOffer) {
-            const notFoundDiv = document.createElement('div');
-            notFoundDiv.style.textAlign = 'center';
-            notFoundDiv.style.color = 'red';
-            notFoundDiv.textContent = 'Offer not found';
-            contentDiv.appendChild(notFoundDiv);
-            return;
-        }
-
-        // Eligible cards
-        const eligibleSection = displayCardEndings('Eligible Cards', foundOffer.eligibleCards);
-        contentDiv.appendChild(eligibleSection);
-
-        // Enrolled cards
-        const enrolledSection = displayCardEndings('Enrolled Cards', foundOffer.enrolledCards);
-        contentDiv.appendChild(enrolledSection);
-
-        // Temporarily highlight a single card span as green/red for 3 seconds
-        function highlightCard(spanElem, success) {
-            spanElem.style.backgroundColor = success ? '#c0ffc0' : '#ffc0c0';
+        // Helper: highlightCard for single enrollment
+        function highlightCard(cardElem, success) {
+            cardElem.style.backgroundColor = success ? '#c0ffc0' : '#ffc0c0';
             setTimeout(() => {
-                spanElem.style.backgroundColor = '#f2f2f2';
+                cardElem.style.backgroundColor = success ? '#e8f5e9' : '#e3f2fd';
             }, 3000);
         }
 
-        // in green/red for 3 seconds
-        function highlightBatchEnrollmentResults(results) {
-            // results is an array of { offerId, accountToken, result: true/false }
+        // Card Sections
+        const createSection = (titleText, cards, isEnrolled) => {
+            const section = document.createElement('div');
+            section.style.marginBottom = '24px';
 
+            const sectionTitle = document.createElement('h4');
+            sectionTitle.textContent = titleText;
+            sectionTitle.style.cssText = `
+                margin: 0 0 12px 0;
+                color: ${isEnrolled ? '#4CAF50' : '#2196F3'};
+                font-size: 0.95rem;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+            // Section icon
+            const sectionIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            sectionIcon.setAttribute('viewBox', '0 0 24 24');
+            sectionIcon.setAttribute('width', '16');
+            sectionIcon.setAttribute('height', '16');
+            const sectionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            sectionPath.setAttribute('d', isEnrolled ? 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' : 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
+            sectionPath.setAttribute('fill', 'currentColor');
+            sectionIcon.appendChild(sectionPath);
+            sectionTitle.prepend(sectionIcon);
+
+            const grid = document.createElement('div');
+            grid.style.cssText = `
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                gap: 8px;
+            `;
+
+            cards.forEach(cardEnd => {
+                const card = document.createElement('div');
+                card.textContent = cardEnd;
+                // Add an id attribute so that highlightBatchEnrollmentResults and highlightCard can find this element
+                card.id = `offerCard_${offerId}_${cardEnd}`;
+                card.style.cssText = `
+                    padding: 8px;
+                    background: ${isEnrolled ? '#e8f5e9' : '#e3f2fd'};
+                    border-radius: 6px;
+                    text-align: center;
+                    font-size: 0.85rem;
+                    transition: all 0.2s ease;
+                    ${!isEnrolled ? 'cursor: pointer;' : ''}
+                `;
+                if (!isEnrolled) {
+                    card.addEventListener('mouseover', () => card.style.transform = 'translateY(-2px)');
+                    card.addEventListener('mouseout', () => card.style.transform = 'none');
+                    card.style.cursor = 'pointer';
+                    card.addEventListener('click', async () => {
+                        const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
+                        if (!matchingAcc) {
+                            console.log(`No matching account token for card ending ${cardEnd}`);
+                            return;
+                        }
+                        // Single enrollment
+                        const singleResult = await enrollOffer(matchingAcc.account_token, offerId);
+                        if (singleResult.result) {
+                            console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
+                            // Temporarily highlight green
+                            highlightCard(card, true);
+                            // Move the card from eligible to enrolled
+                            const idx = foundOffer.eligibleCards.indexOf(cardEnd);
+                            if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
+                            if (!foundOffer.enrolledCards.includes(cardEnd)) {
+                                foundOffer.enrolledCards.push(cardEnd);
+                            }
+                        } else {
+                            console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
+                            // Temporarily highlight red
+                            highlightCard(card, false);
+                        }
+                        // After 3 seconds, re-render the entire popup
+                        setTimeout(() => renderOffer2Card(offerId), 3000);
+                    });
+                }
+                grid.appendChild(card);
+            });
+
+            section.appendChild(sectionTitle);
+            section.appendChild(grid);
+            return section;
+        };
+
+        // Add sections
+        if (foundOffer) {
+            popup.appendChild(createSection('Eligible Cards', foundOffer.eligibleCards, false));
+            popup.appendChild(createSection('Enrolled Cards', foundOffer.enrolledCards, true));
+        } else {
+            const error = document.createElement('div');
+            error.style.cssText = `
+                padding: 16px;
+                background: #ffebee;
+                border-radius: 8px;
+                color: #c62828;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+            error.textContent = 'Offer not found';
+            popup.appendChild(error);
+        }
+
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+
+        function highlightBatchEnrollmentResults(results) {
+            // For batch enrollments (unchanged)
             results.forEach(r => {
                 if (r.offerId !== offerId) return;
-
                 const matchingAcc = accountData.find(a => a.account_token === r.accountToken);
                 if (!matchingAcc) return;
                 const cardEnd = matchingAcc.display_account_number;
-
-                const spanId = `offerCard_${offerId}_${cardEnd}`;
-                const spanElem = document.getElementById(spanId);
+                const spanElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
                 if (spanElem) {
                     spanElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
                     setTimeout(() => {
-                        spanElem.style.backgroundColor = '#f2f2f2';
+                        spanElem.style.backgroundColor = r.result ? '#e8f5e9' : '#e3f2fd';
                     }, 3000);
                 }
-
                 if (r.result) {
-                    // success => move the card from eligible to enrolled
                     const idx = foundOffer.eligibleCards.indexOf(cardEnd);
                     if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
                     if (!foundOffer.enrolledCards.includes(cardEnd)) {
@@ -2776,8 +2734,6 @@
 
         return containerDiv;
     }
-
-
 
     async function renderCurrentView() {
         if (currentView === 'members') {
