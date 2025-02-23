@@ -1,0 +1,28 @@
+{
+  "name": "AmexOfferMax",
+  "version": "1.0.0",
+  "description": "Your description here",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://your.repo.url.git"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DosMiao/AmexOfferMax/issues"
+  },
+  "homepage": "https://github.com/DosMiao/AmexOfferMax#readme",
+  "devDependencies": {
+    "@babel/core": "^7.26.9",
+    "@babel/preset-env": "^7.26.9",
+    "babel-loader": "^9.2.1",
+    "webpack": "^5.98.0",
+    "webpack-cli": "^6.0.1"
+  }
+}

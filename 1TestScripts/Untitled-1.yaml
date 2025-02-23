@@ -1,0 +1,26 @@
+https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1
+
+https://functions.americanexpress.com/ReadLoyaltyTransactions.v1
+
+{accountToken: "2MCIO532SPIH1OK", productType: "AEXP_CARD_ACCOUNT", offset: 0, limit: 30,…}
+accountToken
+: 
+"2MCIO532SPIH1OK"
+endDate
+: 
+"2025-02-21"
+limit
+: 
+30
+offset
+: 
+0
+productType
+: 
+"AEXP_CARD_ACCOUNT"
+startDate
+: 
+"2025-02-01"
+transactionsFor
+: 
+"LOYALTY_ACCOUNT"

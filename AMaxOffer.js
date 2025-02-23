@@ -13,6 +13,8 @@
 (function () {
     'use strict';
 
+    const ScriptVersion = "2.2";
+
     // =========================================================================
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
@@ -46,37 +48,37 @@
     // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
     const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];
     const MEMBER_API_indexMapping = { "0": "4", "1": "0", "2": "9", "3": "2", "4": "3", "5": "6", "6": "7", "7": "8", "8": "1", "9": "5", "10": "11", "11": "10" };
-    const MEMBER_API = reconstructObfuscated(MEMBER_API_segments, MEMBER_API_indexMapping);
+    const MEMBER_API = getUrl(reconstructObfuscated(MEMBER_API_segments, MEMBER_API_indexMapping));
 
     // ENROLL_API: https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
     const ENROLL_API_segments = ["JX)", "bHZibk11WVcxbGNtbGpZVzVsZUh$", "Z1ZEU5bVptVnlSVzV5YjJ4c2%", "E^", "Ce(", "VpYTnpMbU52YlM5RGN)", "VnVkQzUyTVE9PQ==*", "GNITTZMeTltZFc1amRH(", "tVmhkR1Z*", "piM1&", "YUhSM$", "WVhKa1FXTm#"];
     const ENROLL_API_indexMapping = { "0": "10", "1": "7", "2": "1", "3": "4", "4": "5", "5": "8", "6": "3", "7": "11", "8": "9", "9": "2", "10": "0", "11": "6" };
-    const ENROLL_API = reconstructObfuscated(ENROLL_API_segments, ENROLL_API_indexMapping);
+    const ENROLL_API = getUrl(reconstructObfuscated(ENROLL_API_segments, ENROLL_API_indexMapping));
 
     // OFFERS_API: https://functions.americanexpress.com/ReadCardAccountOffersList.v1
     const OFFERS_API_segments = ["HbHZibk11WVcxbGNt_", "YUhSMGNITT*", "yOTFi@", "pXRmtRMkZ5_", "TltZFc1amR!", "Wm1abG%", "GpZVzVsZUhCeVpYTnpMbU52YlM5U1%", "NuTk1hWE4wTG5ZeA==%", "WkVGalk)", "blJQ&", "ZMe$", "b+"];
     const OFFERS_API_indexMapping = { "0": "1", "1": "10", "2": "4", "3": "0", "4": "11", "5": "6", "6": "3", "7": "8", "8": "2", "9": "9", "10": "5", "11": "7" };
-    const OFFERS_API = reconstructObfuscated(OFFERS_API_segments, OFFERS_API_indexMapping);
+    const OFFERS_API = getUrl(reconstructObfuscated(OFFERS_API_segments, OFFERS_API_indexMapping));
 
     // USCF1_API: https://www.uscardforum.com/session/current.json
     const USCF1_segments = ["kQzVx%", "SMG+", "YUh%", "2WT$", "5eWRXMHVZMjl0#", "I5dQ==&", "Yz&", "TDNObGMzTnBiMjR%", "WeWNtVnV_", "kzZDNjdWRYTmpZWEprWm0%", "NITTZMeT*", "N^"];
     const USCF1_indexMapping = { "0": "2", "1": "1", "2": "10", "3": "9", "4": "4", "5": "7", "6": "3", "7": "11", "8": "8", "9": "0", "10": "6", "11": "5" };
-    const USCF1_API = reconstructObfuscated(USCF1_segments, USCF1_indexMapping);
+    const USCF1_API = getUrl(reconstructObfuscated(USCF1_segments, USCF1_indexMapping));
 
     // USCF2_API: https://www.uscardforum.com/u/
     const USCF2_segments = ["WRXMHVZMjl0T(", "TZM&", "rWm05^", "IT&", "YUhSMGN@", "NjdWRYT!", "DNV%", "mpZWE)", "e_", "eTkzZD!", "p#", "dg==$"];
     const USCF2_indexMapping = { "0": "4", "1": "3", "2": "1", "3": "9", "4": "5", "5": "7", "6": "10", "7": "2", "8": "8", "9": "0", "10": "6", "11": "11" };
-    const USCF2_API = reconstructObfuscated(USCF2_segments, USCF2_indexMapping);
+    const USCF2_API = getUrl(reconstructObfuscated(USCF2_segments, USCF2_indexMapping));
 
     // FINANCIAL_BALANCES_API: https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay
     const FINANCIAL_BALANCES_segments = ["E0vWlhoMFpXNWtaV1JmWkdWMFlXbHNjejFrWldabGNuSmxa_", "hMMlpwYm)", "Hd3NjR0Y1WDI5MlpYSmZkR2x0WlN4bFlYSnN^", "bkwzWX%", "iSE12WW1Gc1lXNWpaW!", "YUhSMGN#", "uYkc5aVlXd3VZVzFsY21sallXNWxlSEJ!", "lVjl3WVhrPQ==$", "ITTZMeTl!", "5WlhOekxtTnZiUzloY0drdmMyVnlkbWxqYVc1%", "Q3h1YjI1ZlpHVm1aWEp5WldRc2NHRjVYMmx1WDJaMWJ_", "1GdVkybGh$"];
     const FINANCIAL_BALANCES_indexMapping = { "0": "5", "1": "8", "2": "6", "3": "9", "4": "3", "5": "1", "6": "11", "7": "4", "8": "0", "9": "10", "10": "2", "11": "7" };
-    const FINANCIAL_BALANCES_API = reconstructObfuscated(FINANCIAL_BALANCES_segments, FINANCIAL_BALANCES_indexMapping);
+    const FINANCIAL_BALANCES_API = getUrl(reconstructObfuscated(FINANCIAL_BALANCES_segments, FINANCIAL_BALANCES_indexMapping));
 
     // FINANCIAL_TRANSACTION_API: https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending
     const FINANCIAL_TRANSACTION_segments = ["VzFs)", "wYm1GdVkybGh*", "YUhSM@", "iS+", "hMMlp(", "1bkwzWX(", "lSEJ5WlhOekxtTnZiUzl%", "E12ZEhKaGJuTm)", "hZM1JwYjI1ZmMzVnRiV0Z5ZVQ5emRHRjBkWE05Y0dWdVpHbHVadz09(", "Y21sallXNWx#", "GNITTZMeTluYkc5aVlXd3VZ_", "oY0drdmMyVnlkbWxqYVc@"];
     const FINANCIAL_TRANSACTION_indexMapping = { "0": "2", "1": "10", "2": "0", "3": "9", "4": "6", "5": "11", "6": "5", "7": "4", "8": "1", "9": "3", "10": "7", "11": "8" };
-    const FINANCIAL_TRANSACTION_API = reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping);
+    const FINANCIAL_TRANSACTION_API = getUrl(reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping));
 
     // =========================================================================
     // Section 2: Global State Variables
@@ -107,7 +109,8 @@
     const globalViewState = {
         summary: { scrollTop: 0 },
         members: { scrollTop: 0 },
-        offers: { scrollTop: 0 }
+        offers: { scrollTop: 0 },
+        benefits: { scrollTop: 0 }
     };
 
     // =========================================================================
@@ -226,8 +229,11 @@
         };
     }
 
-    function formatDate(dateStr) {
-        const d = new Date(dateStr);
+    function formatDate(dateStr, roundUp = false) {
+        let d = new Date(dateStr);
+        if (roundUp && !isNaN(d)) {
+            d.setDate(d.getDate() + 1);
+        }
         if (isNaN(d)) return 'N/A';
         let mm = String(d.getMonth() + 1).padStart(2, '0');
         let dd = String(d.getDate()).padStart(2, '0');
@@ -366,7 +372,7 @@
 
     async function fetchAccount() {
         try {
-            const res = await fetch(getUrl(MEMBER_API), {
+            const res = await fetch(MEMBER_API, {
                 method: 'GET',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
@@ -442,7 +448,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(getUrl(OFFERS_API), {
+            const res = await fetch(OFFERS_API, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -468,8 +474,8 @@
         }
         try {
             // Decode the obfuscated URLs
-            const balancesUrl = getUrl(FINANCIAL_BALANCES_API);
-            const transactionUrl = getUrl(FINANCIAL_TRANSACTION_API);
+            const balancesUrl = FINANCIAL_BALANCES_API;
+            const transactionUrl = FINANCIAL_TRANSACTION_API;
 
             // Run both fetch calls concurrently.
             const [balancesResponse, transactionResponse] = await Promise.all([
@@ -601,7 +607,7 @@
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
-                url: getUrl(USCF1_API),
+                url: USCF1_API,
                 onload: function (response) {
                     if (response.status !== 200) {
                         console.log("Session request failed");
@@ -616,7 +622,7 @@
                         }
                         GM.xmlHttpRequest({
                             method: "GET",
-                            url: getUrl(USCF2_API) + encodeURIComponent(username) + ".json",
+                            url: USCF2_API + encodeURIComponent(username) + ".json",
                             onload: function (resp) {
                                 if (resp.status !== 200) {
                                     console.log(`User JSON fetch failed for ${username}`);
@@ -768,7 +774,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(getUrl(ENROLL_API), {
+            const res = await fetch(ENROLL_API, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -1057,12 +1063,16 @@
             if (fetchStatus) {
                 const newOfferData = await refreshOffers();
                 await fetchFinancialDataForBasicCards();
+                const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
-                    lastUpdate = new Date().toLocaleString();
-                    await renderCurrentView();
-                    setLocalStorage(accountData[0].account_token);
                 }
+                if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
+                    benefitTrackers = newBenefitTrackers;
+                }
+                lastUpdate = new Date().toLocaleString();
+                await renderCurrentView();
+                setLocalStorage(accountData[0].account_token, ["accountData", "offerData", "lastUpdate", "benefitTrackers"]);
             }
         });
 
@@ -1338,7 +1348,6 @@
                 else if (headerItem.key === 'priority') {
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
-                    // Check if the current card (using its display number) is in the priority list
                     chk.checked = priorityCards.includes(item.display_account_number);
                     chk.addEventListener('change', () => {
                         if (chk.checked) {
@@ -1348,7 +1357,7 @@
                         } else {
                             priorityCards = priorityCards.filter(num => num !== item.display_account_number);
                         }
-                        setLocalStorage(accountData[0].account_token);
+                        setLocalStorage(accountData[0].account_token, ['priorityCards']);
                     });
                     td.appendChild(chk);
                 } else if (headerItem.key === 'exclude') {
@@ -1363,7 +1372,7 @@
                         } else {
                             excludedCards = excludedCards.filter(num => num !== item.display_account_number);
                         }
-                        setLocalStorage(accountData[0].account_token);
+                        setLocalStorage(accountData[0].account_token, ['excludedCards']);
                     });
                     td.appendChild(chk);
                 } else {
@@ -1588,7 +1597,7 @@
                     favCheckbox.checked = item.favorite === true;
                     favCheckbox.addEventListener('change', () => {
                         item.favorite = favCheckbox.checked;
-                        setLocalStorage(accountData[0].account_token);
+                        setLocalStorage(accountData[0].account_token, ["offerData"]);
                     });
                     td.appendChild(favCheckbox);
                 } else {
@@ -1734,42 +1743,50 @@
         }
     }
 
-    const benefitSortMapping = {
-        "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
-        "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
-        "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400-hilton-aspire-resort-credit" },
-        "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
-        "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
-        "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit for Gold Card" },
-        "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
-        "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
-        "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
-        "digital entertainment": { order: 10, newName: "20 $Digital Entertainment" },
-        "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
-        "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Monthly Membership Credit" },
-        "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" }
-    };
+    // ==================== Updated Benefits Tracker View with Refined UI ====================
 
     async function renderBenefitsView() {
-        // If benefitTrackers is empty, fetch the data first.
-        if (benefitTrackers.length === 0) {
+
+        const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
+
+        if (!benefitTrackers || benefitTrackers.length === 0) {
             benefitTrackers = await fetchBenefitTrackersForBasicCards();
+            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
         }
+
         const containerDiv = document.createElement('div');
         containerDiv.style.padding = '10px';
         containerDiv.style.fontFamily = 'Arial, sans-serif';
 
-        // Group trackers by benefitId.
+
         const grouped = {};
         benefitTrackers.forEach(trackerObj => {
-            const key = trackerObj.benefitId; // Use benefitId as the grouping key.
+            const key = trackerObj.benefitId;
             if (!grouped[key]) {
                 grouped[key] = [];
             }
             grouped[key].push(trackerObj);
         });
 
-        // Helper: Given a group (array of trackers), return its sort order and display name.
+        const benefitSortMapping = {
+            "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
+            "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
+            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400-hilton-aspire-resort-credit" },
+            "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
+            "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
+            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit for Gold Card" },
+            "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
+            "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
+            "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
+            "digital entertainment": { order: 10, newName: "20 $Digital Entertainment" },
+            "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
+            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Monthly Membership Credit" },
+            "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
+            "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
+            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" },
+        };
+
+        // Helper: return sort order and display name for a benefit group.
         function getGroupSortData(trackerGroup) {
             const first = trackerGroup[0];
             const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
@@ -1779,7 +1796,6 @@
                 sortData = benefitSortMapping[benefitNameKey];
             }
             if (!sortData) {
-                // If not found in mapping, assign a default order at the end.
                 return { order: Infinity, displayName: first.benefitName || "" };
             }
             return { order: sortData.order, displayName: sortData.newName };
@@ -1790,10 +1806,11 @@
         for (const key in grouped) {
             const group = grouped[key];
             const sortData = getGroupSortData(group);
-            groupArray.push({ key, trackers: group, order: sortData.order, displayName: sortData.newName });
+            // Use sortData.displayName here to ensure it's defined.
+            groupArray.push({ key, trackers: group, order: sortData.order, displayName: sortData.displayName });
         }
 
-        // Sort groups by the custom order, then alphabetically by display name.
+        // Sort groups by the custom order, then alphabetically by displayName.
         groupArray.sort((a, b) => {
             if (a.order !== b.order) return a.order - b.order;
             return a.displayName.localeCompare(b.displayName);
@@ -1805,18 +1822,16 @@
             const groupDiv = document.createElement('div');
             groupDiv.style.marginBottom = '30px';
 
-            // Retrieve trackerDuration (from either the top-level property or nested in tracker).
+            // Retrieve trackerDuration (either as top-level or nested).
             let durationText =
                 trackersGroup[0].trackerDuration ||
                 (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
                 "";
-            // Create a header with the renamed benefit and append the tracker duration.
             const title = document.createElement('h3');
-            title.textContent =
-                groupObj.displayName + (durationText ? ` (${durationText})` : "");
+            title.textContent = groupObj.displayName + (durationText ? ` (${durationText})` : "");
             groupDiv.appendChild(title);
 
-            // Render each tracker bar within the group.
+            // Render each tracker in the group.
             trackersGroup.forEach(trackerObj => {
                 const t = trackerObj.tracker || trackerObj;
                 const barContainer = document.createElement('div');
@@ -1832,11 +1847,11 @@
                     amountLabel = `Spent: ${t.spentAmount} / ${t.targetAmount}`;
                 }
 
-                // Information label: card ending, period dates, and amounts.
+                // Info label: card ending, period dates, and amounts.
                 const infoLabel = document.createElement('div');
                 infoLabel.style.fontSize = '14px';
                 infoLabel.style.marginBottom = '4px';
-                infoLabel.textContent = `Card Ending: ${trackerObj.cardEnding} | ${formatDate(trackerObj.periodStartDate)} - ${formatDate(trackerObj.periodEndDate)} | ${amountLabel}`;
+                infoLabel.textContent = `Card Ending: ${trackerObj.cardEnding} | ${formatDate(trackerObj.periodStartDate)} - ${formatDate(trackerObj.periodEndDate, true)} | ${amountLabel}`;
                 barContainer.appendChild(infoLabel);
 
                 // Create a refined progress bar.
@@ -1849,7 +1864,6 @@
                 progressBar.style.overflow = 'hidden';
                 progressBar.style.marginTop = '4px';
 
-                // Calculate percentage filled.
                 let percent = 0;
                 const targetAmount = parseFloat(t.targetAmount);
                 const spentAmount = parseFloat(t.spentAmount);
@@ -1861,7 +1875,7 @@
                 progressFill.style.height = '100%';
                 progressFill.style.width = percent + '%';
                 progressFill.style.borderRadius = '6px';
-                // Set fill color based on trackerObj.status.
+                // Set fill color based on status.
                 if (trackerObj.status === "ACHIEVED") {
                     progressFill.style.backgroundColor = "#90ee90"; // light green
                 } else if (trackerObj.status === "IN_PROGRESS") {
@@ -1869,66 +1883,112 @@
                 } else {
                     progressFill.style.backgroundColor = "#cccccc"; // default gray
                 }
-
                 progressBar.appendChild(progressFill);
                 barContainer.appendChild(progressBar);
                 groupDiv.appendChild(barContainer);
             });
-
             containerDiv.appendChild(groupDiv);
         });
-
         return containerDiv;
     }
+
+
+
 
     // =========================================================================
     // Section 8: Local Storage Handling
     // =========================================================================
 
-    function setLocalStorage(tokenSuffix) {
+    function setLocalStorage(tokenSuffix, keys) {
+        // Define all keys and their corresponding global variables.
+        const allData = {
+            accountData: accountData,
+            offerData: offerData,
+            lastUpdate: lastUpdate,
+            priorityCards: priorityCards,
+            excludedCards: excludedCards,
+            benefitTrackers: benefitTrackers,
+            ScriptVersion: ScriptVersion
+        };
+        // If keys not provided or empty, default to all.
+        if (!keys || keys.length === 0) {
+            keys = Object.keys(allData);
+        }
         try {
-            localStorage.setItem("accountData_" + tokenSuffix, JSON.stringify(accountData));
-            localStorage.setItem("offerData_" + tokenSuffix, JSON.stringify(offerData));
-            localStorage.setItem("lastUpdate_" + tokenSuffix, lastUpdate);
-            localStorage.setItem("priorityCards_" + tokenSuffix, JSON.stringify(priorityCards));
-            localStorage.setItem("excludedCards_" + tokenSuffix, JSON.stringify(excludedCards));
-            console.log("Data saved to localStorage with token: " + tokenSuffix);
+            keys.forEach(key => {
+                localStorage.setItem(key + "_" + tokenSuffix, JSON.stringify(allData[key]));
+            });
+            console.log("Data saved to localStorage with token: " + tokenSuffix + " for keys: " + keys.join(", "));
         } catch (e) {
             console.error("Error saving data to localStorage:", e);
         }
     }
 
-    function loadLocalStorage(tokenSuffix) {
-        const savedAccountData = localStorage.getItem("accountData_" + tokenSuffix);
-        const savedOfferData = localStorage.getItem("offerData_" + tokenSuffix);
-        const savedLastUpdate = localStorage.getItem("lastUpdate_" + tokenSuffix);
-        const savedPriorityCards = localStorage.getItem("priorityCards_" + tokenSuffix);
-        const savedExcludedCards = localStorage.getItem("excludedCards_" + tokenSuffix);
-        if (savedAccountData && savedOfferData) {
-            try {
-                accountData = JSON.parse(savedAccountData);
-                offerData = JSON.parse(savedOfferData);
-                lastUpdate = savedLastUpdate || "";
-                priorityCards = savedPriorityCards ? JSON.parse(savedPriorityCards) : [];
-                excludedCards = savedExcludedCards ? JSON.parse(savedExcludedCards) : [];
-                console.log("Load from localStorage successful for token: " + tokenSuffix);
-                renderCurrentView();
-                if (lastUpdate) {
-                    const savedDate = new Date(lastUpdate);
-                    const now = new Date();
-                    const diff = now - savedDate;
-                    if (diff > 24 * 60 * 60 * 1000) {
-                        return 2;
-                    }
-                }
-                return 1;
-            } catch (e) {
-                console.error("Error parsing saved localStorage data:", e);
-                return 0;
-            }
+    function loadLocalStorage(tokenSuffix, keys) {
+        // Define the full set of keys.
+        const allKeys = ["accountData", "offerData", "lastUpdate", "priorityCards", "excludedCards", "benefitTrackers", "ScriptVersion"];
+        // If keys not provided or empty, default to all.
+        if (!keys || keys.length === 0) {
+            keys = allKeys;
         }
-        return 0;
+        // Attempt to retrieve each specified item.
+        const loaded = {};
+        let allExist = true;
+        keys.forEach(key => {
+            const item = localStorage.getItem(key + "_" + tokenSuffix);
+            if (item === null) {
+                allExist = false;
+            } else {
+                loaded[key] = item;
+            }
+        });
+        // For backward compatibility: if accountData and offerData are required and missing, return 0.
+        if (keys.includes("accountData") && keys.includes("offerData") && (!loaded.accountData || !loaded.offerData)) {
+            return 0;
+        }
+        try {
+            // Check the ScriptVersion first if it's one of the requested keys.
+            if (keys.includes("accountData") && loaded.accountData) {
+                accountData = JSON.parse(loaded.accountData);
+            }
+            if (keys.includes("offerData") && loaded.offerData) {
+                offerData = JSON.parse(loaded.offerData);
+            }
+            if (keys.includes("lastUpdate")) {
+                lastUpdate = loaded.lastUpdate || "";
+            }
+            if (keys.includes("priorityCards")) {
+                priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : [];
+            }
+            if (keys.includes("excludedCards")) {
+                excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : [];
+            }
+            if (keys.includes("benefitTrackers")) {
+                benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : [];
+            }
+            if (keys.includes("ScriptVersion")) {
+                if (!loaded.ScriptVersion || JSON.parse(loaded.ScriptVersion) !== ScriptVersion) {
+                    console.error("Script version mismatch or missing.");
+                    return 2;
+                }
+            }
+            console.log("Load from localStorage successful for token: " + tokenSuffix + " for keys: " + keys.join(", "));
+            renderCurrentView();
+            if (keys.includes("lastUpdate") && lastUpdate) {
+                const savedDate = new Date(lastUpdate);
+                const now = new Date();
+                const diff = now - savedDate;
+                if (diff > 24 * 60 * 60 * 1000) {
+                    return 2;
+                }
+            }
+            return 1;
+        } catch (e) {
+            console.error("Error parsing saved localStorage data:", e);
+            return 0;
+        }
     }
+
 
     // =========================================================================
     // Section 10: Event Listeners & UI Interaction
@@ -2017,29 +2077,36 @@
             console.error("Failed to fetch account data or no accounts found.");
             return;
         }
-        const localDataStatus = loadLocalStorage(accountData[0].account_token);
+        const tokenSuffix = accountData[0].account_token;
+        const localDataStatus = loadLocalStorage(tokenSuffix);
         createUI();
+
         if (localDataStatus === 0 || localDataStatus === 2) {
+            // Refresh offers and benefit trackers
             const newOfferData = await refreshOffers();
+            const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
+
             if (newOfferData && Array.isArray(newOfferData)) {
                 offerData = newOfferData;
-                lastUpdate = new Date().toLocaleString();
-                await renderCurrentView();
-                setLocalStorage(accountData[0].account_token);
-            } else {
-                console.error("refreshOffers failed. Not updating localStorage.");
-            }
+            } else { console.error("refreshOffers failed. Not updating offerData."); }
+
+            if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
+                benefitTrackers = newBenefitTrackers;
+            } else { console.error("Fetching benefit trackers failed. Not updating benefitTrackers."); }
+
+            lastUpdate = new Date().toLocaleString();
+            await renderCurrentView();
+            // Save refreshed keys only (accountData, offerData, lastUpdate, benefitTrackers, ScriptVersion, etc.)
+            setLocalStorage(tokenSuffix, ["accountData", "offerData", "lastUpdate", "benefitTrackers", "ScriptVersion"]);
         } else {
             console.log("Using data from LocalStorage. No forced fetch.");
         }
+
         await fetchFinancialDataForBasicCards();
         if (currentView === 'members') {
             renderCurrentView();
         }
     }
 
-    // =========================================================================
-    // Section 12: Start the Application
-    // =========================================================================
     init();
 })();
