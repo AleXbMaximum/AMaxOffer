@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      2.2
+// @version      3.0
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
+// @resource materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
 // ==/UserScript==
 
 // @license    CC BY-NC-ND 4.0
@@ -13,36 +14,11 @@
 (function () {
     'use strict';
 
-    const ScriptVersion = "2.2";
+    const ScriptVersion = "3.0";
 
     // =========================================================================
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
-
-    // Utility to reconstruct obfuscated URLs
-    function reconstructObfuscated(obfSegments, indexMap) {
-        let ordered = [];
-        Object.keys(indexMap)
-            .sort((a, b) => parseInt(a) - parseInt(b))
-            .forEach(key => {
-                let seg = obfSegments[Number(indexMap[key])];
-                seg = seg.slice(0, -1);
-                ordered.push(seg);
-            });
-        return ordered.join('');
-    }
-
-    // Utility to decode Base64 twice to retrieve original URL
-    function getUrl(encoded) {
-        try {
-            let firstDecoding = atob(encoded);
-            let originalUrl = atob(firstDecoding);
-            return originalUrl;
-        } catch (e) {
-            console.error("Error decoding URL:", e, "Encoded string:", encoded);
-            return "";
-        }
-    }
 
     // Obfuscated URL Constants
     // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
@@ -126,6 +102,27 @@
     // =========================================================================
     // Section 3: UI Elements Creation
     // =========================================================================
+
+    const btnBenefits = document.createElement('button');
+    btnBenefits.textContent = 'Benefits';
+    btnBenefits.style.cursor = 'pointer';
+    btnBenefits.style.fontSize = '20px';
+
+    const btnMembers = document.createElement('button');
+    btnMembers.textContent = 'Members';
+    btnMembers.style.cursor = 'pointer';
+    btnMembers.style.fontSize = '20px';
+
+    const btnOffers = document.createElement('button');
+    btnOffers.textContent = 'Offer Map';
+    btnOffers.style.cursor = 'pointer';
+    btnOffers.style.fontSize = '20px';
+
+    const btnSummary = document.createElement('button');
+    btnSummary.textContent = 'Summary';
+    btnSummary.style.cursor = 'pointer';
+    btnSummary.style.fontSize = '20px';
+
     const container = document.createElement('div');
     container.id = 'card-utility-overlay';
     container.style.position = 'fixed';
@@ -140,6 +137,14 @@
     container.style.maxHeight = '80vh';
     container.style.overflow = 'hidden';
     container.style.width = '90%'; // Overridden if minimized
+    container.style.maxWidth = '1080px';
+
+    const content = document.createElement('div');
+    content.id = 'card-utility-content';
+    content.style.padding = '10px';
+    content.style.overflowY = 'auto';
+    content.style.maxHeight = 'calc(80vh - 40px)';
+    content.innerHTML = 'Loading...';
 
     const header = document.createElement('div');
     header.id = 'card-utility-header';
@@ -154,74 +159,54 @@
     const title = document.createElement('span');
     title.textContent = 'AMaxOffer';
 
-    // View buttons container
-    const viewButtons = document.createElement('div');
-    viewButtons.style.display = 'flex';
-    viewButtons.style.gap = '40px';
-
-    // Individual view buttons
-    const btnSummary = document.createElement('button');
-    btnSummary.textContent = 'Summary';
-    btnSummary.style.cursor = 'pointer';
-    btnSummary.style.fontSize = '20px';
-
-    const btnMembers = document.createElement('button');
-    btnMembers.textContent = 'Members';
-    btnMembers.style.cursor = 'pointer';
-    btnMembers.style.fontSize = '20px';
-
-    const btnOffers = document.createElement('button');
-    btnOffers.textContent = 'Offer Map';
-    btnOffers.style.cursor = 'pointer';
-    btnOffers.style.fontSize = '20px';
-
-    viewButtons.appendChild(btnSummary);
-    viewButtons.appendChild(btnMembers);
-    viewButtons.appendChild(btnOffers);
-
-    // Toggle button for minimizing/expanding the overlay
     const toggleBtn = document.createElement('button');
     toggleBtn.textContent = 'Minimize';
     toggleBtn.style.cursor = 'pointer';
 
-    // Append header children
+    const viewButtons = document.createElement('div');
+    viewButtons.style.display = 'flex';
+    viewButtons.style.gap = '40px';
+
+    viewButtons.appendChild(btnSummary);
+    viewButtons.appendChild(btnMembers);
+    viewButtons.appendChild(btnOffers);
+    viewButtons.appendChild(btnBenefits);
+
     header.appendChild(title);
     header.appendChild(viewButtons);
     header.appendChild(toggleBtn);
 
-    // Main content area
-    const content = document.createElement('div');
-    content.id = 'card-utility-content';
-    content.style.padding = '10px';
-    content.style.overflowY = 'auto';
-    content.style.maxHeight = 'calc(80vh - 40px)';
-    content.innerHTML = 'Loading...';
-
-    // Append header and content to container
     container.appendChild(header);
     container.appendChild(content);
-
-    const btnBenefits = document.createElement('button');
-    btnBenefits.textContent = 'Benefits';
-    btnBenefits.style.cursor = 'pointer';
-    btnBenefits.style.fontSize = '20px';
-    viewButtons.appendChild(btnBenefits);
-
-    // Add event listener to switch to the Benefits view
-    btnBenefits.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'benefits';
-        // Update button styles to reflect active view
-        btnBenefits.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
 
     // =========================================================================
     // Section 4: General Helper Functions
     // =========================================================================
+
+    // Utility to reconstruct obfuscated URLs
+    function reconstructObfuscated(obfSegments, indexMap) {
+        let ordered = [];
+        Object.keys(indexMap)
+            .sort((a, b) => parseInt(a) - parseInt(b))
+            .forEach(key => {
+                let seg = obfSegments[Number(indexMap[key])];
+                seg = seg.slice(0, -1);
+                ordered.push(seg);
+            });
+        return ordered.join('');
+    }
+
+    // Utility to decode Base64 twice to retrieve original URL
+    function getUrl(encoded) {
+        try {
+            let firstDecoding = atob(encoded);
+            let originalUrl = atob(firstDecoding);
+            return originalUrl;
+        } catch (e) {
+            console.error("Error decoding URL:", e, "Encoded string:", encoded);
+            return "";
+        }
+    }
 
     // Save the current scroll position for the active view
     function saveCurrentScrollState() {
@@ -442,7 +427,6 @@
                 mainCounter++;
             });
             btnSummary.style.fontWeight = 'bold';
-            renderCurrentView();
             return true;
         } catch (error) {
             console.error('Error fetching account data:', error);
@@ -451,7 +435,7 @@
         }
     }
 
-    async function fetchOffers(accountToken) {
+    async function fetchOffers_ACC(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
             locale: "en-US",
@@ -481,17 +465,211 @@
         }
     }
 
+    async function fetchOffers() {
+        const offerInfoTable = {};
+        const activeAccounts = accountData.filter(acc =>
+            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+        );
+        const skipPatterns = [
+            "Your FICO&#174",
+            "The Hotel Collection",
+            "3X on Amex Travel",
+            "Flexible Business Credit",
+            "Apple Pay",
+            "Send Money to Friends",
+            "Considering a Big Purchase"
+        ];
+        await Promise.all(activeAccounts.map(async (acc) => {
+            const offers = await fetchOffers_ACC(acc.account_token);
+            offers.forEach(offer => {
+                const sourceId = offer.source_id;
+                if (!sourceId) return;
+                const offerName = (offer.name || "").toLowerCase();
+                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
+                    return;
+                }
+                if (!offerInfoTable[sourceId]) {
+                    const details = parseOfferDetails(offer.short_description || "");
+                    offerInfoTable[sourceId] = {
+                        source_id: sourceId,
+                        offerId: offer.id || "N/A",
+                        name: offer.name || "N/A",
+                        achievement_type: offer.achievement_type || "N/A",
+                        category: offer.category || "N/A",
+                        expiry_date: offer.expiry_date || "N/A",
+                        logo: offer.logo_url || "N/A",
+                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
+                        short_description: offer.short_description || "N/A",
+                        threshold: details.threshold,
+                        reward: details.reward,
+                        percentage: details.percentage,
+                        eligibleCards: [],
+                        enrolledCards: [],
+                        favorite: false
+                    };
+                }
+                if (offer.status === "ELIGIBLE") {
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    }
+                } else if (offer.status === "ENROLLED") {
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                    }
+                }
+            });
+        }));
+        mergeFavorites(offerInfoTable);
+        accountData.forEach(acc => {
+            acc.eligibleOffers = 0;
+            acc.enrolledOffers = 0;
+        });
+        Object.values(offerInfoTable).forEach(offer => {
+            if (Array.isArray(offer.eligibleCards)) {
+                offer.eligibleCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                });
+            }
+            if (Array.isArray(offer.enrolledCards)) {
+                offer.enrolledCards.forEach(card => {
+                    const acc = accountData.find(a => a.display_account_number === card);
+                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                });
+            }
+        });
+        return Object.values(offerInfoTable);
+    }
+
+    // Parse offer details from description text
+    function parseOfferDetails(description = "") {
+        const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
+        const toMoneyString = (num) => {
+            if (num == null || isNaN(num)) return null;
+            return `$${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+        };
+
+        let thresholdVal = null;
+        let rewardVal = null;
+        let percentageVal = null;
+        let threshold = null;
+        let reward = null;
+        let percentage = null;
+        let times = null;
+        let total = null;
+
+        {
+            const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
+            const spendMatch = description.match(spendRegex);
+            if (spendMatch) {
+                thresholdVal = parseDollar(spendMatch[1]);
+            }
+        }
+        {
+            const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
+            const percentMatch = description.match(percentRegex);
+            if (percentMatch) {
+                percentageVal = parseFloat(percentMatch[1]);
+            }
+        }
+        {
+            const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
+            const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
+            if (mrPointsPerDollarMatch) {
+                const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
+                if (!percentageVal) {
+                    percentageVal = mrPointsEachDollar;
+                }
+                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
+                const mrPointsCapMatch = description.match(mrPointsCapRegex);
+                if (mrPointsCapMatch) {
+                    const capVal = parseDollar(mrPointsCapMatch[1]);
+                    rewardVal = capVal * 0.01;
+                }
+            }
+        }
+        {
+            const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
+            const earnGetMatch = description.match(earnGetRegex);
+            if (earnGetMatch) {
+                rewardVal = parseDollar(earnGetMatch[1]);
+            }
+            const upToTotalRegex = /up to (?:a total of )?\$(\d[\d,\.]*)/i;
+            const upToTotalMatch = description.match(upToTotalRegex);
+            if (upToTotalMatch) {
+                rewardVal = parseDollar(upToTotalMatch[1]);
+            }
+        }
+        {
+            const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
+            const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
+            if (mrPointsRewardMatch) {
+                const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
+                rewardVal = points * 0.01;
+            }
+        }
+        {
+            const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
+            const upToTimesMatch = description.match(upToTimesRegex);
+            if (upToTimesMatch) {
+                times = upToTimesMatch[1];
+            }
+        }
+        {
+            const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
+            const totalOfMatch = description.match(totalOfRegex);
+            if (totalOfMatch) {
+                total = toMoneyString(parseDollar(totalOfMatch[1]));
+            }
+        }
+        const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
+        const haveReward = (rewardVal != null && !isNaN(rewardVal));
+        const havePercent = (percentageVal != null && !isNaN(percentageVal));
+
+        if (haveThreshold && haveReward && !havePercent && thresholdVal > 0) {
+            percentageVal = (rewardVal / thresholdVal) * 100;
+        } else if (haveThreshold && havePercent && !haveReward) {
+            rewardVal = thresholdVal * (percentageVal / 100);
+        } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
+            thresholdVal = rewardVal / (percentageVal / 100);
+        } else if (havePercent && !haveThreshold && !haveReward) {
+            thresholdVal = 10000;
+            rewardVal = thresholdVal * (percentageVal / 100);
+        }
+        if (thresholdVal != null) threshold = toMoneyString(thresholdVal);
+        if (rewardVal != null) reward = toMoneyString(rewardVal);
+        if (percentageVal != null) {
+            const rounded = Math.round(percentageVal * 10) / 10;
+            percentage = `${rounded}%`;
+        }
+        return { threshold, reward, percentage, times, total };
+    }
+
+    function mergeFavorites(newOfferMap) {
+        const oldFavorites = {};
+        if (offerData && Array.isArray(offerData)) {
+            offerData.forEach(o => {
+                if (o.source_id) {
+                    oldFavorites[o.source_id] = o.favorite === true;
+                }
+            });
+        }
+        for (const sid in newOfferMap) {
+            if (oldFavorites.hasOwnProperty(sid)) {
+                newOfferMap[sid].favorite = oldFavorites[sid];
+            }
+        }
+    }
+
     async function fetchBalance_Data(accountToken) {
         if (!accountToken) {
             console.error("Account token is required");
             return null;
         }
         try {
-            // Decode the obfuscated URLs
             const balancesUrl = FINANCIAL_BALANCES_API;
             const transactionUrl = FINANCIAL_TRANSACTION_API;
 
-            // Run both fetch calls concurrently.
             const [balancesResponse, transactionResponse] = await Promise.all([
                 fetch(balancesUrl, {
                     method: 'GET',
@@ -577,7 +755,7 @@
             data.forEach(item => {
                 if (Array.isArray(item.trackers)) {
                     item.trackers.forEach(trackerObj => {
-                        // Capture all possible properties here
+
                         const {
                             benefitId,
                             sorBenefitId,
@@ -707,114 +885,6 @@
         });
     }
 
-    // =========================================================================
-    // Section 6: Offer Parsing, Sorting, and Enrollment Functions
-    // =========================================================================
-
-    // Parse offer details from description text
-    function parseOfferDetails(description = "") {
-        const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
-        const toMoneyString = (num) => {
-            if (num == null || isNaN(num)) return null;
-            return `$${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-        };
-
-        let thresholdVal = null;
-        let rewardVal = null;
-        let percentageVal = null;
-        let threshold = null;
-        let reward = null;
-        let percentage = null;
-        let times = null;
-        let total = null;
-
-        {
-            const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
-            const spendMatch = description.match(spendRegex);
-            if (spendMatch) {
-                thresholdVal = parseDollar(spendMatch[1]);
-            }
-        }
-        {
-            const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
-            const percentMatch = description.match(percentRegex);
-            if (percentMatch) {
-                percentageVal = parseFloat(percentMatch[1]);
-            }
-        }
-        {
-            const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
-            const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
-            if (mrPointsPerDollarMatch) {
-                const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
-                if (!percentageVal) {
-                    percentageVal = mrPointsEachDollar;
-                }
-                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
-                const mrPointsCapMatch = description.match(mrPointsCapRegex);
-                if (mrPointsCapMatch) {
-                    const capVal = parseDollar(mrPointsCapMatch[1]);
-                    rewardVal = capVal * 0.01;
-                }
-            }
-        }
-        {
-            const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
-            const earnGetMatch = description.match(earnGetRegex);
-            if (earnGetMatch) {
-                rewardVal = parseDollar(earnGetMatch[1]);
-            }
-            const upToTotalRegex = /up to (?:a total of )?\$(\d[\d,\.]*)/i;
-            const upToTotalMatch = description.match(upToTotalRegex);
-            if (upToTotalMatch) {
-                rewardVal = parseDollar(upToTotalMatch[1]);
-            }
-        }
-        {
-            const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
-            const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
-            if (mrPointsRewardMatch) {
-                const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
-                rewardVal = points * 0.01;
-            }
-        }
-        {
-            const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
-            const upToTimesMatch = description.match(upToTimesRegex);
-            if (upToTimesMatch) {
-                times = upToTimesMatch[1];
-            }
-        }
-        {
-            const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
-            const totalOfMatch = description.match(totalOfRegex);
-            if (totalOfMatch) {
-                total = toMoneyString(parseDollar(totalOfMatch[1]));
-            }
-        }
-        const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
-        const haveReward = (rewardVal != null && !isNaN(rewardVal));
-        const havePercent = (percentageVal != null && !isNaN(percentageVal));
-
-        if (haveThreshold && haveReward && !havePercent && thresholdVal > 0) {
-            percentageVal = (rewardVal / thresholdVal) * 100;
-        } else if (haveThreshold && havePercent && !haveReward) {
-            rewardVal = thresholdVal * (percentageVal / 100);
-        } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
-            thresholdVal = rewardVal / (percentageVal / 100);
-        } else if (havePercent && !haveThreshold && !haveReward) {
-            thresholdVal = 10000;
-            rewardVal = thresholdVal * (percentageVal / 100);
-        }
-        if (thresholdVal != null) threshold = toMoneyString(thresholdVal);
-        if (rewardVal != null) reward = toMoneyString(rewardVal);
-        if (percentageVal != null) {
-            const rounded = Math.round(percentageVal * 10) / 10;
-            percentage = `${rounded}%`;
-        }
-        return { threshold, reward, percentage, times, total };
-    }
-
     async function enrollOffer(accountToken, offerIdentifier) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -849,46 +919,6 @@
         }
     }
 
-
-
-    function sortOfferData(key) {
-        if (offerSortState.key === key) {
-            offerSortState.direction *= -1;
-        } else {
-            offerSortState.key = key;
-            offerSortState.direction = (key === "favorite") ? -1 : 1;
-        }
-        offerData.sort((a, b) => {
-            if (key === "favorite") {
-                if (a.favorite === b.favorite) return 0;
-                return a.favorite ? -1 : 1;
-            }
-            const numericColumns = ["reward", "threshold", "percentage"];
-            const valA = a[key] || "";
-            const valB = b[key] || "";
-            if (numericColumns.includes(key)) {
-                const numA = parseNumericValue(valA);
-                const numB = parseNumericValue(valB);
-                if (isNaN(numA) && isNaN(numB)) {
-                    return offerSortState.direction * valA.localeCompare(valB);
-                } else if (isNaN(numA)) {
-                    return 1 * offerSortState.direction;
-                } else if (isNaN(numB)) {
-                    return -1 * offerSortState.direction;
-                }
-                return offerSortState.direction * (numA - numB);
-            } else if (key === "eligibleCards" || key === "enrolledCards") {
-                const lenA = Array.isArray(valA) ? valA.length : 0;
-                const lenB = Array.isArray(valB) ? valB.length : 0;
-                return offerSortState.direction * (lenA - lenB);
-            } else {
-                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
-            }
-        });
-        renderCurrentView();
-    }
-
-    // Modified runInBatches that returns an array of results from each task
     async function runInBatches(tasks, limit) {
         const results = [];
         let i = 0;
@@ -972,8 +1002,7 @@
         const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
 
         // Refresh the offer data and re-render the UI.
-        offerData = await refreshOffers();
-        await renderCurrentView();
+        offerData = await fetchOffers();
 
         if (totalEnrollAttempts > 0) {
             const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
@@ -986,103 +1015,48 @@
     }
 
 
-
-    async function refreshOffers() {
-        const offerInfoTable = {};
-        const activeAccounts = accountData.filter(acc =>
-            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
-        );
-        const skipPatterns = [
-            "Your FICO&#174",
-            "The Hotel Collection",
-            "3X on Amex Travel",
-            "Flexible Business Credit",
-            "Apple Pay",
-            "Send Money to Friends",
-            "Considering a Big Purchase"
-        ];
-        await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffers(acc.account_token);
-            offers.forEach(offer => {
-                const sourceId = offer.source_id;
-                if (!sourceId) return;
-                const offerName = (offer.name || "").toLowerCase();
-                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
-                    return;
-                }
-                if (!offerInfoTable[sourceId]) {
-                    const details = parseOfferDetails(offer.short_description || "");
-                    offerInfoTable[sourceId] = {
-                        source_id: sourceId,
-                        offerId: offer.id || "N/A",
-                        name: offer.name || "N/A",
-                        achievement_type: offer.achievement_type || "N/A",
-                        category: offer.category || "N/A",
-                        expiry_date: offer.expiry_date || "N/A",
-                        logo: offer.logo_url || "N/A",
-                        redemption_types: offer.redemption_types ? offer.redemption_types.join(', ') : "N/A",
-                        short_description: offer.short_description || "N/A",
-                        threshold: details.threshold,
-                        reward: details.reward,
-                        percentage: details.percentage,
-                        eligibleCards: [],
-                        enrolledCards: [],
-                        favorite: false
-                    };
-                }
-                if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
-                    }
-                }
-            });
-        }));
-        mergeFavorites(offerInfoTable);
-        accountData.forEach(acc => {
-            acc.eligibleOffers = 0;
-            acc.enrolledOffers = 0;
-        });
-        Object.values(offerInfoTable).forEach(offer => {
-            if (Array.isArray(offer.eligibleCards)) {
-                offer.eligibleCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
-                });
+    function sortOfferData(key) {
+        if (offerSortState.key === key) {
+            offerSortState.direction *= -1;
+        } else {
+            offerSortState.key = key;
+            offerSortState.direction = (key === "favorite") ? -1 : 1;
+        }
+        offerData.sort((a, b) => {
+            if (key === "favorite") {
+                if (a.favorite === b.favorite) return 0;
+                return a.favorite ? -1 : 1;
             }
-            if (Array.isArray(offer.enrolledCards)) {
-                offer.enrolledCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
-                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
-                });
+            const numericColumns = ["reward", "threshold", "percentage"];
+            const valA = a[key] || "";
+            const valB = b[key] || "";
+            if (numericColumns.includes(key)) {
+                const numA = parseNumericValue(valA);
+                const numB = parseNumericValue(valB);
+                if (isNaN(numA) && isNaN(numB)) {
+                    return offerSortState.direction * valA.localeCompare(valB);
+                } else if (isNaN(numA)) {
+                    return 1 * offerSortState.direction;
+                } else if (isNaN(numB)) {
+                    return -1 * offerSortState.direction;
+                }
+                return offerSortState.direction * (numA - numB);
+            } else if (key === "eligibleCards" || key === "enrolledCards") {
+                const lenA = Array.isArray(valA) ? valA.length : 0;
+                const lenB = Array.isArray(valB) ? valB.length : 0;
+                return offerSortState.direction * (lenA - lenB);
+            } else {
+                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
         });
-        return Object.values(offerInfoTable);
-    }
-
-    function mergeFavorites(newOfferMap) {
-        const oldFavorites = {};
-        if (offerData && Array.isArray(offerData)) {
-            offerData.forEach(o => {
-                if (o.source_id) {
-                    oldFavorites[o.source_id] = o.favorite === true;
-                }
-            });
-        }
-        for (const sid in newOfferMap) {
-            if (oldFavorites.hasOwnProperty(sid)) {
-                newOfferMap[sid].favorite = oldFavorites[sid];
-            }
-        }
+        renderCurrentView();
     }
 
     // =========================================================================
-    // Section 7: UI Rendering Functions
+    // Section 6: UI Rendering Functions
     // =========================================================================
-    function renderSummaryView() {
+
+    async function renderSummaryView() {
         const numAccounts = accountData.length;
         const updateTime = lastUpdate || "Never";
         let distinctFullyEnrolled = 0;
@@ -1090,119 +1064,198 @@
         let totalEnrolled = 0;
         let totalEligible = 0;
 
-        // Aggregate some stats about your offers
+        // Aggregate enrollment stats from offerData
         offerData.forEach(offer => {
             if (offer.category === "DEFAULT") return;
-            const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
-            const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
+            const eligibleCount = offer.eligibleCards?.length || 0;
+            const enrolledCount = offer.enrolledCards?.length || 0;
             totalEligible += eligibleCount;
             totalEnrolled += enrolledCount;
-            const totalCount = eligibleCount + enrolledCount;
-            if (totalCount > 0 && enrolledCount === totalCount) {
-                distinctFullyEnrolled++;
-            } else if (eligibleCount > 0) {
-                distinctNotFullyEnrolled++;
+            if ((eligibleCount + enrolledCount) > 0) {
+                enrolledCount === (eligibleCount + enrolledCount)
+                    ? distinctFullyEnrolled++
+                    : distinctNotFullyEnrolled++;
             }
         });
 
-        // Create a container for the summary
-        const summaryDiv = document.createElement('div');
-        summaryDiv.style.fontSize = '16px';
-        summaryDiv.style.lineHeight = '1.5';
-        summaryDiv.style.padding = '16px';
-        summaryDiv.style.textAlign = 'center';
-        summaryDiv.style.backgroundColor = '#f8fbff'; // slightly lighter than #f0f8ff
-        summaryDiv.style.border = '1px solid #ccc';
-        summaryDiv.style.borderRadius = '12px';
-        summaryDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        // Compute financial stats from BASIC accounts with financialData
+        let totalBalance = 0;
+        let totalPending = 0;
+        let totalRemaining = 0;
+        accountData.filter(acc => acc.relationship === "BASIC" && acc.financialData)
+            .forEach(acc => {
+                totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
+                totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
+                totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
+            });
 
-        // Add summary stats
-        // Using template literal HTML so it can remain simple
-        const statsHtml = `
-            <p style="margin: 8px 0;">
-              <strong style="color: #555;">Number of Accounts:</strong> ${numAccounts}
-              &nbsp;&nbsp;&nbsp;
-              <strong style="color: #555;">Last Update:</strong> ${updateTime}
-            </p>
-            <p style="margin: 8px 0;">
-              <strong style="color: #555;">Fully Enrolled Offers:</strong> ${distinctFullyEnrolled}
-              &nbsp;&nbsp;&nbsp;
-              <strong style="color: #555;">Total Offers Enrolled:</strong> ${totalEnrolled}
-            </p>
-            <p style="margin: 8px 0;">
-              <strong style="color: #555;">Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled}
-              &nbsp;&nbsp;&nbsp;
-              <strong style="color: #555;">Total Offers Eligible:</strong> ${totalEligible}
-            </p>
+        // Main container styling
+        const summaryDiv = document.createElement('div');
+        summaryDiv.style.cssText = `
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin: 10px;
+            font-family: Arial, sans-serif;
         `;
+
+        // Header section with title and last update badge
+        const header = document.createElement('div');
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e9ecef;
+        `;
+        const title = document.createElement('h2');
+        title.textContent = 'Account Overview';
+        title.style.cssText = `
+            margin: 0;
+            font-size: 1.5rem;
+            color: #2d3436;
+        `;
+        const updateBadge = document.createElement('div');
+        updateBadge.textContent = `Last Updated: ${updateTime}`;
+        updateBadge.style.cssText = `
+            background: #e3f2fd;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #1976d2;
+        `;
+        header.appendChild(title);
+        header.appendChild(updateBadge);
+        summaryDiv.appendChild(header);
+
+        // Create a container for the refresh button and status message
+        const refreshContainer = document.createElement('div');
+        refreshContainer.style.display = 'flex';
+        refreshContainer.style.alignItems = 'center';
+        refreshContainer.style.gap = '12px';
+
+        // Refresh status element (placed to the left)
+        const refreshStatusEl = document.createElement('div');
+        refreshStatusEl.id = 'refresh-status';
+        refreshStatusEl.style.cssText = `
+            font-size: 14px;
+            color: #555;
+        `;
+        // Append the status element first so it appears left of the button
+        refreshContainer.appendChild(refreshStatusEl);
+
+        // Helper function to create a stat item
+        const statItem = (label, value, color = '#2d3436') => {
+            const container = document.createElement('div');
+            container.style.cssText = `
+                background: white;
+                padding: 16px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                text-align: center;
+                flex: 1;
+            `;
+            const statValue = document.createElement('div');
+            statValue.textContent = value;
+            statValue.style.cssText = `
+                font-size: 1.8rem;
+                font-weight: 600;
+                color: ${color};
+                margin-bottom: 4px;
+            `;
+            const statLabel = document.createElement('div');
+            statLabel.textContent = label;
+            statLabel.style.cssText = `
+                font-size: 0.9rem;
+                color: #6c757d;
+            `;
+            container.appendChild(statValue);
+            container.appendChild(statLabel);
+            return container;
+        };
+
+        // Create a container for two rows of stats
         const statsContainer = document.createElement('div');
-        statsContainer.innerHTML = statsHtml;
+        statsContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            margin-bottom: 24px;
+        `;
+        // Row 1: Financial stats
+        const financialStatsRow = document.createElement('div');
+        financialStatsRow.style.cssText = `
+            display: flex;
+            gap: 16px;
+            justify-content: space-around;
+        `;
+        financialStatsRow.appendChild(statItem('Basic Cards on Login', `${numAccounts}`, '#011F26'));
+        financialStatsRow.appendChild(statItem('Total Balance', `$${totalBalance.toFixed(2)}`, '#025E73'));
+        financialStatsRow.appendChild(statItem('Total Pending Charge', `$${totalPending.toFixed(2)}`, '#BFB78F'));
+        financialStatsRow.appendChild(statItem('Remain Statement', `$${totalRemaining.toFixed(2)}`, '#F2A71B'));
+
+        // Row 2: Enrollment stats
+        const enrollmentStatsRow = document.createElement('div');
+        enrollmentStatsRow.style.cssText = `
+            display: flex;
+            gap: 16px;
+            justify-content: space-around;
+        `;
+        enrollmentStatsRow.appendChild(statItem('Offers Fully Enrolled', distinctFullyEnrolled, '#737373'));
+        enrollmentStatsRow.appendChild(statItem('Offers Pending Enrollment', distinctNotFullyEnrolled, '#CCD96C'));
+        enrollmentStatsRow.appendChild(statItem('Total Eligible Offers', totalEligible, '#627324'));
+        enrollmentStatsRow.appendChild(statItem('Total Enrolled Offers', totalEnrolled, '#324001'));
+
+        statsContainer.appendChild(financialStatsRow);
+        statsContainer.appendChild(enrollmentStatsRow);
         summaryDiv.appendChild(statsContainer);
 
-        // Container for the buttons
-        const btnContainer = document.createElement('div');
-        btnContainer.style.marginTop = '20px';
-        btnContainer.style.display = 'flex';
-        btnContainer.style.justifyContent = 'center';
-        btnContainer.style.gap = '40px';
-
-        // Common button style
-        const buttonStyle = `
-          cursor: pointer;
-          font-size: 18px;
-          padding: 10px 20px;
-          background-color: #007bff;
-          color: #fff;
-          border: none;
-          outline: none;
-          border-radius: 6px;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-          transition: background-color 0.3s ease, transform 0.2s ease;
+        // Action buttons container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
         `;
 
-        // Create the "Enroll All" button
-        const summaryEnrollBtn = document.createElement('button');
-        summaryEnrollBtn.textContent = 'Enroll All';
-        summaryEnrollBtn.style.cssText = buttonStyle;
-        // Hover & active effects (requires some inline event or style injection):
-        summaryEnrollBtn.addEventListener('mouseover', () => {
-            summaryEnrollBtn.style.backgroundColor = '#0056b3';  // darker shade
-        });
-        summaryEnrollBtn.addEventListener('mouseout', () => {
-            summaryEnrollBtn.style.backgroundColor = '#007bff';
-        });
-        summaryEnrollBtn.addEventListener('mousedown', () => {
-            summaryEnrollBtn.style.transform = 'scale(0.97)';
-        });
-        summaryEnrollBtn.addEventListener('mouseup', () => {
-            summaryEnrollBtn.style.transform = 'scale(1)';
-        });
-        summaryEnrollBtn.addEventListener('click', async () => {
-            await batchEnrollOffer();
-        });
+        // Helper to create a button with icon and text mark
+        const createButton = (text, color, onClick) => {
+            const btn = document.createElement('button');
+            btn.style.cssText = `
+                padding: 12px 28px;
+                border: none;
+                border-radius: 6px;
+                background: ${color};
+                color: white;
+                font-weight: 500;
+                cursor: pointer;
+                transition: transform 0.1s ease, opacity 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 1rem;
+            `;
+            btn.addEventListener('mouseover', () => (btn.style.opacity = '0.9'));
+            btn.addEventListener('mouseout', () => (btn.style.opacity = '1'));
+            btn.addEventListener('mousedown', () => (btn.style.transform = 'scale(0.98)'));
+            btn.addEventListener('mouseup', () => (btn.style.transform = 'none'));
+            btn.addEventListener('click', onClick);
+            return btn;
+        };
 
-        // Create the "Refresh" button
-        const summaryRefreshBtn = document.createElement('button');
-        summaryRefreshBtn.textContent = 'Refresh';
-        summaryRefreshBtn.style.cssText = buttonStyle;
-        summaryRefreshBtn.addEventListener('mouseover', () => {
-            summaryRefreshBtn.style.backgroundColor = '#0056b3';
-        });
-        summaryRefreshBtn.addEventListener('mouseout', () => {
-            summaryRefreshBtn.style.backgroundColor = '#007bff';
-        });
-        summaryRefreshBtn.addEventListener('mousedown', () => {
-            summaryRefreshBtn.style.transform = 'scale(0.97)';
-        });
-        summaryRefreshBtn.addEventListener('mouseup', () => {
-            summaryRefreshBtn.style.transform = 'scale(1)';
-        });
-        summaryRefreshBtn.addEventListener('click', async () => {
-            console.log("Refreshing data...");
-            const fetchStatus = await fetchAccount();
-            if (fetchStatus) {
-                const newOfferData = await refreshOffers();
+        // Refresh button logic with progress updates
+        const refreshBtn = createButton('Refresh Data', '#3498db', async () => {
+            try {
+                refreshStatusEl.textContent = "Refreshing accounts...";
+                await fetchAccount();
+                refreshStatusEl.textContent = "Refreshing offers.....";
+                const newOfferData = await fetchOffers();
+                refreshStatusEl.textContent = "Refreshing balances...";
                 await fetchBalance();
+                refreshStatusEl.textContent = "Refreshing benefits...";
                 const newBenefitTrackers = await fetchBenefit();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
@@ -1211,8 +1264,8 @@
                     benefitTrackers = newBenefitTrackers;
                 }
                 lastUpdate = new Date().toLocaleString();
+                refreshStatusEl.textContent = "Refresh complete.";
                 await renderCurrentView();
-
                 // Save updated data
                 setLocalStorage(accountData[0].account_token, [
                     "accountData",
@@ -1220,79 +1273,94 @@
                     "lastUpdate",
                     "benefitTrackers"
                 ]);
+            } catch (e) {
+                console.error('Error refreshing data:', e);
+                refreshStatusEl.textContent = "Error refreshing data.";
             }
         });
+        refreshBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
+            <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg> Refresh Data`;
 
-        // Append both buttons to the button container
-        btnContainer.appendChild(summaryEnrollBtn);
-        btnContainer.appendChild(summaryRefreshBtn);
+        // Append refreshContainer (with status element then button) to the button container
+        refreshContainer.appendChild(refreshBtn);
+        buttonContainer.appendChild(refreshContainer);
 
-        // Finally, append the button container to the summary
-        summaryDiv.appendChild(btnContainer);
+        // Enroll All button (unchanged)
+        const enrollBtn = createButton('Enroll All', '#27ae60', async () => {
+            try {
+                await batchEnrollOffer();
+                renderCurrentView();
+            } catch (e) {
+                console.error('Error enrolling all:', e);
+            }
+        });
+        enrollBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
+            <path d="M19 13H5v-2h14v2z"/>
+          </svg> Enroll All`;
+        buttonContainer.appendChild(enrollBtn);
+
+        summaryDiv.appendChild(buttonContainer);
 
         return summaryDiv;
     }
-
 
     function renderMembersView() {
         // Main container
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
         containerDiv.style.flexDirection = 'column';
-        containerDiv.style.gap = '14px';
+        containerDiv.style.gap = '16px';
         containerDiv.style.margin = '10px';
 
-        // ────────────── FILTERS CARD ──────────────
+        // FILTERS CARD (without a separate header label)
         const filtersCard = document.createElement('div');
         filtersCard.style.position = 'relative';
         filtersCard.style.border = '1px solid #ccc';
         filtersCard.style.borderRadius = '10px';
-        filtersCard.style.padding = '14px';
-        filtersCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        filtersCard.style.background = 'linear-gradient(to bottom, #fcfcfd, #f0f0f5)';
+        filtersCard.style.padding = '16px';
+        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+        filtersCard.style.background = 'linear-gradient(to bottom, #fcfcfd, #f7f7fa)';
         filtersCard.style.transition = 'box-shadow 0.3s ease';
 
-        // Optional subtle hover effect
         filtersCard.addEventListener('mouseover', () => {
             filtersCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
         });
         filtersCard.addEventListener('mouseout', () => {
-            filtersCard.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+            filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
         });
 
-        // Filters container
         const filtersDiv = document.createElement('div');
         filtersDiv.style.display = 'flex';
+        filtersDiv.style.flexWrap = 'wrap';
         filtersDiv.style.alignItems = 'flex-start';
         filtersDiv.style.gap = '20px';
-        filtersDiv.style.flexWrap = 'wrap';
 
-        // ────────── Status Filter ──────────
+        // Status Filter
         const statusFilterDiv = document.createElement('div');
         statusFilterDiv.style.display = 'flex';
         statusFilterDiv.style.flexDirection = 'column';
         statusFilterDiv.style.gap = '4px';
 
         const statusFilterLabel = document.createElement('label');
-        statusFilterLabel.textContent = 'Filter by Status:';
-        statusFilterLabel.style.fontWeight = 'bold';
+        statusFilterLabel.textContent = 'Status:';
+        statusFilterLabel.style.fontWeight = '600';
+        statusFilterLabel.style.fontSize = '0.9rem';
 
         const statusFilterSelect = document.createElement('select');
         statusFilterSelect.id = 'status-filter';
         statusFilterSelect.style.padding = '6px';
         statusFilterSelect.style.borderRadius = '6px';
         statusFilterSelect.style.border = '1px solid #ccc';
-        statusFilterSelect.style.fontSize = '14px';
+        statusFilterSelect.style.fontSize = '0.9rem';
         statusFilterSelect.style.cursor = 'pointer';
 
         const optionAll = document.createElement('option');
         optionAll.value = 'all';
         optionAll.textContent = 'All';
-
         const optionActive = document.createElement('option');
         optionActive.value = 'Active';
         optionActive.textContent = 'Active';
-
         const optionCanceled = document.createElement('option');
         optionCanceled.value = 'Canceled';
         optionCanceled.textContent = 'Canceled';
@@ -1310,32 +1378,31 @@
         statusFilterDiv.appendChild(statusFilterSelect);
         filtersDiv.appendChild(statusFilterDiv);
 
-        // ────────── Type Filter ──────────
+        // Type Filter
         const typeFilterDiv = document.createElement('div');
         typeFilterDiv.style.display = 'flex';
         typeFilterDiv.style.flexDirection = 'column';
         typeFilterDiv.style.gap = '4px';
 
         const typeFilterLabel = document.createElement('label');
-        typeFilterLabel.textContent = 'Filter by Type:';
-        typeFilterLabel.style.fontWeight = 'bold';
+        typeFilterLabel.textContent = 'Type:';
+        typeFilterLabel.style.fontWeight = '600';
+        typeFilterLabel.style.fontSize = '0.9rem';
 
         const typeFilterSelect = document.createElement('select');
         typeFilterSelect.id = 'type-filter';
         typeFilterSelect.style.padding = '6px';
         typeFilterSelect.style.borderRadius = '6px';
         typeFilterSelect.style.border = '1px solid #ccc';
-        typeFilterSelect.style.fontSize = '14px';
+        typeFilterSelect.style.fontSize = '0.9rem';
         typeFilterSelect.style.cursor = 'pointer';
 
         const typeOptionAll = document.createElement('option');
         typeOptionAll.value = 'all';
         typeOptionAll.textContent = 'All';
-
         const typeOptionBasic = document.createElement('option');
         typeOptionBasic.value = 'BASIC';
         typeOptionBasic.textContent = 'BASIC';
-
         const typeOptionSupp = document.createElement('option');
         typeOptionSupp.value = 'SUPP';
         typeOptionSupp.textContent = 'SUPP';
@@ -1353,7 +1420,7 @@
         typeFilterDiv.appendChild(typeFilterSelect);
         filtersDiv.appendChild(typeFilterDiv);
 
-        // ────────── Offer Search Filter ──────────
+        // Offer Search Filter
         const offerSearchDiv = document.createElement('div');
         offerSearchDiv.style.display = 'flex';
         offerSearchDiv.style.flexDirection = 'column';
@@ -1361,15 +1428,16 @@
 
         const offerSearchLabel = document.createElement('label');
         offerSearchLabel.textContent = 'Search Offer:';
-        offerSearchLabel.style.fontWeight = 'bold';
+        offerSearchLabel.style.fontWeight = '600';
+        offerSearchLabel.style.fontSize = '0.9rem';
 
         const offerSearchInput = document.createElement('input');
         offerSearchInput.type = 'text';
-        offerSearchInput.placeholder = 'Enter offer keyword';
-        offerSearchInput.style.fontSize = '14px';
+        offerSearchInput.placeholder = 'Enter keyword';
         offerSearchInput.style.padding = '6px';
         offerSearchInput.style.borderRadius = '6px';
         offerSearchInput.style.border = '1px solid #ccc';
+        offerSearchInput.style.fontSize = '0.9rem';
         offerSearchInput.style.width = '220px';
         offerSearchInput.value = offerSearchMembersKeyword;
         offerSearchInput.addEventListener('input', debounce(() => {
@@ -1381,13 +1449,11 @@
         offerSearchDiv.appendChild(offerSearchInput);
         filtersDiv.appendChild(offerSearchDiv);
 
-        // Append the filters to the card
+        // Append filters into the filters card and then add to the container
         filtersCard.appendChild(filtersDiv);
-
-        // Add filtersCard to container
         containerDiv.appendChild(filtersCard);
 
-        // ────────── MEMBERS TABLE ──────────
+        // Append the members table below filters
         const membersTable = renderMembersTable();
         containerDiv.appendChild(membersTable);
 
@@ -1395,7 +1461,7 @@
     }
 
     function renderMembersTable() {
-        // Reordered so that "Index" (cardIndex) is now the first column
+        // Define headers with "Index" as the first column
         const headers = [
             { label: "Index", key: "cardIndex" },
             { label: "Logo", key: "small_card_art" },
@@ -1414,12 +1480,12 @@
         ];
 
         const colWidths = {
-            cardIndex: "50px",
+            cardIndex: "45px",
             small_card_art: "60px",
-            display_account_number: "80px",
+            display_account_number: "60px",
             embossed_name: "150px",
             relationship: "80px",
-            account_setup_date: "80px",
+            account_setup_date: "120px",
             account_status: "80px",
             StatementBalance: "80px",
             pending: "80px",
@@ -1430,7 +1496,7 @@
             exclude: "60px"
         };
 
-        // Create table
+        // Create table element
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
@@ -1441,47 +1507,35 @@
         table.style.backgroundColor = '#fff';
         table.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
 
-        // Table header
+        // Create table header
         const thead = document.createElement('thead');
         thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
         const headerRow = document.createElement('tr');
 
-        // Define which columns are sortable
+        // Define sortable keys (if you have a sortData function)
         const sortableKeys = [
-            "cardIndex",
-            "small_card_art",
-            "display_account_number",
-            "embossed_name",
-            "relationship",
-            "account_setup_date",
-            "account_status",
-            "StatementBalance",
-            "pending",
-            "remainingStaBal",
-            "eligibleOffers",
-            "enrolledOffers"
+            "cardIndex", "small_card_art", "display_account_number", "embossed_name",
+            "relationship", "account_setup_date", "account_status", "StatementBalance",
+            "pending", "remainingStaBal", "eligibleOffers", "enrolledOffers"
         ];
 
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
             th.style.padding = '6px';
-            th.style.cursor = 'pointer';
             th.style.textAlign = 'center';
             th.style.borderBottom = '1px solid #ccc';
             th.style.fontWeight = 'bold';
             th.style.color = '#333';
+            th.style.cursor = 'pointer';
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
                 th.style.maxWidth = colWidths[headerItem.key];
                 th.style.whiteSpace = 'normal';
                 th.style.wordWrap = 'break-word';
             }
-
-            // Add click-to-sort if key is in sortableKeys
             if (sortableKeys.includes(headerItem.key)) {
                 th.setAttribute('data-sort-key', headerItem.key);
-                // Removed the sorting icon, per your request
                 th.addEventListener('click', () => sortData(headerItem.key));
             }
             headerRow.appendChild(th);
@@ -1489,7 +1543,7 @@
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // Filter accounts by status and type
+        // Filter accounts by current status and type
         const filteredAccounts = accountData.filter(acc => {
             const statusMatch = (currentStatusFilter === 'all') ||
                 (acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase());
@@ -1498,7 +1552,7 @@
             return statusMatch && typeMatch;
         });
 
-        // Helper: highlight if it matches the offer search
+        // Helper to highlight row if a member matches the offer search
         function shouldHighlightAccount(acc) {
             if (!offerSearchMembersKeyword || offerSearchMembersKeyword.trim().length === 0) {
                 return false;
@@ -1515,13 +1569,14 @@
             });
         }
 
+        // Create table body
         const tbody = document.createElement('tbody');
 
         filteredAccounts.forEach((item, idx) => {
             const row = document.createElement('tr');
             row.style.transition = 'background-color 0.3s ease, box-shadow 0.3s ease';
 
-            // On hover
+            // Set zebra stripes and hover effect
             row.addEventListener('mouseover', () => {
                 row.style.backgroundColor = '#fefefe';
                 row.style.boxShadow = 'inset 0 0 6px rgba(0,0,0,0.1)';
@@ -1529,23 +1584,18 @@
             row.addEventListener('mouseout', () => {
                 row.style.boxShadow = 'none';
                 row.style.backgroundColor = shouldHighlightAccount(item)
-                    ? '#fff9c2'  // pale yellow highlight
+                    ? '#fff9c2'
                     : (idx % 2 === 0 ? '#fff' : '#fdfdfd');
             });
-
-            // If search highlight
-            if (shouldHighlightAccount(item)) {
-                row.style.backgroundColor = '#fff9c2';
-            } else {
-                row.style.backgroundColor = (idx % 2 === 0 ? '#fff' : '#fdfdfd');
-            }
+            row.style.backgroundColor = shouldHighlightAccount(item)
+                ? '#fff9c2'
+                : (idx % 2 === 0 ? '#fff' : '#fdfdfd');
 
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
                 td.style.padding = '6px';
                 td.style.textAlign = 'center';
                 td.style.borderBottom = '1px solid #eee';
-
                 if (colWidths[headerItem.key]) {
                     td.style.width = colWidths[headerItem.key];
                     td.style.maxWidth = colWidths[headerItem.key];
@@ -1553,7 +1603,8 @@
                     td.style.wordWrap = 'break-word';
                 }
 
-                // Render cells
+                let cellValue = item[headerItem.key];
+
                 if (headerItem.key === 'small_card_art') {
                     if (item.small_card_art && item.small_card_art !== 'N/A') {
                         const img = document.createElement('img');
@@ -1565,8 +1616,7 @@
                     } else {
                         td.textContent = sanitizeValue('N/A');
                     }
-                }
-                else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
+                } else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
                     const count = item[headerItem.key];
                     const btn = document.createElement('button');
                     btn.textContent = sanitizeValue(count);
@@ -1583,15 +1633,11 @@
                         btn.style.backgroundColor = '#fafafa';
                     });
                     btn.addEventListener('click', () => {
-                        renderMember_CardOffers(
-                            item.display_account_number,
-                            (headerItem.key === 'eligibleOffers') ? 'eligible' : 'enrolled'
-                        );
+                        renderMember_CardOffers(item.display_account_number,
+                            (headerItem.key === 'eligibleOffers') ? 'eligible' : 'enrolled');
                     });
                     td.appendChild(btn);
-                }
-                else if (headerItem.key === 'pending' || headerItem.key === 'remainingStaBal' || headerItem.key === 'StatementBalance') {
-                    // Only BASIC cards show financial data.
+                } else if (headerItem.key === 'pending' || headerItem.key === 'remainingStaBal' || headerItem.key === 'StatementBalance') {
                     if (item.relationship === "BASIC") {
                         if (item.financialData) {
                             if (headerItem.key === 'pending') {
@@ -1607,15 +1653,13 @@
                     } else {
                         td.textContent = "0";
                     }
-                }
-                else if (headerItem.key === 'relationship') {
+                } else if (headerItem.key === 'relationship') {
                     if (item.relationship === "SUPP") {
                         td.textContent = getBasicAccountEndingForSuppAccount(item);
                     } else {
                         td.textContent = sanitizeValue(item[headerItem.key]);
                     }
-                }
-                else if (headerItem.key === 'priority') {
+                } else if (headerItem.key === 'priority') {
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = priorityCards.includes(item.display_account_number);
@@ -1630,8 +1674,7 @@
                         setLocalStorage(accountData[0].account_token, ['priorityCards']);
                     });
                     td.appendChild(chk);
-                }
-                else if (headerItem.key === 'exclude') {
+                } else if (headerItem.key === 'exclude') {
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = excludedCards.includes(item.display_account_number);
@@ -1649,15 +1692,14 @@
                 } else {
                     td.textContent = sanitizeValue(item[headerItem.key]);
                 }
-
                 row.appendChild(td);
             });
             tbody.appendChild(row);
         });
-
         table.appendChild(tbody);
         return table;
     }
+
 
 
     function renderMember_CardOffers(accountNumber, offerType) {
@@ -2334,19 +2376,17 @@
             }, 3000);
         }
 
-        // For “Enroll All” scenario, we highlight success/fail cards
         // in green/red for 3 seconds
         function highlightBatchEnrollmentResults(results) {
             // results is an array of { offerId, accountToken, result: true/false }
-            // We'll look up the cardEnd from accountData
+
             results.forEach(r => {
-                if (r.offerId !== offerId) return; // only highlight for this offer
-                // find the display_account_number for that account token
+                if (r.offerId !== offerId) return;
+
                 const matchingAcc = accountData.find(a => a.account_token === r.accountToken);
                 if (!matchingAcc) return;
                 const cardEnd = matchingAcc.display_account_number;
 
-                // find the span element
                 const spanId = `offerCard_${offerId}_${cardEnd}`;
                 const spanElem = document.getElementById(spanId);
                 if (spanElem) {
@@ -2370,63 +2410,20 @@
 
 
     async function renderBenefitsView() {
-        // Ensure trackers are loaded
         const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
         if (!benefitTrackers || benefitTrackers.length === 0) {
             benefitTrackers = await fetchBenefit();
             if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
         }
 
-        // Container
         const containerDiv = document.createElement('div');
-        containerDiv.style.display = 'flex';
-        containerDiv.style.flexDirection = 'column';
-        containerDiv.style.gap = '16px';
-        containerDiv.style.padding = '16px';
-        containerDiv.style.fontFamily = 'Arial, sans-serif';
+        containerDiv.style.padding = '20px 16px';
+        containerDiv.style.fontFamily = "'Segoe UI', system-ui, sans-serif";
+        containerDiv.style.backgroundColor = '#f8f9fa';
+        containerDiv.style.maxWidth = '800px';
+        containerDiv.style.margin = '0 auto';
 
-        // ───────────── TOP BAR ─────────────
-        // This top bar has a "Benefit Trackers" title on the left,
-        // plus a "Refresh" button on the right.
-        const topBar = document.createElement('div');
-        topBar.style.display = 'flex';
-        topBar.style.alignItems = 'center';
-        topBar.style.justifyContent = 'space-between';
-        topBar.style.marginBottom = '12px';
-
-        const title = document.createElement('h1');
-        title.textContent = 'Your Benefit Trackers';
-        title.style.margin = '0';
-        title.style.fontSize = '22px';
-        title.style.color = '#333';
-
-        const refreshBtn = document.createElement('button');
-        refreshBtn.textContent = 'Refresh Trackers';
-        refreshBtn.style.cursor = 'pointer';
-        refreshBtn.style.border = '1px solid #ccc';
-        refreshBtn.style.borderRadius = '6px';
-        refreshBtn.style.padding = '6px 12px';
-        refreshBtn.style.fontSize = '14px';
-        refreshBtn.style.backgroundColor = '#f0f0f0';
-        refreshBtn.addEventListener('mouseover', () => {
-            refreshBtn.style.backgroundColor = '#e9e9e9';
-        });
-        refreshBtn.addEventListener('mouseout', () => {
-            refreshBtn.style.backgroundColor = '#f0f0f0';
-        });
-        refreshBtn.addEventListener('click', async () => {
-            // Re-fetch the trackers and re-render
-            benefitTrackers = await fetchBenefit();
-            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
-            await renderCurrentView();
-        });
-
-        topBar.appendChild(title);
-        topBar.appendChild(refreshBtn);
-
-        containerDiv.appendChild(topBar);
-
-        // ───────────── GROUP & SORT TRACKERS ─────────────
+        // Group trackers by benefitId
         const grouped = {};
         benefitTrackers.forEach(trackerObj => {
             const key = trackerObj.benefitId;
@@ -2436,7 +2433,7 @@
             grouped[key].push(trackerObj);
         });
 
-        // Known or custom mapping for sorting / renaming
+        // Define sorting/renaming for known benefits
         const benefitSortMapping = {
             "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
             "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
@@ -2459,17 +2456,15 @@
             const first = trackerGroup[0];
             const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
             const benefitNameKey = (first.benefitName || "").toLowerCase().trim();
-            let sortData = benefitSortMapping[benefitIdKey];
-            if (!sortData) {
-                sortData = benefitSortMapping[benefitNameKey];
-            }
+            let sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
             if (!sortData) {
                 return { order: Infinity, displayName: first.benefitName || "" };
             }
-            return { order: sortData.order, displayName: sortData.newName };
+            // Fallback: if newName is missing, use benefitName from the first tracker
+            return { order: sortData.order, displayName: sortData.newName || first.benefitName || "" };
         }
 
-        // Build an array of groups for sorting
+        // Build and sort group array
         const groupArray = [];
         for (const key in grouped) {
             const group = grouped[key];
@@ -2481,111 +2476,239 @@
                 displayName: sortData.displayName
             });
         }
-
-        // Sort them
         groupArray.sort((a, b) => {
             if (a.order !== b.order) return a.order - b.order;
-            return a.displayName.localeCompare(b.displayName);
+            return (a.displayName || "").localeCompare(b.displayName || "");
         });
 
-        // ───────────── RENDER GROUPS (ACCORDION-STYLE) ─────────────
+        // Add status legend
+        const legend = document.createElement('div');
+        legend.style.display = 'flex';
+        legend.style.gap = '15px';
+        legend.style.marginBottom = '25px';
+        legend.style.justifyContent = 'center';
+        legend.style.flexWrap = 'wrap';
+
+        const statusLegend = {
+            'ACHIEVED': { label: 'Completed', color: '#4CAF50' },
+            'IN_PROGRESS': { label: 'In Progress', color: '#2196F3' }
+        };
+
+        Object.entries(statusLegend).forEach(([status, { label, color }]) => {
+            const legendItem = document.createElement('div');
+            legendItem.style.display = 'flex';
+            legendItem.style.alignItems = 'center';
+            legendItem.style.gap = '6px';
+
+            const colorDot = document.createElement('div');
+            colorDot.style.width = '12px';
+            colorDot.style.height = '12px';
+            colorDot.style.borderRadius = '50%';
+            colorDot.style.backgroundColor = color;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = label;
+            labelSpan.style.color = '#424242';
+            labelSpan.style.fontSize = '14px';
+
+            legendItem.appendChild(colorDot);
+            legendItem.appendChild(labelSpan);
+            legend.appendChild(legendItem);
+        });
+
+        containerDiv.appendChild(legend);
+
+        if (groupArray.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.style.textAlign = 'center';
+            emptyState.style.padding = '40px 20px';
+            emptyState.style.color = '#616161';
+
+            const emptyText = document.createElement('p');
+            emptyText.textContent = 'No benefits available to display';
+            emptyText.style.fontSize = '16px';
+
+            emptyState.appendChild(emptyText);
+            containerDiv.appendChild(emptyState);
+            return containerDiv;
+        }
+
         groupArray.forEach(groupObj => {
             const trackersGroup = groupObj.trackers;
+            // Use trackerDuration if available, otherwise empty string
             const durationText =
                 trackersGroup[0].trackerDuration ||
                 (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
                 "";
 
-            // Each group is an "accordion" container
+            // Accordion container
             const accordionItem = document.createElement('div');
-            accordionItem.style.border = '1px solid #ccc';
-            accordionItem.style.borderRadius = '8px';
-            accordionItem.style.marginBottom = '12px';
-            accordionItem.style.overflow = 'hidden';
-            accordionItem.style.transition = 'max-height 0.3s ease';
+            accordionItem.style.border = '1px solid #e0e0e0';
+            accordionItem.style.borderRadius = '12px';
+            accordionItem.style.marginBottom = '15px';
+            accordionItem.style.backgroundColor = '#ffffff';
+            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+            accordionItem.style.transition = 'box-shadow 0.2s ease, transform 0.2s ease';
+
+            accordionItem.addEventListener('mouseenter', () => {
+                accordionItem.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                accordionItem.style.transform = 'translateY(-2px)';
+            });
+            accordionItem.addEventListener('mouseleave', () => {
+                accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+                accordionItem.style.transform = 'translateY(0)';
+            });
 
             // Accordion Header
             const headerDiv = document.createElement('div');
-            headerDiv.style.display = 'flex';
-            headerDiv.style.justifyContent = 'space-between';
-            headerDiv.style.alignItems = 'center';
+            headerDiv.style.padding = '16px';
             headerDiv.style.cursor = 'pointer';
-            headerDiv.style.padding = '10px';
-            headerDiv.style.background = '#f0f0f0';
+            headerDiv.style.transition = 'background-color 0.2s ease';
+
+            headerDiv.addEventListener('mouseenter', () => {
+                headerDiv.style.backgroundColor = '#f5f5f5';
+            });
+            headerDiv.addEventListener('mouseleave', () => {
+                headerDiv.style.backgroundColor = '#ffffff';
+            });
+
+            // Header content
+            const titleRow = document.createElement('div');
+            titleRow.style.display = 'flex';
+            titleRow.style.justifyContent = 'space-between';
+            titleRow.style.alignItems = 'center';
 
             const titleSpan = document.createElement('span');
             titleSpan.style.fontSize = '16px';
             titleSpan.style.fontWeight = 'bold';
-            titleSpan.style.color = '#333';
-            titleSpan.textContent = groupObj.displayName + (durationText ? ` (${durationText})` : "");
+            titleSpan.style.color = '#2c3e50';
+            // Fallback to first tracker's benefitName if displayName is empty
+            titleSpan.textContent = (groupObj.displayName || trackersGroup[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
 
-            // A small expand/collapse icon
-            const arrowSpan = document.createElement('span');
-            arrowSpan.textContent = '▼';
-            arrowSpan.style.marginLeft = '8px';
-            arrowSpan.style.transition = 'transform 0.3s ease';
+            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            arrowIcon.setAttribute('viewBox', '0 0 24 24');
+            arrowIcon.setAttribute('width', '20');
+            arrowIcon.setAttribute('height', '20');
+            arrowIcon.style.transition = 'transform 0.3s ease';
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M7 10l5 5 5-5');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#666');
+            path.setAttribute('stroke-width', '2');
+            arrowIcon.appendChild(path);
 
-            headerDiv.appendChild(titleSpan);
-            headerDiv.appendChild(arrowSpan);
+            titleRow.appendChild(titleSpan);
+            titleRow.appendChild(arrowIcon);
+            headerDiv.appendChild(titleRow);
 
-            // Body container for the group items
+            // Mini Bar: a summary of each tracker's card ending with color coding.
+            const miniBarDiv = document.createElement('div');
+            miniBarDiv.style.display = 'flex';
+            miniBarDiv.style.flexWrap = 'wrap';
+            miniBarDiv.style.gap = '8px';
+            miniBarDiv.style.marginTop = '12px';
+
+            trackersGroup.forEach(trackerObj => {
+                const miniCard = document.createElement('div');
+                miniCard.style.display = 'flex';
+                miniCard.style.alignItems = 'center';
+                miniCard.style.gap = '6px';
+                miniCard.style.padding = '6px 10px';
+                miniCard.style.borderRadius = '6px';
+                miniCard.style.fontSize = '13px';
+                miniCard.style.background = statusLegend[trackerObj.status].color + '15';
+                miniCard.style.border = `1px solid ${statusLegend[trackerObj.status].color}30`;
+                miniCard.style.color = statusLegend[trackerObj.status].color;
+
+                const cardEnding = document.createElement('span');
+                cardEnding.textContent = trackerObj.cardEnding;
+                cardEnding.style.fontWeight = '500';
+
+                const statusDot = document.createElement('div');
+                statusDot.style.width = '8px';
+                statusDot.style.height = '8px';
+                statusDot.style.borderRadius = '50%';
+                statusDot.style.backgroundColor = statusLegend[trackerObj.status].color;
+
+                miniCard.appendChild(statusDot);
+                miniCard.appendChild(cardEnding);
+                miniBarDiv.appendChild(miniCard);
+            });
+
+            headerDiv.appendChild(miniBarDiv);
+
+            // Accordion Body: Full tracker cards (detailed view)
             const bodyDiv = document.createElement('div');
             bodyDiv.style.padding = '10px';
-            bodyDiv.style.display = 'none'; // hidden by default
+            bodyDiv.style.display = 'none'; // collapsed by default
 
-            // Render each tracker in the group
+            // Render full tracker cards for this group
             trackersGroup.forEach(trackerObj => {
                 const t = trackerObj.tracker || trackerObj;
-
-                // A card for each tracker
                 const trackerCard = document.createElement('div');
                 trackerCard.style.border = '1px solid #ddd';
-                trackerCard.style.borderRadius = '6px';
-                trackerCard.style.padding = '12px';
-                trackerCard.style.marginBottom = '10px';
-                trackerCard.style.backgroundColor = '#fafafa';
+                trackerCard.style.borderRadius = '8px';
+                trackerCard.style.padding = '16px';
+                trackerCard.style.margin = '12px 0';
+                trackerCard.style.backgroundColor = '#fcfcfc';
                 trackerCard.style.transition = 'background-color 0.3s ease';
 
-                // Top row: card ending + date range
-                const topRow = document.createElement('div');
-                topRow.style.display = 'flex';
-                topRow.style.justifyContent = 'space-between';
-                topRow.style.marginBottom = '8px';
+                // Card header
+                const cardHeader = document.createElement('div');
+                cardHeader.style.display = 'flex';
+                cardHeader.style.justifyContent = 'space-between';
+                cardHeader.style.marginBottom = '12px';
 
-                const leftSpan = document.createElement('span');
-                leftSpan.textContent = `Card Ending: ${trackerObj.cardEnding}`;
-                leftSpan.style.fontWeight = 'bold';
+                const cardNumber = document.createElement('div');
+                cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
+                cardNumber.style.fontWeight = '500';
+                cardNumber.style.color = '#555';
 
-                // Format dates
-                const startFormatted = formatDate(trackerObj.periodStartDate);
-                const endFormatted = formatDate(trackerObj.periodEndDate, true);
-                const dateRangeSpan = document.createElement('span');
-                dateRangeSpan.textContent = `${startFormatted} - ${endFormatted}`;
-                dateRangeSpan.style.fontStyle = 'italic';
+                // Only display formatted dates if available, otherwise fallback to a message
+                const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
+                const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
+                const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
 
-                topRow.appendChild(leftSpan);
-                topRow.appendChild(dateRangeSpan);
+                const dateRange = document.createElement('div');
+                dateRange.textContent = dateRangeText;
+                dateRange.style.color = '#757575';
+                dateRange.style.fontSize = '14px';
 
-                // Middle row: progress bar + usage
-                const middleRow = document.createElement('div');
-                middleRow.style.display = 'flex';
-                middleRow.style.alignItems = 'center';
-                middleRow.style.gap = '10px';
-                middleRow.style.marginBottom = '8px';
+                cardHeader.appendChild(cardNumber);
+                cardHeader.appendChild(dateRange);
+
+                // Progress bar
+                const progressContainer = document.createElement('div');
+                progressContainer.style.marginBottom = '12px';
+
+                const progressText = document.createElement('div');
+                progressText.style.display = 'flex';
+                progressText.style.justifyContent = 'space-between';
+                progressText.style.marginBottom = '8px';
+                progressText.style.fontSize = '14px';
 
                 const progressLabel = document.createElement('span');
-                progressLabel.style.fontWeight = 'bold';
-                progressLabel.style.color = '#555';
                 progressLabel.textContent = 'Progress:';
+                progressLabel.style.color = '#666';
+
+                const progressAmount = document.createElement('span');
+                const spent = parseFloat(t.spentAmount).toFixed(2);
+                const target = parseFloat(t.targetAmount).toFixed(2);
+                progressAmount.textContent = `${t.targetCurrencySymbol || ''}${spent} / ${t.targetCurrencySymbol || ''}${target}`;
+                progressAmount.style.fontWeight = '500';
+                progressAmount.style.color = statusLegend[trackerObj.status].color;
+
+                progressText.appendChild(progressLabel);
+                progressText.appendChild(progressAmount);
 
                 const progressBarWrapper = document.createElement('div');
-                progressBarWrapper.style.flex = '1';
-                progressBarWrapper.style.background = '#eee';
-                progressBarWrapper.style.borderRadius = '7px';
+                progressBarWrapper.style.height = '12px';
+                progressBarWrapper.style.borderRadius = '6px';
+                progressBarWrapper.style.backgroundColor = '#eee';
                 progressBarWrapper.style.position = 'relative';
-                progressBarWrapper.style.height = '14px';
                 progressBarWrapper.style.overflow = 'hidden';
                 progressBarWrapper.style.border = '1px solid #ccc';
+                progressBarWrapper.style.width = '100%';
 
                 let percent = 0;
                 const targetAmountNum = parseFloat(t.targetAmount);
@@ -2603,75 +2726,56 @@
                 progressFill.style.left = '0';
                 progressFill.style.transition = 'width 0.3s ease';
                 if (trackerObj.status === 'ACHIEVED') {
-                    progressFill.style.backgroundColor = '#90ee90'; // green
+                    progressFill.style.backgroundColor = "#90ee90";
                 } else if (trackerObj.status === 'IN_PROGRESS') {
-                    progressFill.style.backgroundColor = '#add8e6'; // light blue
+                    progressFill.style.backgroundColor = "#add8e6";
                 } else {
-                    progressFill.style.backgroundColor = '#ccc'; // gray
+                    progressFill.style.backgroundColor = "#ccc";
                 }
                 progressBarWrapper.appendChild(progressFill);
 
-                middleRow.appendChild(progressLabel);
-                middleRow.appendChild(progressBarWrapper);
+                progressContainer.appendChild(progressText);
+                progressContainer.appendChild(progressBarWrapper);
 
-                // Right side: usage label
-                const usageSpan = document.createElement('span');
-                usageSpan.style.fontWeight = 'bold';
-
-                const spentStr = parseFloat(t.spentAmount).toFixed(2);
-                const targetStr = parseFloat(t.targetAmount).toFixed(2);
-                let usageLabel;
-                if (t.targetUnit === 'MONETARY') {
-                    if (t.targetCurrencySymbol === '$') {
-                        usageLabel = `Spent: $${spentStr} / $${targetStr}`;
-                    } else {
-                        usageLabel = `Spent: ${t.targetCurrencySymbol}${spentStr} / ${t.targetCurrencySymbol}${targetStr}`;
-                    }
-                } else if (t.targetUnit === 'PASSES') {
-                    usageLabel = `Used: ${parseInt(t.spentAmount)} / ${parseInt(t.targetAmount)} passes`;
-                } else {
-                    usageLabel = `Spent: ${t.spentAmount} / ${t.targetAmount}`;
-                }
-                usageSpan.textContent = usageLabel;
-
-                middleRow.appendChild(usageSpan);
-
-                // If there's a message from trackerObj.progress
-                const bottomRow = document.createElement('div');
+                // Message (if any)
                 if (trackerObj.progress && trackerObj.progress.message) {
-                    bottomRow.style.marginTop = '6px';
-                    bottomRow.style.fontSize = '13px';
-                    bottomRow.style.color = '#555';
-                    bottomRow.innerHTML = trackerObj.progress.message;
+                    const message = document.createElement('div');
+                    message.style.marginTop = '12px';
+                    message.style.padding = '10px';
+                    message.style.background = '#f5f5f5';
+                    message.style.borderRadius = '6px';
+                    message.style.color = '#616161';
+                    message.style.fontSize = '14px';
+                    message.innerHTML = trackerObj.progress.message;
+                    trackerCard.appendChild(message);
                 }
 
-                trackerCard.appendChild(topRow);
-                trackerCard.appendChild(middleRow);
-                trackerCard.appendChild(bottomRow);
-
+                trackerCard.appendChild(cardHeader);
+                trackerCard.appendChild(progressContainer);
                 bodyDiv.appendChild(trackerCard);
             });
 
-            // Initially collapsed
-            bodyDiv.style.display = 'none';
-
-            // Accordion logic
+            // Accordion toggle logic
             headerDiv.addEventListener('click', () => {
-                const isOpen = (bodyDiv.style.display === 'block');
+                const isOpen = bodyDiv.style.display === 'block';
+                arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
                 bodyDiv.style.display = isOpen ? 'none' : 'block';
-                arrowSpan.textContent = isOpen ? '▼' : '▲';
+                if (!isOpen) {
+                    bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
+                    bodyDiv.style.padding = '10px';
+                } else {
+                    bodyDiv.style.maxHeight = '0';
+                    bodyDiv.style.padding = '0 16px';
+                }
             });
 
             accordionItem.appendChild(headerDiv);
             accordionItem.appendChild(bodyDiv);
-
-            // Insert into the container
             containerDiv.appendChild(accordionItem);
         });
 
         return containerDiv;
     }
-
 
 
 
@@ -2702,7 +2806,7 @@
     }
 
     // =========================================================================
-    // Section 8: Local Storage Handling
+    // Section 7: Local Storage Handling
     // =========================================================================
 
     function setLocalStorage(tokenSuffix, keys) {
@@ -2778,54 +2882,41 @@
         }
     }
 
-
-
     // =========================================================================
-    // Section 10: Event Listeners & UI Interaction
+    // Section 8: Event Listeners & UI Interaction
     // =========================================================================
 
     // Draggable header implementation
-    header.addEventListener('mousedown', function (e) {
-        let shiftX = e.clientX - container.getBoundingClientRect().left;
-        let shiftY = e.clientY - container.getBoundingClientRect().top;
-        function onMouseMove(e2) {
-            container.style.left = (e2.clientX - shiftX) + 'px';
-            container.style.top = (e2.clientY - shiftY) + 'px';
-        }
+    header.addEventListener('mousedown', (e) => {
+        const rect = container.getBoundingClientRect();
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        const onMouseMove = (e2) => {
+            container.style.left = `${e2.clientX - shiftX}px`;
+            container.style.top = `${e2.clientY - shiftY}px`;
+        };
+
         document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', function onMouseUp() {
+        document.addEventListener('mouseup', () => {
             document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        });
+        }, { once: true });
     });
 
     // View switching buttons
-    btnSummary.addEventListener('click', () => {
+    const switchView = (view, activeBtn) => {
         saveCurrentScrollState();
-        currentView = 'summary';
-        btnSummary.style.fontWeight = 'bold';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
+        currentView = view;
+        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
+            btn.style.fontWeight = btn === activeBtn ? 'bold' : 'normal';
+        });
         renderCurrentView();
-    });
+    };
 
-    btnMembers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'members';
-        btnMembers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    btnOffers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'offers';
-        btnOffers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
+    btnSummary.addEventListener('click', () => switchView('summary', btnSummary));
+    btnMembers.addEventListener('click', () => switchView('members', btnMembers));
+    btnOffers.addEventListener('click', () => switchView('offers', btnOffers));
+    btnBenefits.addEventListener('click', () => switchView('benefits', btnBenefits));
 
     // Toggle minimize/expand functionality
     toggleBtn.addEventListener('click', () => {
@@ -2843,8 +2934,9 @@
         }
     });
 
+
     // =========================================================================
-    // Section 11: Initialization Functions
+    // Section 9: Initialization Functions
     // =========================================================================
 
     function createUI() {
@@ -2873,16 +2965,21 @@
 
         if (localDataStatus === 0 || localDataStatus === 2) {
             // Refresh offers and benefit trackers
-            const newOfferData = await refreshOffers();
+            const newOfferData = await fetchOffers();
             const newBenefitTrackers = await fetchBenefit();
+            const newBalance = await fetchBalance();
 
             if (newOfferData && Array.isArray(newOfferData)) {
                 offerData = newOfferData;
-            } else { console.error("refreshOffers failed. Not updating offerData."); }
+            } else { console.error("fetchOffers failed. Not updating offerData."); }
 
             if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
                 benefitTrackers = newBenefitTrackers;
             } else { console.error("Fetching benefit trackers failed. Not updating benefitTrackers."); }
+
+            if (newBalance && newBalance.length > 0) {
+                balanceData = newBalance;
+            } else { console.error("Fetching balance data failed. Not updating balanceData."); }
 
             lastUpdate = new Date().toLocaleString();
             await renderCurrentView();
