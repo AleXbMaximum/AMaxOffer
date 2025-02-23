@@ -437,7 +437,7 @@
         }
     }
 
-    async function fetchOffersForAccount(accountToken) {
+    async function fetchOffers(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
             locale: "en-US",
@@ -467,7 +467,7 @@
         }
     }
 
-    async function fetchFinancialData(accountToken) {
+    async function fetchBalance_Data(accountToken) {
         if (!accountToken) {
             console.error("Account token is required");
             return null;
@@ -527,16 +527,16 @@
         } catch (error) { console.error("Error fetching financial data:", error); return null; }
     }
 
-    async function fetchFinancialDataForBasicCards() {
+    async function fetchBalance() {
         const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
         await Promise.all(basicAccounts.map(async (acc) => {
             if (!acc.financialData) {
-                acc.financialData = await fetchFinancialData(acc.account_token);
+                acc.financialData = await fetchBalance_Data(acc.account_token);
             }
         }));
     }
 
-    async function fetchBestLoyaltyBenefitsTrackers(accountToken, locale = "en-US", limit = "ALL") {
+    async function fetchBenefit_Data(accountToken, locale = "en-US", limit = "ALL") {
         const url = "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1";
         const payload = [{ accountToken, locale, limit }];
 
@@ -583,11 +583,11 @@
         }
     }
 
-    async function fetchBenefitTrackersForBasicCards() {
+    async function fetchBenefit() {
         const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
         let allTrackers = [];
         await Promise.all(basicAccounts.map(async (acc) => {
-            const trackers = await fetchBestLoyaltyBenefitsTrackers(acc.account_token);
+            const trackers = await fetchBenefit_Data(acc.account_token);
             if (Array.isArray(trackers)) {
                 trackers.forEach(tracker => {
                     // Attach the BASIC card's display number so we know which card the tracker is for
@@ -603,7 +603,7 @@
     }
 
     // Retrieve current user's trust level via USCF APIs
-    async function getCurrentUserTrustLevel() {
+    async function getTrustLevel() {
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
@@ -929,7 +929,7 @@
             "Considering a Big Purchase"
         ];
         await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.account_token);
+            const offers = await fetchOffers(acc.account_token);
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
@@ -1062,8 +1062,8 @@
             const fetchStatus = await fetchAccount();
             if (fetchStatus) {
                 const newOfferData = await refreshOffers();
-                await fetchFinancialDataForBasicCards();
-                const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
+                await fetchBalance();
+                const newBenefitTrackers = await fetchBenefit();
                 if (newOfferData && Array.isArray(newOfferData)) {
                     offerData = newOfferData;
                 }
@@ -1750,7 +1750,7 @@
         const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
 
         if (!benefitTrackers || benefitTrackers.length === 0) {
-            benefitTrackers = await fetchBenefitTrackersForBasicCards();
+            benefitTrackers = await fetchBenefit();
             if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
         }
 
@@ -1925,13 +1925,11 @@
     }
 
     function loadLocalStorage(tokenSuffix, keys) {
-        // Define the full set of keys.
+
         const allKeys = ["accountData", "offerData", "lastUpdate", "priorityCards", "excludedCards", "benefitTrackers", "ScriptVersion"];
-        // If keys not provided or empty, default to all.
         if (!keys || keys.length === 0) {
             keys = allKeys;
         }
-        // Attempt to retrieve each specified item.
         const loaded = {};
         let allExist = true;
         keys.forEach(key => {
@@ -1942,30 +1940,16 @@
                 loaded[key] = item;
             }
         });
-        // For backward compatibility: if accountData and offerData are required and missing, return 0.
         if (keys.includes("accountData") && keys.includes("offerData") && (!loaded.accountData || !loaded.offerData)) {
             return 0;
         }
         try {
-            // Check the ScriptVersion first if it's one of the requested keys.
-            if (keys.includes("accountData") && loaded.accountData) {
-                accountData = JSON.parse(loaded.accountData);
-            }
-            if (keys.includes("offerData") && loaded.offerData) {
-                offerData = JSON.parse(loaded.offerData);
-            }
-            if (keys.includes("lastUpdate")) {
-                lastUpdate = loaded.lastUpdate || "";
-            }
-            if (keys.includes("priorityCards")) {
-                priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : [];
-            }
-            if (keys.includes("excludedCards")) {
-                excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : [];
-            }
-            if (keys.includes("benefitTrackers")) {
-                benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : [];
-            }
+            if (keys.includes("accountData") && loaded.accountData) { accountData = JSON.parse(loaded.accountData); }
+            if (keys.includes("offerData") && loaded.offerData) { offerData = JSON.parse(loaded.offerData); }
+            if (keys.includes("lastUpdate")) { lastUpdate = loaded.lastUpdate || ""; }
+            if (keys.includes("priorityCards")) { priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : []; }
+            if (keys.includes("excludedCards")) { excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : []; }
+            if (keys.includes("benefitTrackers")) { benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : []; }
             if (keys.includes("ScriptVersion")) {
                 if (!loaded.ScriptVersion || JSON.parse(loaded.ScriptVersion) !== ScriptVersion) {
                     console.error("Script version mismatch or missing.");
@@ -2068,7 +2052,7 @@
     }
 
     async function init() {
-        const tl = await getCurrentUserTrustLevel();
+        const tl = await getTrustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
             return;
         }
@@ -2084,7 +2068,7 @@
         if (localDataStatus === 0 || localDataStatus === 2) {
             // Refresh offers and benefit trackers
             const newOfferData = await refreshOffers();
-            const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
+            const newBenefitTrackers = await fetchBenefit();
 
             if (newOfferData && Array.isArray(newOfferData)) {
                 offerData = newOfferData;
@@ -2102,7 +2086,7 @@
             console.log("Using data from LocalStorage. No forced fetch.");
         }
 
-        await fetchFinancialDataForBasicCards();
+        await fetchBalance();
         if (currentView === 'members') {
             renderCurrentView();
         }
