@@ -1,19 +1,16 @@
 // src/index.js
 import {
-    fetchAccount,
-    getCurrentUserTrustLevel,
-    fetchFinancialDataForBasicCards,
     refreshOffers,
-    fetchBenefitTrackersForBasicCards
+    getCurrentUserTrustLevel,
+    fetchBenefitTrackersForBasicCards,
+    fetchFinancialDataForBasicCards,
+    fetchAccount
 } from './api.js';
+
 import { initUI, renderCurrentView } from './ui.js';
 import { loadLocalStorage, setLocalStorage } from './storage.js';
 import { saveCurrentScrollState } from './utils.js';
 import { currentView, isMinimized, accountData, offerData, benefitTrackers } from './state.js';
-
-'use strict';
-
-const ScriptVersion = "2.2";
 
 // --- UI Elements Creation ---
 const container = document.createElement('div');

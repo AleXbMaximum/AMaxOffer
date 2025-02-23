@@ -1,18 +1,5 @@
 // src/api.js
 
-import {
-    accountData,
-    btnSummary,
-    renderCurrentView,
-    content,
-    excludedCards,
-    priorityCards,
-    globalViewState,
-    runInBatchesLimit
-} from './state.js';
-
-import { getUrl, reconstructObfuscated } from './utils.js';
-import { parseOfferDetails } from './apiUtils.js'; // Optional: if you want to extract offer parsing
 
 // Obfuscated URL Constants
 // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member

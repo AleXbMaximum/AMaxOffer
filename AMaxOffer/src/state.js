@@ -27,3 +27,5 @@ export const globalViewState = {
     offers: { scrollTop: 0 },
     benefits: { scrollTop: 0 }
 };
+
+export const ScriptVersion = "2.2";

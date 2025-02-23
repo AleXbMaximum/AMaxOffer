@@ -1,12 +1,12 @@
-const path = require('path');
-const webpack = require('webpack');
+import path from 'path';
+import webpack from 'webpack';
 
-module.exports = {
-    mode: 'development', // set mode explicitly
+export default {
+    mode: 'development', // explicitly set mode
     entry: './src/index.js',
     output: {
         filename: 'bundle.user.js',
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(process.cwd(), 'dist')
     },
     devtool: 'source-map',
     module: {
@@ -15,9 +15,7 @@ module.exports = {
                 test: /\.js$/,
                 exclude: /node_modules/,
                 parser: { sourceType: 'module' },  // force module parsing
-                use: {
-                    loader: 'babel-loader'
-                }
+                use: 'babel-loader'
             }
         ]
     },
