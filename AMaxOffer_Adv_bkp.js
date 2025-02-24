@@ -101,230 +101,86 @@
         benefits: { scrollTop: 0 },
     };
 
-    let content, viewBtns, toggleBtn, container, btnSummary, btnMembers, btnOffers, btnBenefits;
 
     // =========================================================================
     // Section 3: UI Elements Creation
     // =========================================================================
 
-    // Helper: Create a new element with given properties and inline styles
-    function createEl(tag, { text = '', className = '', styles = {}, props = {} } = {}) {
-        const el = document.createElement(tag);
-        if (text) el.textContent = text;
-        if (className) el.className = className;
-        Object.assign(el.style, styles);
-        Object.entries(props).forEach(([key, value]) => el[key] = value);
-        return el;
-    }
+    const btnBenefits = document.createElement('button');
+    btnBenefits.textContent = 'Benefits';
+    btnBenefits.style.cursor = 'pointer';
+    btnBenefits.style.fontSize = '20px';
 
-    // Helper: Create a button with hover effects
-    function createButton(label, onClick, { styles = {} } = {}) {
-        const btn = createEl('button', {
-            text: label, styles: {
-                cursor: 'pointer',
-                fontSize: '18px',
-                padding: '8px 20px',
-                border: 'none',
-                background: 'transparent',
-                borderRadius: '8px',
-                transition: 'all 0.2s ease',
-                color: '#2c3e50',
-                fontWeight: '500',
-                ...styles
-            }
-        });
-        btn.addEventListener('click', onClick);
-        btn.addEventListener('mouseover', () => {
-            btn.style.transform = 'scale(1.05)';
-            btn.style.backgroundColor = '#f0f0f0';
-        });
-        btn.addEventListener('mouseout', () => {
-            btn.style.transform = 'none';
-            btn.style.backgroundColor = 'transparent';
-        });
-        return btn;
-    }
+    const btnMembers = document.createElement('button');
+    btnMembers.textContent = 'Members';
+    btnMembers.style.cursor = 'pointer';
+    btnMembers.style.fontSize = '20px';
 
-    // Build the UI container with header and content area
-    function buildUI() {
-        // Increased shadow and darker background to separate from page
-        const container = createEl('div', {
-            props: { id: 'card-utility-overlay' },
-            styles: {
-                position: 'fixed',
-                top: '5%',
-                left: '5%',
-                backgroundColor: '#fefefe', // slightly darker white
-                borderRadius: '12px',
-                zIndex: '10000',
-                fontFamily: "'Segoe UI', system-ui, sans-serif",
-                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.42)', // stronger shadow for separation
-                maxHeight: '90vh',
-                overflow: 'hidden',
-                width: '90%',
-                maxWidth: '1400px',
-                border: '1px solid rgba(0,0,0,0.15)',
-                transition: 'all 0.3s ease'
-            }
-        });
+    const btnOffers = document.createElement('button');
+    btnOffers.textContent = 'Offers';
+    btnOffers.style.cursor = 'pointer';
+    btnOffers.style.fontSize = '20px';
 
-        const title = createEl('span', {
-            text: 'AMaxOffer',
-            styles: {
-                fontSize: '1.4rem',
-                fontWeight: '600',
-                background: 'linear-gradient(45deg, #4CAF50, #2196F3)',
-                WebkitBackgroundClip: 'text',
-                color: 'transparent',
-                letterSpacing: '-0.5px'
-            }
-        });
+    const btnSummary = document.createElement('button');
+    btnSummary.textContent = 'Summary';
+    btnSummary.style.cursor = 'pointer';
+    btnSummary.style.fontSize = '20px';
 
-        // Create view buttons with improved logic
-        const btnSummary = createButton('Summary', () => switchView('summary', btnSummary));
-        const btnMembers = createButton('Members', () => switchView('members', btnMembers));
-        const btnOffers = createButton('Offers', () => switchView('offers', btnOffers));
-        const btnBenefits = createButton('Benefits', () => switchView('benefits', btnBenefits));
+    const container = document.createElement('div');
+    container.id = 'card-utility-overlay';
+    container.style.position = 'fixed';
+    container.style.top = '5%';
+    container.style.left = '5%';
+    container.style.backgroundColor = '#fff';
+    container.style.color = '#000';
+    container.style.border = '1px solid #000';
+    container.style.zIndex = '10000';
+    container.style.fontFamily = 'Arial, sans-serif';
+    container.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
+    container.style.maxHeight = '80vh';
+    container.style.overflow = 'hidden';
+    container.style.width = '90%'; // Overridden if minimized
+    container.style.maxWidth = '1344px';
 
-        const viewBtns = createEl('div', {
-            styles: {
-                display: 'flex',
-                gap: '12px',
-                background: '#f8f9fa',
-                borderRadius: '8px',
-                padding: '4px'
-            }
-        });
-        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => viewBtns.appendChild(btn));
+    const content = document.createElement('div');
+    content.id = 'card-utility-content';
+    content.style.padding = '10px';
+    content.style.overflowY = 'auto';
+    content.style.maxHeight = 'calc(80vh - 40px)';
+    content.innerHTML = 'Loading...';
 
-        // Toggle button for expanding/minimizing the container
-        const toggleBtn = createButton('➕', toggleMinimize, {
-            styles: {
-                fontSize: '1.2rem',
-                border: '1px dashed #ccc',
-                borderRadius: '6px',
-                width: '50px',
-                height: '50px',
-                display: 'inline-flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
-        });
-        toggleBtn.addEventListener('mouseover', () => toggleBtn.style.backgroundColor = '#f0f0f0');
-        toggleBtn.addEventListener('mouseout', () => toggleBtn.style.backgroundColor = 'transparent');
+    const header = document.createElement('div');
+    header.id = 'card-utility-header';
+    header.style.backgroundColor = '#f0f0f0';
+    header.style.borderBottom = '1px solid #ccc';
+    header.style.padding = '5px 10px';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.cursor = 'move';
 
-        // Build header and content sections
-        const header = createEl('div', {
-            props: { id: 'card-utility-header' },
-            styles: {
-                backgroundColor: '#f8f9fa',
-                borderBottom: '1px solid rgba(0,0,0,0.08)',
-                padding: '12px 20px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'grab',
-                userSelect: 'none'
-            }
-        });
-        header.append(title, viewBtns, toggleBtn);
+    const title = document.createElement('span');
+    title.textContent = 'AMaxOffer';
 
-        const content = createEl('div', {
-            props: { id: 'card-utility-content' },
-            styles: {
-                padding: '20px',
-                overflowY: 'auto',
-                maxHeight: 'calc(80vh - 64px)'
-            },
-            text: 'Loading...'
-        });
+    const toggleBtn = document.createElement('button');
+    toggleBtn.textContent = 'Minimize';
+    toggleBtn.style.cursor = 'pointer';
 
-        // Append header and content to container
-        container.append(header, content);
-        document.body.appendChild(container);
+    const viewButtons = document.createElement('div');
+    viewButtons.style.display = 'flex';
+    viewButtons.style.gap = '40px';
 
-        // Set initial UI state
-        content.style.display = 'none';
-        viewBtns.style.display = 'none';
-        container.style.width = '200px';
-        container.style.height = '75px'
-        toggleBtn.textContent = '➕';
+    viewButtons.appendChild(btnSummary);
+    viewButtons.appendChild(btnMembers);
+    viewButtons.appendChild(btnOffers);
+    viewButtons.appendChild(btnBenefits);
 
-        // Make header draggable
-        makeDraggable(header, container);
-        return { container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits };
-    }
+    header.appendChild(title);
+    header.appendChild(viewButtons);
+    header.appendChild(toggleBtn);
 
-    // Simple function to make an element draggable
-    function makeDraggable(handle, container) {
-        handle.addEventListener('mousedown', (e) => {
-            const rect = container.getBoundingClientRect();
-            const shiftX = e.clientX - rect.left;
-            const shiftY = e.clientY - rect.top;
-
-            const onMouseMove = (e2) => {
-                container.style.left = `${e2.clientX - shiftX}px`;
-                container.style.top = `${e2.clientY - shiftY}px`;
-            };
-
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', () => {
-                document.removeEventListener('mousemove', onMouseMove);
-            }, { once: true });
-        });
-    }
-
-    // Toggle minimize/expand logic
-    function toggleMinimize() {
-        isMinimized = !isMinimized;
-        content.style.display = isMinimized ? 'none' : 'block';
-        viewBtns.style.display = isMinimized ? 'none' : 'flex';
-        toggleBtn.textContent = isMinimized ? '➕' : '➖';
-        container.style.width = isMinimized ? '200px' : '90%';
-        container.style.height = isMinimized ? '75px' : 'auto'; // Reduced height when minimized
-        container.style.transform = isMinimized ? 'scale(0.98)' : 'none';
-        container.style.boxShadow = isMinimized
-            ? '0 12px 18px rgba(0,0,0,0.20)'
-            : '0 12px 32px rgba(0,0,0,0.30)';
-        if (!isMinimized) {
-            // Listen for the transition to finish (e.g., height transition)
-            const onTransitionEnd = (e) => {
-                if (e.propertyName === 'height') {
-                    renderCurrentView();
-                    container.removeEventListener('transitionend', onTransitionEnd);
-                }
-            };
-            container.addEventListener('transitionend', onTransitionEnd);
-        }
-    }
-
-    // View switching logic: save state, update active button style, and re-render view
-    function switchView(view, activeBtn) {
-        saveCurrentScrollState();
-        currentView = view;
-        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
-            btn.style.backgroundColor = (btn === activeBtn) ? '#4CAF50' : 'transparent';
-            btn.style.color = (btn === activeBtn) ? 'black' : '#2c3e50';
-            btn.style.fontWeight = (btn === activeBtn) ? '800' : '500';
-        });
-        renderCurrentView();
-    }
-
-    // Save current scroll state for the active view
-    function saveCurrentScrollState() {
-        if (content) {
-            globalViewState[currentView].scrollTop = content.scrollTop;
-        }
-    }
-
-    // Assume renderCurrentView is defined elsewhere that re-renders view based on currentView
-
-    // Initialize UI
-    const ui = buildUI();
-    // Destructure our UI elements for use in the rest of your code
-    ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
-
-
+    container.appendChild(header);
+    container.appendChild(content);
 
     // =========================================================================
     // Section 4: General Helper Functions
@@ -1205,7 +1061,7 @@
         table.style.borderRadius = '8px';
         table.style.overflow = 'hidden';
         table.style.backgroundColor = '#fff';
-        table.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+        table.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
 
         // Build table header
         const thead = document.createElement('thead');
@@ -1289,8 +1145,8 @@
     function createSearchInput(placeholder, value, callback) {
         const container = document.createElement('div');
         container.style.position = 'relative';
-        container.style.boxSizing = 'border-box';
-        container.style.width = '200px';  // fixed width for the search input
+        container.style.flex = '1';
+        container.style.minWidth = '240px';
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -1306,7 +1162,9 @@
         input.addEventListener('input', debounce(() => {
             callback(input.value.trim());
             renderCurrentView();
-            setTimeout(() => input.focus(), 0);
+            setTimeout(() => {
+                input.focus();
+            }, 0);
         }, 500));
 
         // Search icon
@@ -1330,53 +1188,51 @@
         return container;
     }
 
-
-    async function renderSummary_page() {
-        // Compute offer statistics using reduce
-        const {
-            distinctFullyEnrolled,
-            distinctNotFullyEnrolled,
-            totalEligible,
-            totalEnrolled
-        } = offerData.reduce((stats, offer) => {
-            if (offer.category === "DEFAULT") return stats;
-            const eligible = offer.eligibleCards?.length || 0;
-            const enrolled = offer.enrolledCards?.length || 0;
-            stats.totalEligible += eligible;
-            stats.totalEnrolled += enrolled;
-            if (eligible + enrolled > 0) {
-                enrolled === (eligible + enrolled)
-                    ? stats.distinctFullyEnrolled++
-                    : stats.distinctNotFullyEnrolled++;
-            }
-            return stats;
-        }, { distinctFullyEnrolled: 0, distinctNotFullyEnrolled: 0, totalEligible: 0, totalEnrolled: 0 });
-
-        // Compute financial stats for BASIC accounts with financialData
-        const { totalBalance, totalPending, totalRemaining } = accountData
-            .filter(acc => acc.relationship === "BASIC" && acc.financialData)
-            .reduce((fin, acc) => {
-                fin.totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
-                fin.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
-                fin.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
-                return fin;
-            }, { totalBalance: 0, totalPending: 0, totalRemaining: 0 });
-
+    async function renderSummaryView() {
         const numAccounts = accountData.length;
         const updateTime = lastUpdate || "Never";
+        let distinctFullyEnrolled = 0;
+        let distinctNotFullyEnrolled = 0;
+        let totalEnrolled = 0;
+        let totalEligible = 0;
 
-        // Create main container
+        // Aggregate enrollment stats from offerData
+        offerData.forEach(offer => {
+            if (offer.category === "DEFAULT") return;
+            const eligibleCount = offer.eligibleCards?.length || 0;
+            const enrolledCount = offer.enrolledCards?.length || 0;
+            totalEligible += eligibleCount;
+            totalEnrolled += enrolledCount;
+            if ((eligibleCount + enrolledCount) > 0) {
+                enrolledCount === (eligibleCount + enrolledCount)
+                    ? distinctFullyEnrolled++
+                    : distinctNotFullyEnrolled++;
+            }
+        });
+
+        // Compute financial stats from BASIC accounts with financialData
+        let totalBalance = 0;
+        let totalPending = 0;
+        let totalRemaining = 0;
+        accountData.filter(acc => acc.relationship === "BASIC" && acc.financialData)
+            .forEach(acc => {
+                totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
+                totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
+                totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
+            });
+
+        // Main container styling
         const summaryDiv = document.createElement('div');
         summaryDiv.style.cssText = `
             padding: 20px;
             background: #f8f9fa;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             margin: 10px;
             font-family: Arial, sans-serif;
         `;
 
-        // Header: Title and Last Updated badge with fixed min-width and max-height
+        // Header section with title and last update badge
         const header = document.createElement('div');
         header.style.cssText = `
             display: flex;
@@ -1388,7 +1244,11 @@
         `;
         const title = document.createElement('h2');
         title.textContent = 'Account Overview';
-        title.style.cssText = `margin: 0; font-size: 1.5rem; color: #2d3436;`;
+        title.style.cssText = `
+            margin: 0;
+            font-size: 1.5rem;
+            color: #2d3436;
+        `;
         const updateBadge = document.createElement('div');
         updateBadge.textContent = `Last Updated: ${updateTime}`;
         updateBadge.style.cssText = `
@@ -1397,123 +1257,153 @@
             border-radius: 20px;
             font-size: 0.9rem;
             color: #1976d2;
-            min-width: 250px;
-            max-height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         `;
         header.appendChild(title);
         header.appendChild(updateBadge);
         summaryDiv.appendChild(header);
 
-        // Refresh container with status and refresh button
+        // Create a container for the refresh button and status message
         const refreshContainer = document.createElement('div');
-        refreshContainer.style.cssText = `display: flex; align-items: center; gap: 12px;`;
+        refreshContainer.style.display = 'flex';
+        refreshContainer.style.alignItems = 'center';
+        refreshContainer.style.gap = '12px';
+
+        // Refresh status element (placed to the left)
         const refreshStatusEl = document.createElement('div');
         refreshStatusEl.id = 'refresh-status';
-        refreshStatusEl.style.cssText = `font-size: 14px; color: #555;`;
+        refreshStatusEl.style.cssText = `
+            font-size: 14px;
+            color: #555;
+        `;
+        // Append the status element first so it appears left of the button
         refreshContainer.appendChild(refreshStatusEl);
 
-        // Helper function to create a stat card element with fixed min width and max height
+        // Helper function to create a stat item
         const statItem = (label, value, color = '#2d3436') => {
             const container = document.createElement('div');
             container.style.cssText = `
-            background: white;
-            padding: 16px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-            flex: 1;
-            min-width: 160px;
-            max-width: 240px;
-            max-height: 60px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-          `;
+                background: white;
+                padding: 16px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                text-align: center;
+                flex: 1;
+            `;
             const statValue = document.createElement('div');
             statValue.textContent = value;
-            statValue.style.cssText = `font-size: 1.8rem; font-weight: 600; color: ${color}; margin-bottom: 4px;`;
+            statValue.style.cssText = `
+                font-size: 1.8rem;
+                font-weight: 600;
+                color: ${color};
+                margin-bottom: 4px;
+            `;
             const statLabel = document.createElement('div');
             statLabel.textContent = label;
-            statLabel.style.cssText = `font-size: 0.9rem; color: #6c757d;`;
-            container.append(statValue, statLabel);
+            statLabel.style.cssText = `
+                font-size: 0.9rem;
+                color: #6c757d;
+            `;
+            container.appendChild(statValue);
+            container.appendChild(statLabel);
             return container;
         };
 
-        // Helper to create a row of stat cards
-        const createStatRow = items => {
-            const row = document.createElement('div');
-            row.style.cssText = `display: flex; gap: 16px; justify-content: space-around;`;
-            items.forEach(item => row.appendChild(item));
-            return row;
-        };
-
-        const financialRow = createStatRow([
-            statItem('Basic Cards on Login', `${numAccounts}`, 'rgba(0, 0, 0, 0.69)'),
-            statItem('Total Balance', `$${totalBalance.toFixed(2)}`, 'rgba(22, 18, 19, 0.69)'),
-            statItem('Total Pending Charge', `$${totalPending.toFixed(2)}`, 'rgba(138, 113, 121, 0.65)'),
-            statItem('Remain Statement', `$${totalRemaining.toFixed(2)}`, 'rgba(231, 29, 99, 0.65)')
-        ]);
-        const enrollmentRow = createStatRow([
-            statItem('Offers Fully Enrolled', distinctFullyEnrolled, 'rgba(94, 14, 215, 0.8)'),
-            statItem('Offers Pending Enrollment', distinctNotFullyEnrolled, 'rgba(213, 36, 36, 0.77)'),
-            statItem('Total Eligible Offers', totalEligible, 'rgba(37, 108, 158, 0.74)'),
-            statItem('Total Enrolled Offers', totalEnrolled, 'rgba(3, 68, 114, 0.86)')
-        ]);
-
+        // Create a container for two rows of stats
         const statsContainer = document.createElement('div');
-        statsContainer.style.cssText = `display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;`;
-        statsContainer.append(financialRow, enrollmentRow);
+        statsContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            margin-bottom: 24px;
+        `;
+        // Row 1: Financial stats
+        const financialStatsRow = document.createElement('div');
+        financialStatsRow.style.cssText = `
+            display: flex;
+            gap: 16px;
+            justify-content: space-around;
+        `;
+        financialStatsRow.appendChild(statItem('Basic Cards on Login', `${numAccounts}`, 'rgba(0, 0, 0, 0.69)'));
+        financialStatsRow.appendChild(statItem('Total Balance', `$${totalBalance.toFixed(2)}`, 'rgba(22, 18, 19, 0.69)'));
+        financialStatsRow.appendChild(statItem('Total Pending Charge', `$${totalPending.toFixed(2)}`, 'rgba(138, 113, 121, 0.65)'));
+        financialStatsRow.appendChild(statItem('Remain Statement', `$${totalRemaining.toFixed(2)}`, 'rgba(231, 29, 99, 0.65)'));
+
+        // Row 2: Enrollment stats
+        const enrollmentStatsRow = document.createElement('div');
+        enrollmentStatsRow.style.cssText = `
+            display: flex;
+            gap: 16px;
+            justify-content: space-around;
+        `;
+        enrollmentStatsRow.appendChild(statItem('Offers Fully Enrolled', distinctFullyEnrolled, 'rgba(94, 14, 215, 0.8)'));
+        enrollmentStatsRow.appendChild(statItem('Offers Pending Enrollment', distinctNotFullyEnrolled, 'rgba(213, 36, 36, 0.77)'));
+        enrollmentStatsRow.appendChild(statItem('Total Eligible Offers', totalEligible, 'rgba(37, 108, 158, 0.74)'));
+        enrollmentStatsRow.appendChild(statItem('Total Enrolled Offers', totalEnrolled, 'rgba(3, 68, 114, 0.86)'));
+
+        statsContainer.appendChild(financialStatsRow);
+        statsContainer.appendChild(enrollmentStatsRow);
         summaryDiv.appendChild(statsContainer);
 
         // Action buttons container
         const buttonContainer = document.createElement('div');
-        buttonContainer.style.cssText = `display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;`;
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        `;
 
-        // Helper to create a button with icon and text
+        // Helper to create a button with icon and text mark
         const createButton = (text, color, onClick) => {
             const btn = document.createElement('button');
             btn.style.cssText = `
-            padding: 12px 28px;
-            border: none;
-            border-radius: 6px;
-            background: ${color};
-            color: white;
-            font-weight: 500;
-            cursor: pointer;
-            transition: transform 0.1s ease, opacity 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 1rem;
-          `;
-            btn.addEventListener('mouseover', () => btn.style.opacity = '0.9');
-            btn.addEventListener('mouseout', () => btn.style.opacity = '1');
-            btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.98)');
-            btn.addEventListener('mouseup', () => btn.style.transform = 'none');
+                padding: 12px 28px;
+                border: none;
+                border-radius: 6px;
+                background: ${color};
+                color: white;
+                font-weight: 500;
+                cursor: pointer;
+                transition: transform 0.1s ease, opacity 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 1rem;
+            `;
+            btn.addEventListener('mouseover', () => (btn.style.opacity = '0.9'));
+            btn.addEventListener('mouseout', () => (btn.style.opacity = '1'));
+            btn.addEventListener('mousedown', () => (btn.style.transform = 'scale(0.98)'));
+            btn.addEventListener('mouseup', () => (btn.style.transform = 'none'));
             btn.addEventListener('click', onClick);
             return btn;
         };
 
+        // Refresh button logic with progress updates
         const refreshBtn = createButton('Refresh Data', '#3498db', async () => {
             try {
                 refreshStatusEl.textContent = "Refreshing accounts...";
                 await get_accounts();
-                refreshStatusEl.textContent = "Refreshing offers...";
+                refreshStatusEl.textContent = "Refreshing offers.....";
                 const newOfferData = await get_offers();
                 refreshStatusEl.textContent = "Refreshing balances...";
                 await get_balance();
                 refreshStatusEl.textContent = "Refreshing benefits...";
                 const newBenefitTrackers = await get_benefit();
-                if (Array.isArray(newOfferData)) offerData = newOfferData;
-                if (Array.isArray(newBenefitTrackers)) benefitTrackers = newBenefitTrackers;
+                if (newOfferData && Array.isArray(newOfferData)) {
+                    offerData = newOfferData;
+                }
+                if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
+                    benefitTrackers = newBenefitTrackers;
+                }
                 lastUpdate = new Date().toLocaleString();
                 refreshStatusEl.textContent = "Refresh complete.";
                 await renderCurrentView();
+                // Save updated data
                 setLocalStorage(accountData[0].account_token, [
-                    "accountData", "offerData", "lastUpdate", "benefitTrackers"
+                    "accountData",
+                    "offerData",
+                    "lastUpdate",
+                    "benefitTrackers"
                 ]);
             } catch (e) {
                 console.error('Error refreshing data:', e);
@@ -1521,10 +1411,14 @@
             }
         });
         refreshBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-          <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-        </svg> Refresh Data`;
-        refreshContainer.appendChild(refreshBtn);
+            <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg> Refresh Data`;
 
+        // Append refreshContainer (with status element then button) to the button container
+        refreshContainer.appendChild(refreshBtn);
+        buttonContainer.appendChild(refreshContainer);
+
+        // Enroll All button (unchanged)
         const enrollBtn = createButton('Enroll All', '#27ae60', async () => {
             try {
                 await get__batchEnrollOffer();
@@ -1534,14 +1428,14 @@
             }
         });
         enrollBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-          <path d="M19 13H5v-2h14v2z"/>
-        </svg> Enroll All`;
-        buttonContainer.append(refreshContainer, enrollBtn);
+            <path d="M19 13H5v-2h14v2z"/>
+          </svg> Enroll All`;
+        buttonContainer.appendChild(enrollBtn);
+
         summaryDiv.appendChild(buttonContainer);
 
         return summaryDiv;
     }
-
 
 
     function renderMembers_filterBar() {
@@ -1549,18 +1443,18 @@
         filtersCard.style.background = '#ffffff';
         filtersCard.style.borderRadius = '12px';
         filtersCard.style.padding = '16px';
-        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
         filtersCard.style.display = 'flex';
         filtersCard.style.gap = '20px';
         filtersCard.style.flexWrap = 'wrap';
         filtersCard.style.width = '100%';
         filtersCard.style.boxSizing = 'border-box';
 
-        // Status Filter: label and select side-by-side
+        // Status Filter
         const statusFilterDiv = document.createElement('div');
         statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
-        statusFilterDiv.style.gap = '8px';
+        statusFilterDiv.style.flexDirection = 'column';
+        statusFilterDiv.style.gap = '4px';
 
         const statusFilterLabel = document.createElement('label');
         statusFilterLabel.textContent = 'Status:';
@@ -1598,11 +1492,11 @@
         statusFilterDiv.appendChild(statusFilterSelect);
         filtersCard.appendChild(statusFilterDiv);
 
-        // Type Filter: label and select side-by-side
+        // Type Filter
         const typeFilterDiv = document.createElement('div');
         typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
-        typeFilterDiv.style.gap = '8px';
+        typeFilterDiv.style.flexDirection = 'column';
+        typeFilterDiv.style.gap = '4px';
 
         const typeFilterLabel = document.createElement('label');
         typeFilterLabel.textContent = 'Type:';
@@ -1640,18 +1534,18 @@
         typeFilterDiv.appendChild(typeFilterSelect);
         filtersCard.appendChild(typeFilterDiv);
 
-        // Offer Search Filter: label and search input on the same line
+        // Offer Search Filter using createSearchInput
         const offerSearchContainer = document.createElement('div');
         offerSearchContainer.style.display = 'flex';
-        offerSearchContainer.style.alignItems = 'center';
-        offerSearchContainer.style.gap = '8px';
+        offerSearchContainer.style.flexDirection = 'column';
+        offerSearchContainer.style.gap = '4px';
 
         const offerSearchLabel = document.createElement('label');
         offerSearchLabel.textContent = 'Search Offer:';
         offerSearchLabel.style.fontWeight = '600';
         offerSearchLabel.style.fontSize = '0.9rem';
 
-        // Reuse createSearchInput here. This function should return a container with the search input.
+        // Reuse createSearchInput here.
         const offerSearchInputContainer = createSearchInput(
             'Enter keyword',
             offerSearchMembersKeyword,
@@ -1667,7 +1561,6 @@
 
         return filtersCard;
     }
-
 
     function renderMembers_table() {
         const headers = [
@@ -1838,7 +1731,7 @@
             max-width: 400px;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             position: relative;
         `;
 
@@ -1937,7 +1830,7 @@
         containerDiv.style.flexDirection = 'column';
         containerDiv.style.gap = '16px';
         containerDiv.style.padding = '16px';
-        containerDiv.style.maxWidth = '1300px';
+        containerDiv.style.maxWidth = '1400px';
         containerDiv.style.margin = '0 auto';
         containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
 
@@ -1949,7 +1842,7 @@
         filterCard.style.background = '#ffffff';
         filterCard.style.borderRadius = '12px';
         filterCard.style.padding = '16px';
-        filterCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        filterCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
         filterCard.style.display = 'flex';
         filterCard.style.gap = '20px';
         filterCard.style.flexWrap = 'wrap';
@@ -2010,7 +1903,7 @@
             { label: "Cat", key: "category" },
             { label: "Exp", key: "expiry_date" },
             { label: "Usg", key: "redemption_types" },
-            { label: "Description", key: "short_description" },
+            { label: "Desc", key: "short_description" },
             { label: "Thres", key: "threshold" },
             { label: "Rwd", key: "reward" },
             { label: "Pct", key: "percentage" },
@@ -2028,8 +1921,8 @@
             redemption_types: "60px",
             short_description: "250px",
             threshold: "80px",
-            reward: "80px",
-            percentage: "80px",
+            reward: "70px",
+            percentage: "60px",
             eligibleCards: "40px",
             enrolledCards: "45px"
         };
@@ -2163,7 +2056,7 @@
             max-width: 440px;
             max-height: 90vh;
             overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
             position: relative;
         `;
 
@@ -2394,13 +2287,13 @@
         }
     }
 
-    function renderOffers_page() {
+    function renderOffer_page() {
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
         containerDiv.style.flexDirection = 'column';
         containerDiv.style.gap = '16px';
         containerDiv.style.padding = '16px';
-        containerDiv.style.maxWidth = '1300px';
+        containerDiv.style.maxWidth = '1200px';
         containerDiv.style.margin = '0 auto';
         containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
 
@@ -2545,7 +2438,7 @@
             accordionItem.style.borderRadius = '12px';
             accordionItem.style.marginBottom = '15px';
             accordionItem.style.backgroundColor = '#ffffff';
-            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
             accordionItem.style.transition = 'box-shadow 0.2s ease, transform 0.2s ease';
 
             accordionItem.addEventListener('mouseenter', () => {
@@ -2787,14 +2680,14 @@
             membersTableContainer.appendChild(reRenderTable());
             viewContent.appendChild(membersTableContainer);
         } else if (currentView === 'offers') {
-            viewContent = renderOffers_page(offerData);
+            viewContent = renderOffer_page(offerData);
             viewContent.appendChild(renderOffers_searchBar());
             const offersTableContainer = document.createElement('div');
             offersTableContainer.id = 'offers-table-container';
             offersTableContainer.appendChild(reRenderTable());
             viewContent.appendChild(offersTableContainer);
         } else if (currentView === 'summary') {
-            viewContent = renderSummary_page();
+            viewContent = renderSummaryView();
         } else if (currentView === 'benefits') {
             viewContent = await renderBenefits();
         }
@@ -2900,12 +2793,68 @@
     // Section 8: Event Listeners & UI Interaction
     // =========================================================================
 
+    // Draggable header implementation
+    header.addEventListener('mousedown', (e) => {
+        const rect = container.getBoundingClientRect();
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        const onMouseMove = (e2) => {
+            container.style.left = `${e2.clientX - shiftX}px`;
+            container.style.top = `${e2.clientY - shiftY}px`;
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', () => {
+            document.removeEventListener('mousemove', onMouseMove);
+        }, { once: true });
+    });
+
+    // View switching buttons
+    const switchView = (view, activeBtn) => {
+        saveCurrentScrollState();
+        currentView = view;
+        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
+            btn.style.fontWeight = btn === activeBtn ? 'bold' : 'normal';
+        });
+        renderCurrentView();
+    };
+
+    btnSummary.addEventListener('click', () => switchView('summary', btnSummary));
+    btnMembers.addEventListener('click', () => switchView('members', btnMembers));
+    btnOffers.addEventListener('click', () => switchView('offers', btnOffers));
+    btnBenefits.addEventListener('click', () => switchView('benefits', btnBenefits));
+
+    // Toggle minimize/expand functionality
+    toggleBtn.addEventListener('click', () => {
+        isMinimized = !isMinimized;
+        if (isMinimized) {
+            content.style.display = 'none';
+            viewButtons.style.display = 'none';
+            toggleBtn.textContent = 'Expand';
+            container.style.width = '200px';
+        } else {
+            content.style.display = 'block';
+            viewButtons.style.display = 'flex';
+            toggleBtn.textContent = 'Minimize';
+            container.style.width = '90%';
+        }
+    });
 
 
     // =========================================================================
     // Section 9: Initialization Functions
     // =========================================================================
 
+    function createUI() {
+        document.body.appendChild(container);
+        if (isMinimized) {
+            content.style.display = 'none';
+            viewButtons.style.display = 'none';
+            toggleBtn.textContent = 'Expand';
+            container.style.width = '200px';
+        }
+    }
 
     async function init() {
         const tl = await get_trustLevel();
@@ -2919,6 +2868,7 @@
         }
         const tokenSuffix = accountData[0].account_token;
         const localDataStatus = loadLocalStorage(tokenSuffix);
+        createUI();
 
         if (localDataStatus === 0 || localDataStatus === 2) {
             // Refresh offers and benefit trackers
