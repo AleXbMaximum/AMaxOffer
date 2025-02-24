@@ -199,6 +199,8 @@
         return ordered.join('');
     }
 
+
+
     // Utility to decode Base64 twice to retrieve original URL
     function getUrl(encoded) {
         try {
@@ -211,12 +213,16 @@
         }
     }
 
+
+
     // Save the current scroll position for the active view
     function saveCurrentScrollState() {
         if (content) {
             globalViewState[currentView].scrollTop = content.scrollTop;
         }
     }
+
+
 
     // Debounce utility for limiting rapid function calls
     function debounce(func, wait) {
@@ -226,6 +232,8 @@
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
+
+
 
     function formatDate(dateStr, roundUp = false) {
         let d = new Date(dateStr);
@@ -239,9 +247,14 @@
         return `${mm}-${dd}-${yy}`;
     }
 
+
+
     function sanitizeValue(val) {
         return (val === "N/A" || val === null || val === undefined) ? "0" : val;
     }
+
+
+
     // Parse card index into main and sub-index components
     function parseCardIndex(indexStr) {
         if (!indexStr) return [0, 0];
@@ -251,12 +264,16 @@
         return [main, sub];
     }
 
+
+
     // Parse a numeric value from a string, cleaning common symbols
     function parseNumericValue(str) {
         if (!str) return NaN;
         const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
         return parseFloat(cleaned) || NaN;
     }
+
+
 
     // Run tasks in batches to control concurrency
     async function runInBatches(tasks, limit) {
@@ -272,6 +289,9 @@
         return results;
     }
 
+
+
+
     // Utility to get the basic account ending for a supplementary account
     function getBasicAccountEndingForSuppAccount(suppAccount) {
         // For a supplementary account, cardIndex is in the form "N-X"
@@ -286,6 +306,10 @@
         }
         return "N/A";
     }
+
+
+
+
 
     // Utility to sort the account data based on a key
     function sort_memberTab(key) {
@@ -312,8 +336,15 @@
             });
         }
         saveCurrentScrollState();
-        renderCurrentView();
+        const container = document.getElementById('members-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(renderMembers_table());
+        }
     }
+
+
+
 
     // Utility to sort the offer data based on a key
     function sort_offerTab(key) {
@@ -351,8 +382,16 @@
             }
         });
         saveCurrentScrollState();
-        renderCurrentView();
+
+        const container = document.getElementById('members-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(renderMembers_table());
+        }
     }
+
+
+
 
     // Utility to parse offer details from the description
     function parseOfferDetails(description = "") {
@@ -457,6 +496,9 @@
         }
         return { threshold, reward, percentage, times, total };
     }
+
+
+
 
     // Merge the old favorites with the new offer data
     function mergeFavorites(newOfferMap) {
@@ -2631,17 +2673,19 @@
         let viewContent;
 
         if (currentView === 'members') {
-
             viewContent = renderMembers_page();
             viewContent.appendChild(renderMembers_filterBar());
-            viewContent.appendChild(renderMembers_table());
-
+            const membersTableContainer = document.createElement('div');
+            membersTableContainer.id = 'members-table-container';
+            membersTableContainer.appendChild(reRenderTable());
+            viewContent.appendChild(membersTableContainer);
         } else if (currentView === 'offers') {
-
             viewContent = renderOffer_page(offerData);
             viewContent.appendChild(renderOffers_searchBar());
-            viewContent.appendChild(renderOffers_table(offerData));
-
+            const offersTableContainer = document.createElement('div');
+            offersTableContainer.id = 'offers-table-container';
+            offersTableContainer.appendChild(reRenderTable());
+            viewContent.appendChild(offersTableContainer);
         } else if (currentView === 'summary') {
             viewContent = renderSummaryView();
         } else if (currentView === 'benefits') {
@@ -2656,8 +2700,17 @@
         if (globalViewState[currentView] && typeof globalViewState[currentView].scrollTop === 'number') {
             content.scrollTop = globalViewState[currentView].scrollTop;
         }
-
     }
+
+    function reRenderTable() {
+        if (currentView === 'members') {
+            return renderMembers_table();
+        } else if (currentView === 'offers') {
+            return renderOffers_table(offerData);
+        }
+        return document.createTextNode('');
+    }
+
 
     // =========================================================================
     // Section 7: Local Storage Handling
