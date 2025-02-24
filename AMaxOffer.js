@@ -1,53 +1,30 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      2.3
+// @version      3.0
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
+
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // @resource materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
+
 // ==/UserScript==
 
 // @license    CC BY-NC-ND 4.0
 
-
 (function () {
     'use strict';
 
-    const ScriptVersion = "2.2";
+    const ScriptVersion = "3.0";
 
     // =========================================================================
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
 
-    // Utility to reconstruct obfuscated URLs
-    function reconstructObfuscated(obfSegments, indexMap) {
-        let ordered = [];
-        Object.keys(indexMap)
-            .sort((a, b) => parseInt(a) - parseInt(b))
-            .forEach(key => {
-                let seg = obfSegments[Number(indexMap[key])];
-                seg = seg.slice(0, -1);
-                ordered.push(seg);
-            });
-        return ordered.join('');
-    }
-
-    // Utility to decode Base64 twice to retrieve original URL
-    function getUrl(encoded) {
-        try {
-            let firstDecoding = atob(encoded);
-            let originalUrl = atob(firstDecoding);
-            return originalUrl;
-        } catch (e) {
-            console.error("Error decoding URL:", e, "Encoded string:", encoded);
-            return "";
-        }
-    }
-
     // Obfuscated URL Constants
     // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
+
     const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];
     const MEMBER_API_indexMapping = { "0": "4", "1": "0", "2": "9", "3": "2", "4": "3", "5": "6", "6": "7", "7": "8", "8": "1", "9": "5", "10": "11", "11": "10" };
     const MEMBER_API = getUrl(reconstructObfuscated(MEMBER_API_segments, MEMBER_API_indexMapping));
@@ -82,138 +59,315 @@
     const FINANCIAL_TRANSACTION_indexMapping = { "0": "2", "1": "10", "2": "0", "3": "9", "4": "6", "5": "11", "6": "5", "7": "4", "8": "1", "9": "3", "10": "7", "11": "8" };
     const FINANCIAL_TRANSACTION_API = getUrl(reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping));
 
+    // BENEFIT_API: https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1
+    const BENEFIT_API_segments = ["ZMeTltZFc*", "VzVsZ_", "1amRHbHZibk11WVcxbGNtbGpZ#", "Z6ZEV4dmVXRnNkSGxDWlc1bFptbDBjMVJ5WVdOclpYSnpM!", "b+", "l@", "UhCeVpYTnpMbU52Y$", "ll4+", "YUhSMGNI#", "M5U1p@", "TT)", "XRmtRbV!"];
+    const BENEFIT_API_indexMapping = { "0": "8", "1": "10", "2": "0", "3": "2", "4": "1", "5": "6", "6": "5", "7": "9", "8": "11", "9": "3", "10": "4", "11": "7" };
+    const BENEFIT_API = getUrl(reconstructObfuscated(BENEFIT_API_segments, BENEFIT_API_indexMapping));
+
     // =========================================================================
     // Section 2: Global State Variables
     // =========================================================================
-    let accountData = [];
-    let offerData = [];
-    let lastUpdate = "";
-    let currentView = 'summary'; // Options: "summary", "members", "offers"
-    let isMinimized = true;
-    let currentStatusFilter = "Active"; // Options: "all", "Active", "Canceled"
-    let currentTypeFilter = "all";    // Options: "all", "BASIC", "SUPP"
-    let runInBatchesLimit = 50;
-    let showFavoritesOnly = false;
-    let offerSearchKeyword = "";
-    let offerSearchMembersKeyword = "";
-    let benefitTrackers = [];
 
-    // Global sort states for members & offers
-    let sortState = { key: "", direction: 1 };
-    let offerSortState = { key: "", direction: 1 };
+    //  1) PRIMARY DATA & TRACKERS
+    let accountData = [];       // Holds all account/member info from the API
+    let offerData = [];         // Holds all offers (eligible and enrolled status)
+    let benefitTrackers = [];   // Holds benefit tracker info for each card
+    let priorityCards = [];  // List of card endings that have top priority
+    let excludedCards = [];  // List of card endings to skip automatically
 
-    // Global variables for card priority and exclusion
-    let priorityCards = [];   // Array of card endings that should be added immediately
-    let excludedCards = [];   // Array of card endings that should be skipped
+    //  2) TIMESTAMPS & BATCH CONFIG
+    let lastUpdate = "";        // Last time data was fetched
+    let runInBatchesLimit = 50; // Concurrency limit when enrolling in batches
 
+    //  3) VIEW / UI STATES
+    let currentView = "summary";  // Possible: "summary", "members", "offers", "benefits"
+    let isMinimized = true;       // Whether the main container is collapsed
 
-    // Global object to store independent scroll positions per view
+    //  4) FILTER STATES
+    let currentStatusFilter = "Active"; // "all", "Active", "Canceled"
+    let currentTypeFilter = "all";     // "all", "BASIC", "SUPP"
+    let showFavoritesOnly = false;     // Hide non-favorite offers
+    let offerSearchKeyword = "";       // Merchant/offer text search
+    let offerSearchMembersKeyword = "";// Searching among members (by offer name)
+    let offerSearchCardEnding = "";    // Searching among offers by card ending
+
+    //  5) SORTING STATES SCROLL POSITIONS PER VIEW
+    let sortState = { key: "", direction: 1 };      // For member table
+    let offerSortState = { key: "", direction: 1 }; // For offer table
     const globalViewState = {
         summary: { scrollTop: 0 },
         members: { scrollTop: 0 },
         offers: { scrollTop: 0 },
-        benefits: { scrollTop: 0 }
+        benefits: { scrollTop: 0 },
     };
+
+    let content, viewBtns, toggleBtn, container, btnSummary, btnMembers, btnOffers, btnBenefits;
 
     // =========================================================================
     // Section 3: UI Elements Creation
     // =========================================================================
-    const container = document.createElement('div');
-    container.id = 'card-utility-overlay';
-    container.style.position = 'fixed';
-    container.style.top = '5%';
-    container.style.left = '5%';
-    container.style.backgroundColor = '#fff';
-    container.style.color = '#000';
-    container.style.border = '1px solid #000';
-    container.style.zIndex = '10000';
-    container.style.fontFamily = 'Arial, sans-serif';
-    container.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
-    container.style.maxHeight = '80vh';
-    container.style.overflow = 'hidden';
-    container.style.width = '90%'; // Overridden if minimized
 
-    const header = document.createElement('div');
-    header.id = 'card-utility-header';
-    header.style.backgroundColor = '#f0f0f0';
-    header.style.borderBottom = '1px solid #ccc';
-    header.style.padding = '5px 10px';
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
-    header.style.cursor = 'move';
+    // Helper: Create a new element with given properties and inline styles
+    function createEl(tag, { text = '', className = '', styles = {}, props = {} } = {}) {
+        const el = document.createElement(tag);
+        if (text) el.textContent = text;
+        if (className) el.className = className;
+        Object.assign(el.style, styles);
+        Object.entries(props).forEach(([key, value]) => el[key] = value);
+        return el;
+    }
 
-    const title = document.createElement('span');
-    title.textContent = 'AMaxOffer';
+    // Helper: Create a button with hover effects
+    function createButton(label, onClick, { styles = {} } = {}) {
+        const btn = createEl('button', {
+            text: label, styles: {
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '8px 20px',
+                border: 'none',
+                background: 'transparent',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                color: '#2c3e50',
+                fontWeight: '500',
+                ...styles
+            }
+        });
+        btn.addEventListener('click', onClick);
+        btn.addEventListener('mouseover', () => {
+            btn.style.transform = 'scale(1.05)';
+            btn.style.backgroundColor = '#f0f0f0';
+        });
+        btn.addEventListener('mouseout', () => {
+            btn.style.transform = 'none';
+            btn.style.backgroundColor = 'transparent';
+        });
+        return btn;
+    }
 
-    // View buttons container
-    const viewButtons = document.createElement('div');
-    viewButtons.style.display = 'flex';
-    viewButtons.style.gap = '40px';
+    // Build the UI container with header and content area
+    function buildUI() {
+        const fontStyle = document.createElement('style');
+        fontStyle.textContent = `
+        @font-face {
+            font-family: 'AmexFont';
+            src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/dls-fonts/1.0.0/package/dist/fonts/325e6ad0-38fb-4bad-861c-d965eab101d5-3.woff") format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+        /* Example: Apply the custom font to your overlay container */
+        #card-utility-overlay {
+            font-family: 'AmexFont', 'Segoe UI', system-ui, sans-serif;
+        }
+        `;
+        document.head.appendChild(fontStyle);
+        // Increased shadow and darker background to separate from page
+        const container = createEl('div', {
+            props: { id: 'card-utility-overlay' },
+            styles: {
+                position: 'fixed',
+                top: '5%',
+                left: '5%',
+                background: 'url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.28.0/package/dist/img/brand/worldservice-tile-gray.svg") repeat, #fefefe',
+                borderRadius: '12px',
+                zIndex: '10000',
+                fontFamily: "'AmexFont', 'Segoe UI', system-ui, sans-serif",
+                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.42)', // stronger shadow for separation
+                maxHeight: '90vh',
+                overflow: 'hidden',
+                width: '90%',
+                maxWidth: '1400px',
+                border: '1px solid rgba(0,0,0,0.15)',
+                transition: 'all 0.3s ease'
+            }
+        });
 
-    // Individual view buttons
-    const btnSummary = document.createElement('button');
-    btnSummary.textContent = 'Summary';
-    btnSummary.style.cursor = 'pointer';
-    btnSummary.style.fontSize = '20px';
+        const title = createEl('span', {
+            text: 'AMaxOffer',
+            styles: {
+                fontSize: '1.4rem',
+                fontWeight: '600',
+                background: 'linear-gradient(45deg, #4CAF50, #2196F3)',
+                WebkitBackgroundClip: 'text',
+                color: 'transparent',
+                letterSpacing: '-0.5px'
+            }
+        });
 
-    const btnMembers = document.createElement('button');
-    btnMembers.textContent = 'Members';
-    btnMembers.style.cursor = 'pointer';
-    btnMembers.style.fontSize = '20px';
+        // Create view buttons with improved logic
+        const btnSummary = createButton('Summary', () => switchView('summary', btnSummary));
+        const btnMembers = createButton('Members', () => switchView('members', btnMembers));
+        const btnOffers = createButton('Offers', () => switchView('offers', btnOffers));
+        const btnBenefits = createButton('Benefits', () => switchView('benefits', btnBenefits));
 
-    const btnOffers = document.createElement('button');
-    btnOffers.textContent = 'Offer Map';
-    btnOffers.style.cursor = 'pointer';
-    btnOffers.style.fontSize = '20px';
+        const viewBtns = createEl('div', {
+            styles: {
+                display: 'flex',
+                gap: '12px',
+                background: '#f8f9fa',
+                borderRadius: '8px',
+                padding: '4px'
+            }
+        });
+        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => viewBtns.appendChild(btn));
 
-    viewButtons.appendChild(btnSummary);
-    viewButtons.appendChild(btnMembers);
-    viewButtons.appendChild(btnOffers);
+        // Toggle button for expanding/minimizing the container
+        const toggleBtn = createButton('➕', toggleMinimize, {
+            styles: {
+                fontSize: '1.2rem',
+                border: '1px dashed #ccc',
+                borderRadius: '6px',
+                width: '50px',
+                height: '50px',
+                display: 'inline-flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }
+        });
+        toggleBtn.addEventListener('mouseover', () => toggleBtn.style.backgroundColor = '#f0f0f0');
+        toggleBtn.addEventListener('mouseout', () => toggleBtn.style.backgroundColor = 'transparent');
 
-    // Toggle button for minimizing/expanding the overlay
-    const toggleBtn = document.createElement('button');
-    toggleBtn.textContent = 'Minimize';
-    toggleBtn.style.cursor = 'pointer';
+        // Build header and content sections
+        const header = createEl('div', {
+            props: { id: 'card-utility-header' },
+            styles: {
+                backgroundColor: '#f8f9fa',
+                borderBottom: '1px solid rgba(0,0,0,0.08)',
+                padding: '12px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'grab',
+                userSelect: 'none'
+            }
+        });
+        header.append(title, viewBtns, toggleBtn);
 
-    // Append header children
-    header.appendChild(title);
-    header.appendChild(viewButtons);
-    header.appendChild(toggleBtn);
+        const content = createEl('div', {
+            props: { id: 'card-utility-content' },
+            styles: {
+                padding: '20px',
+                overflowY: 'auto',
+                maxHeight: 'calc(80vh - 64px)'
+            },
+            text: 'Loading...'
+        });
 
-    // Main content area
-    const content = document.createElement('div');
-    content.id = 'card-utility-content';
-    content.style.padding = '10px';
-    content.style.overflowY = 'auto';
-    content.style.maxHeight = 'calc(80vh - 40px)';
-    content.innerHTML = 'Loading...';
+        // Append header and content to container
+        container.append(header, content);
+        document.body.appendChild(container);
 
-    // Append header and content to container
-    container.appendChild(header);
-    container.appendChild(content);
+        // Set initial UI state
+        content.style.display = 'none';
+        viewBtns.style.display = 'none';
+        container.style.width = '200px';
+        container.style.height = '75px'
+        toggleBtn.textContent = '➕';
 
-    const btnBenefits = document.createElement('button');
-    btnBenefits.textContent = 'Benefits';
-    btnBenefits.style.cursor = 'pointer';
-    btnBenefits.style.fontSize = '20px';
-    viewButtons.appendChild(btnBenefits);
+        // Make header draggable
+        makeDraggable(header, container);
+        return { container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits };
+    }
 
-    // Add event listener to switch to the Benefits view
-    btnBenefits.addEventListener('click', () => {
+    // Simple function to make an element draggable
+    function makeDraggable(handle, container) {
+        handle.addEventListener('mousedown', (e) => {
+            const rect = container.getBoundingClientRect();
+            const shiftX = e.clientX - rect.left;
+            const shiftY = e.clientY - rect.top;
+
+            const onMouseMove = (e2) => {
+                container.style.left = `${e2.clientX - shiftX}px`;
+                container.style.top = `${e2.clientY - shiftY}px`;
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', () => {
+                document.removeEventListener('mousemove', onMouseMove);
+            }, { once: true });
+        });
+    }
+
+    // Toggle minimize/expand logic
+    function toggleMinimize() {
+        isMinimized = !isMinimized;
+        content.style.display = isMinimized ? 'none' : 'block';
+        viewBtns.style.display = isMinimized ? 'none' : 'flex';
+        toggleBtn.textContent = isMinimized ? '➕' : '➖';
+        container.style.width = isMinimized ? '200px' : '90%';
+        container.style.height = isMinimized ? '75px' : 'auto'; // Reduced height when minimized
+        container.style.transform = isMinimized ? 'scale(0.98)' : 'none';
+        container.style.boxShadow = isMinimized
+            ? '0 12px 18px rgba(0,0,0,0.20)'
+            : '0 12px 32px rgba(0,0,0,0.30)';
+        if (!isMinimized) {
+            // Listen for the transition to finish (e.g., height transition)
+            const onTransitionEnd = (e) => {
+                if (e.propertyName === 'height') {
+                    renderCurrentView();
+                    container.removeEventListener('transitionend', onTransitionEnd);
+                }
+            };
+            container.addEventListener('transitionend', onTransitionEnd);
+        }
+    }
+
+    // View switching logic: save state, update active button style, and re-render view
+    function switchView(view, activeBtn) {
         saveCurrentScrollState();
-        currentView = 'benefits';
-        // Update button styles to reflect active view
-        btnBenefits.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
+        currentView = view;
+        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
+            btn.style.backgroundColor = (btn === activeBtn) ? '#4CAF50' : 'transparent';
+            btn.style.color = (btn === activeBtn) ? 'black' : '#2c3e50';
+            btn.style.fontWeight = (btn === activeBtn) ? '800' : '500';
+        });
         renderCurrentView();
-    });
+    }
+
+    // Save current scroll state for the active view
+    function saveCurrentScrollState() {
+        if (content) {
+            globalViewState[currentView].scrollTop = content.scrollTop;
+        }
+    }
+
+
+    const ui = buildUI();
+    // Destructure our UI elements for use in the rest of your code
+    ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
+
+
 
     // =========================================================================
     // Section 4: General Helper Functions
     // =========================================================================
+
+    // Utility to reconstruct obfuscated URLs
+    function reconstructObfuscated(obfSegments, indexMap) {
+        let ordered = [];
+        Object.keys(indexMap)
+            .sort((a, b) => parseInt(a) - parseInt(b))
+            .forEach(key => {
+                let seg = obfSegments[Number(indexMap[key])];
+                seg = seg.slice(0, -1);
+                ordered.push(seg);
+            });
+        return ordered.join('');
+    }
+
+
+    // Utility to decode Base64 twice to retrieve original URL
+    function getUrl(encoded) {
+        try {
+            let firstDecoding = atob(encoded);
+            let originalUrl = atob(firstDecoding);
+            return originalUrl;
+        } catch (e) {
+            console.error("Error decoding URL:", e, "Encoded string:", encoded);
+            return "";
+        }
+    }
+
 
     // Save the current scroll position for the active view
     function saveCurrentScrollState() {
@@ -221,6 +375,7 @@
             globalViewState[currentView].scrollTop = content.scrollTop;
         }
     }
+
 
     // Debounce utility for limiting rapid function calls
     function debounce(func, wait) {
@@ -230,6 +385,7 @@
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
+
 
     function formatDate(dateStr, roundUp = false) {
         let d = new Date(dateStr);
@@ -243,9 +399,12 @@
         return `${mm}-${dd}-${yy}`;
     }
 
+
     function sanitizeValue(val) {
         return (val === "N/A" || val === null || val === undefined) ? "0" : val;
     }
+
+
     // Parse card index into main and sub-index components
     function parseCardIndex(indexStr) {
         if (!indexStr) return [0, 0];
@@ -255,6 +414,8 @@
         return [main, sub];
     }
 
+
+
     // Parse a numeric value from a string, cleaning common symbols
     function parseNumericValue(str) {
         if (!str) return NaN;
@@ -262,16 +423,24 @@
         return parseFloat(cleaned) || NaN;
     }
 
+
+
     // Run tasks in batches to control concurrency
-    async function runInBatches(tasks, limit = 8) {
+    async function runInBatches(tasks, limit) {
+        const results = [];
         let i = 0;
         while (i < tasks.length) {
             const chunk = tasks.slice(i, i + limit);
-            await Promise.all(chunk.map(fn => fn()));
+            // Each “task” returns a single object: { offerId, accountToken, result: boolean }
+            const chunkResults = await Promise.all(chunk.map(fn => fn()));
+            results.push(...chunkResults);
             i += limit;
         }
+        return results;
     }
 
+
+    // Utility to get the basic account ending for a supplementary account
     function getBasicAccountEndingForSuppAccount(suppAccount) {
         // For a supplementary account, cardIndex is in the form "N-X"
         const parts = suppAccount.cardIndex.split('-');
@@ -286,63 +455,12 @@
         return "N/A";
     }
 
-    function applyMemberSort() {
-        if (sortState.key) {
-            if (sortState.key === 'cardIndex') {
-                accountData.sort((a, b) => {
-                    const [aMain, aSub] = parseCardIndex(a.cardIndex);
-                    const [bMain, bSub] = parseCardIndex(b.cardIndex);
-                    if (aMain === bMain) {
-                        return sortState.direction * (aSub - bSub);
-                    }
-                    return sortState.direction * (aMain - bMain);
-                });
-            } else {
-                accountData.sort((a, b) => {
-                    const valA = a[sortState.key] || "";
-                    const valB = b[sortState.key] || "";
-                    return sortState.direction * valA.toString().localeCompare(valB.toString());
-                });
-            }
-        }
-    }
 
-    function applyOfferSort() {
-        if (offerSortState.key) {
-            if (offerSortState.key === "favorite") {
-                offerData.sort((a, b) => {
-                    if (a.favorite === b.favorite) return 0;
-                    return a.favorite ? -1 : 1;
-                });
-            } else {
-                const numericColumns = ["reward", "threshold", "percentage"];
-                offerData.sort((a, b) => {
-                    const valA = a[offerSortState.key] || "";
-                    const valB = b[offerSortState.key] || "";
-                    if (numericColumns.includes(offerSortState.key)) {
-                        const numA = parseNumericValue(valA);
-                        const numB = parseNumericValue(valB);
-                        if (isNaN(numA) && isNaN(numB)) {
-                            return offerSortState.direction * valA.localeCompare(valB);
-                        } else if (isNaN(numA)) {
-                            return 1 * offerSortState.direction;
-                        } else if (isNaN(numB)) {
-                            return -1 * offerSortState.direction;
-                        }
-                        return offerSortState.direction * (numA - numB);
-                    } else if (offerSortState.key === "eligibleCards" || offerSortState.key === "enrolledCards") {
-                        const lenA = Array.isArray(valA) ? valA.length : 0;
-                        const lenB = Array.isArray(valB) ? valB.length : 0;
-                        return offerSortState.direction * (lenA - lenB);
-                    } else {
-                        return offerSortState.direction * valA.toString().localeCompare(valB.toString());
-                    }
-                });
-            }
-        }
-    }
 
-    function sortData(key) {
+
+
+    // Utility to sort the account data based on a key
+    function sort_memberTab(key) {
         if (sortState.key === key) {
             sortState.direction *= -1;
         } else {
@@ -365,303 +483,65 @@
                 return sortState.direction * valA.toString().localeCompare(valB.toString());
             });
         }
-        renderCurrentView();
+        saveCurrentScrollState();
+        const container = document.getElementById('members-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(renderMembers_table());
+        }
     }
 
-    // =========================================================================
-    // Section 5: Data Fetching Functions
-    // =========================================================================
 
-    async function fetchAccount() {
-        try {
-            const res = await fetch(MEMBER_API, {
-                method: 'GET',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (!res.ok) {
-                console.error('Failed to fetch account data (status not OK)');
-                return false;
+
+
+    // Utility to sort the offer data based on a key
+    function sort_offerTab(key) {
+        if (offerSortState.key === key) {
+            offerSortState.direction *= -1;
+        } else {
+            offerSortState.key = key;
+            offerSortState.direction = (key === "favorite") ? -1 : 1;
+        }
+        offerData.sort((a, b) => {
+            if (key === "favorite") {
+                if (a.favorite === b.favorite) return 0;
+                return a.favorite ? -1 : 1;
             }
-            const data = await res.json();
-            if (!data || !Array.isArray(data.accounts)) {
-                throw new Error('Invalid account data received');
-            }
-            accountData = [];
-            let mainCounter = 1;
-            data.accounts.forEach(item => {
-                const mainAccount = {
-                    display_account_number: item.account?.display_account_number || 'N/A',
-                    relationship: item.account?.relationship || 'N/A',
-                    supplementary_index: item.account?.supplementary_index || 'N/A',
-                    account_status: Array.isArray(item.status?.account_status) ? item.status.account_status[0] : (item.status?.account_status || 'N/A'),
-                    days_past_due: (item.status?.days_past_due !== undefined) ? item.status.days_past_due : 'N/A',
-                    account_setup_date: item.status?.account_setup_date || 'N/A',
-                    description: item.product?.description || 'N/A',
-                    small_card_art: item.product?.small_card_art || 'N/A',
-                    embossed_name: item.profile?.embossed_name || 'N/A',
-                    account_token: item.account_token || 'N/A',
-                    cardIndex: mainCounter.toString(),
-                    eligibleOffers: 0,
-                    enrolledOffers: 0
-                };
-                accountData.push(mainAccount);
-                if (Array.isArray(item.supplementary_accounts)) {
-                    item.supplementary_accounts.forEach(supp => {
-                        const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
-                        const suppAccount = {
-                            display_account_number: supp.account?.display_account_number || 'N/A',
-                            relationship: supp.account?.relationship || 'N/A',
-                            supplementary_index: supp.account?.supplementary_index || 'N/A',
-                            account_status: Array.isArray(supp.status?.account_status) ? supp.status.account_status[0] : (supp.status?.account_status || 'N/A'),
-                            days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
-                            account_setup_date: supp.status?.account_setup_date || 'N/A',
-                            description: supp.product?.description || 'N/A',
-                            small_card_art: supp.product?.small_card_art || 'N/A',
-                            embossed_name: supp.profile?.embossed_name || 'N/A',
-                            account_token: supp.account_token || 'N/A',
-                            cardIndex: `${mainCounter}-${suppIndex}`,
-                            eligibleOffers: 0,
-                            enrolledOffers: 0
-                        };
-                        accountData.push(suppAccount);
-                    });
+            const numericColumns = ["reward", "threshold", "percentage"];
+            const valA = a[key] || "";
+            const valB = b[key] || "";
+            if (numericColumns.includes(key)) {
+                const numA = parseNumericValue(valA);
+                const numB = parseNumericValue(valB);
+                if (isNaN(numA) && isNaN(numB)) {
+                    return offerSortState.direction * valA.localeCompare(valB);
+                } else if (isNaN(numA)) {
+                    return 1 * offerSortState.direction;
+                } else if (isNaN(numB)) {
+                    return -1 * offerSortState.direction;
                 }
-                mainCounter++;
-            });
-            btnSummary.style.fontWeight = 'bold';
-            renderCurrentView();
-            return true;
-        } catch (error) {
-            console.error('Error fetching account data:', error);
-            content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
-            return false;
-        }
-    }
-
-    async function fetchOffersForAccount(accountToken) {
-        const payload = {
-            accountNumberProxy: accountToken,
-            locale: "en-US",
-            offerRequestType: "LIST",
-            source: "STANDARD",
-            status: ["ELIGIBLE", "ENROLLED"],
-            typeOf: "MERCHANT",
-            userOffset: "-06:00"
-        };
-        try {
-            const res = await fetch(OFFERS_API, {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Origin': 'https://global.americanexpress.com'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(`Offers fetch error: ${res.status}`);
-            const json = await res.json();
-            return json.offers || [];
-        } catch (error) {
-            console.error(`Error fetching offers for token ${accountToken}:`, error);
-            return [];
-        }
-    }
-
-    async function fetchFinancialData(accountToken) {
-        if (!accountToken) {
-            console.error("Account token is required");
-            return null;
-        }
-        try {
-            // Decode the obfuscated URLs
-            const balancesUrl = FINANCIAL_BALANCES_API;
-            const transactionUrl = FINANCIAL_TRANSACTION_API;
-
-            // Run both fetch calls concurrently.
-            const [balancesResponse, transactionResponse] = await Promise.all([
-                fetch(balancesUrl, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'account_tokens': accountToken
-                    }
-                }),
-                fetch(transactionUrl, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'account_tokens': accountToken
-                    }
-                })
-            ]);
-
-            if (!balancesResponse.ok) { console.error("Failed to fetch balances, status:", balancesResponse.status); return null; }
-            if (!transactionResponse.ok) { console.error("Failed to fetch transaction summary, status:", transactionResponse.status); return null; }
-
-            const balanceData = await balancesResponse.json();
-            const transactionData = await transactionResponse.json();
-
-            let balanceInfo = {};
-            if (Array.isArray(balanceData) && balanceData.length > 0) {
-                balanceInfo = {
-                    statement_balance_amount: balanceData[0].statement_balance_amount,
-                    remaining_statement_balance_amount: balanceData[0].remaining_statement_balance_amount
-                };
-            } else { console.error("Unexpected data format for balances:", balanceData); }
-
-            let transactionInfo = {};
-            if (Array.isArray(transactionData) && transactionData.length > 0) {
-                transactionInfo = {
-                    debits_credits_payments_total_amount: transactionData[0].total?.debits_credits_payments_total_amount
-                };
-            } else { console.error("Unexpected data format for transaction summary:", transactionData); }
-
-            return {
-                ...balanceInfo,
-                ...transactionInfo
-            };
-        } catch (error) { console.error("Error fetching financial data:", error); return null; }
-    }
-
-    async function fetchFinancialDataForBasicCards() {
-        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
-        await Promise.all(basicAccounts.map(async (acc) => {
-            if (!acc.financialData) {
-                acc.financialData = await fetchFinancialData(acc.account_token);
+                return offerSortState.direction * (numA - numB);
+            } else if (key === "eligibleCards" || key === "enrolledCards") {
+                const lenA = Array.isArray(valA) ? valA.length : 0;
+                const lenB = Array.isArray(valB) ? valB.length : 0;
+                return offerSortState.direction * (lenA - lenB);
+            } else {
+                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
-        }));
-    }
-
-    async function fetchBestLoyaltyBenefitsTrackers(accountToken, locale = "en-US", limit = "ALL") {
-        const url = "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1";
-        const payload = [{ accountToken, locale, limit }];
-
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "*/*"
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                console.error("Failed to fetch Best Loyalty Benefits Trackers, status:", response.status);
-                return null;
-            }
-
-            const data = await response.json();
-            // data is expected to be an array of objects, each with a "trackers" array.
-            const trackers = [];
-            data.forEach(item => {
-                if (Array.isArray(item.trackers)) {
-                    item.trackers.forEach(trackerObj => {
-                        trackers.push({
-                            benefitId: trackerObj.benefitId,
-                            periodStartDate: trackerObj.periodStartDate,
-                            periodEndDate: trackerObj.periodEndDate,
-                            trackerDuration: trackerObj.trackerDuration, // e.g., "Monthly", "HalfYear", "CalenderYear", etc.
-                            benefitName: trackerObj.benefitName,
-                            status: trackerObj.status,
-                            targetAmount: trackerObj.tracker?.targetAmount,
-                            spentAmount: trackerObj.tracker?.spentAmount,
-                            remainingAmount: trackerObj.tracker?.remainingAmount
-                        });
-                    });
-                }
-            });
-            return trackers;
-        } catch (error) {
-            console.error("Error fetching Best Loyalty Benefits Trackers:", error);
-            return null;
-        }
-    }
-
-    async function fetchBenefitTrackersForBasicCards() {
-        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
-        let allTrackers = [];
-        await Promise.all(basicAccounts.map(async (acc) => {
-            const trackers = await fetchBestLoyaltyBenefitsTrackers(acc.account_token);
-            if (Array.isArray(trackers)) {
-                trackers.forEach(tracker => {
-                    // Attach the BASIC card's display number so we know which card the tracker is for
-                    tracker.cardEnding = acc.display_account_number;
-                    // Ensure numeric values for spent and target amounts
-                    tracker.spentAmount = parseFloat(tracker.spentAmount) || 0;
-                    tracker.targetAmount = parseFloat(tracker.targetAmount) || 0;
-                    allTrackers.push(tracker);
-                });
-            }
-        }));
-        return allTrackers;
-    }
-
-    // Retrieve current user's trust level via USCF APIs
-    async function getCurrentUserTrustLevel() {
-        return new Promise((resolve) => {
-            GM.xmlHttpRequest({
-                method: "GET",
-                url: USCF1_API,
-                onload: function (response) {
-                    if (response.status !== 200) {
-                        console.log("Session request failed");
-                        return resolve(0);
-                    }
-                    try {
-                        const sessionData = JSON.parse(response.responseText);
-                        const username = sessionData?.current_user?.username;
-                        if (!username) {
-                            console.log("No current user found");
-                            return resolve(0);
-                        }
-                        GM.xmlHttpRequest({
-                            method: "GET",
-                            url: USCF2_API + encodeURIComponent(username) + ".json",
-                            onload: function (resp) {
-                                if (resp.status !== 200) {
-                                    console.log(`User JSON fetch failed for ${username}`);
-                                    return resolve(0);
-                                }
-                                try {
-                                    const userData = JSON.parse(resp.responseText);
-                                    const trustLevel = userData?.user?.trust_level;
-                                    resolve(trustLevel ?? 0);
-                                } catch (e) {
-                                    console.error("Error parsing user JSON:", e);
-                                    resolve(0);
-                                }
-                            },
-                            onerror: function (err) {
-                                console.error("Error fetching user JSON:", err);
-                                resolve(0);
-                            }
-                        });
-                    } catch (e) {
-                        console.error("Error parsing session JSON:", e);
-                        resolve(0);
-                    }
-                },
-                onerror: function (err) {
-                    console.error("Error fetching session:", err);
-                    resolve(0);
-                }
-            });
         });
+        saveCurrentScrollState();
+
+        const container = document.getElementById('offers-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(renderOffers_table());
+        }
     }
 
-    // =========================================================================
-    // Section 6: Offer Parsing, Sorting, and Enrollment Functions
-    // =========================================================================
 
-    // Parse offer details from description text
+
+
+    // Utility to parse offer details from the description
     function parseOfferDetails(description = "") {
         const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
         const toMoneyString = (num) => {
@@ -765,18 +645,109 @@
         return { threshold, reward, percentage, times, total };
     }
 
-    async function enrollOffer(accountToken, offerIdentifier) {
+
+
+
+    // Merge the old favorites with the new offer data
+    function mergeFavorites(newOfferMap) {
+        const oldFavorites = {};
+        if (offerData && Array.isArray(offerData)) {
+            offerData.forEach(o => {
+                if (o.source_id) {
+                    oldFavorites[o.source_id] = o.favorite === true;
+                }
+            });
+        }
+        for (const sid in newOfferMap) {
+            if (oldFavorites.hasOwnProperty(sid)) {
+                newOfferMap[sid].favorite = oldFavorites[sid];
+            }
+        }
+    }
+
+
+    // =========================================================================
+    // Section 5: Data Fetching Functions
+    // =========================================================================
+
+    async function get_accounts() {
+        try {
+            const res = await fetch(MEMBER_API, {
+                method: 'GET',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                console.error('Failed to fetch account data (status not OK)');
+                return false;
+            }
+            const data = await res.json();
+            if (!data || !Array.isArray(data.accounts)) {
+                throw new Error('Invalid account data received');
+            }
+            accountData = [];
+            let mainCounter = 1;
+            data.accounts.forEach(item => {
+                const mainAccount = {
+                    display_account_number: item.account?.display_account_number || 'N/A',
+                    relationship: item.account?.relationship || 'N/A',
+                    supplementary_index: item.account?.supplementary_index || 'N/A',
+                    account_status: Array.isArray(item.status?.account_status) ? item.status.account_status[0] : (item.status?.account_status || 'N/A'),
+                    days_past_due: (item.status?.days_past_due !== undefined) ? item.status.days_past_due : 'N/A',
+                    account_setup_date: item.status?.account_setup_date || 'N/A',
+                    description: item.product?.description || 'N/A',
+                    small_card_art: item.product?.small_card_art || 'N/A',
+                    embossed_name: item.profile?.embossed_name || 'N/A',
+                    account_token: item.account_token || 'N/A',
+                    cardIndex: mainCounter.toString(),
+                    eligibleOffers: 0,
+                    enrolledOffers: 0
+                };
+                accountData.push(mainAccount);
+                if (Array.isArray(item.supplementary_accounts)) {
+                    item.supplementary_accounts.forEach(supp => {
+                        const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
+                        const suppAccount = {
+                            display_account_number: supp.account?.display_account_number || 'N/A',
+                            relationship: supp.account?.relationship || 'N/A',
+                            supplementary_index: supp.account?.supplementary_index || 'N/A',
+                            account_status: Array.isArray(supp.status?.account_status) ? supp.status.account_status[0] : (supp.status?.account_status || 'N/A'),
+                            days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
+                            account_setup_date: supp.status?.account_setup_date || 'N/A',
+                            description: supp.product?.description || 'N/A',
+                            small_card_art: supp.product?.small_card_art || 'N/A',
+                            embossed_name: supp.profile?.embossed_name || 'N/A',
+                            account_token: supp.account_token || 'N/A',
+                            cardIndex: `${mainCounter}-${suppIndex}`,
+                            eligibleOffers: 0,
+                            enrolledOffers: 0
+                        };
+                        accountData.push(suppAccount);
+                    });
+                }
+                mainCounter++;
+            });
+            btnSummary.style.fontWeight = 'bold';
+            return true;
+        } catch (error) {
+            console.error('Error fetching account data:', error);
+            content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
+            return false;
+        }
+    }
+
+    async function fetchRequest_offer(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
-            identifier: offerIdentifier,
-            identifierType: "OFFER",
             locale: "en-US",
-            offerRequestType: "DETAILS",
-            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
+            offerRequestType: "LIST",
+            source: "STANDARD",
+            status: ["ELIGIBLE", "ENROLLED"],
+            typeOf: "MERCHANT",
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(ENROLL_API, {
+            const res = await fetch(OFFERS_API, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -786,137 +757,16 @@
                 },
                 body: JSON.stringify(payload)
             });
-            if (!res.ok) throw new Error(`Enrollment fetch error: ${res.status}`);
-            return await res.json();
+            if (!res.ok) throw new Error(`Offers fetch error: ${res.status}`);
+            const json = await res.json();
+            return json.offers || [];
         } catch (error) {
-            console.error('Error enrolling offer:', error);
-            return { isEnrolled: false };
+            console.error(`Error fetching offers for token ${accountToken}:`, error);
+            return [];
         }
     }
 
-    function sortOfferData(key) {
-        if (offerSortState.key === key) {
-            offerSortState.direction *= -1;
-        } else {
-            offerSortState.key = key;
-            offerSortState.direction = (key === "favorite") ? -1 : 1;
-        }
-        offerData.sort((a, b) => {
-            if (key === "favorite") {
-                if (a.favorite === b.favorite) return 0;
-                return a.favorite ? -1 : 1;
-            }
-            const numericColumns = ["reward", "threshold", "percentage"];
-            const valA = a[key] || "";
-            const valB = b[key] || "";
-            if (numericColumns.includes(key)) {
-                const numA = parseNumericValue(valA);
-                const numB = parseNumericValue(valB);
-                if (isNaN(numA) && isNaN(numB)) {
-                    return offerSortState.direction * valA.localeCompare(valB);
-                } else if (isNaN(numA)) {
-                    return 1 * offerSortState.direction;
-                } else if (isNaN(numB)) {
-                    return -1 * offerSortState.direction;
-                }
-                return offerSortState.direction * (numA - numB);
-            } else if (key === "eligibleCards" || key === "enrolledCards") {
-                const lenA = Array.isArray(valA) ? valA.length : 0;
-                const lenB = Array.isArray(valB) ? valB.length : 0;
-                return offerSortState.direction * (lenA - lenB);
-            } else {
-                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
-            }
-        });
-        renderCurrentView();
-    }
-
-    async function batchEnrollOffer(offerSourceId, accountNumber) {
-        const activeCardMap = {};
-        accountData.forEach(acc => {
-            if (acc.account_status && acc.account_status.trim().toLowerCase() === "active") {
-                if (!accountNumber || acc.display_account_number === accountNumber) {
-                    activeCardMap[acc.display_account_number] = acc.account_token;
-                }
-            }
-        });
-
-        let totalEnrollAttempts = 0;
-        let successfulEnrollments = 0;
-        const tasks = [];
-
-        for (const offer of offerData) {
-            if (offerSourceId && offer.source_id !== offerSourceId) continue;
-            if (offer.category === "DEFAULT") {
-                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-            }
-            const accountTasks = [];
-            for (const card of offer.eligibleCards) {
-                const matchingAccounts = accountData.filter(acc =>
-                    acc.display_account_number === card &&
-                    acc.account_status &&
-                    acc.account_status.trim().toLowerCase() === "active"
-                );
-                for (const acc of matchingAccounts) {
-                    let fullName = acc.embossed_name;
-                    if (!fullName) continue;
-                    const parts = fullName.trim().split(/\s+/);
-                    const normalizedName = parts.length >= 2 ? parts[0] + " " + parts[parts.length - 1] : fullName;
-                    accountTasks.push({
-                        card,
-                        accountToken: acc.account_token,
-                        cardHolder: normalizedName
-                    });
-                }
-            }
-            accountTasks.sort((a, b) => a.cardHolder.localeCompare(b.cardHolder));
-            for (const task of accountTasks) {
-                tasks.push(async () => {
-                    totalEnrollAttempts++;
-                    // If the card is in the excluded list, skip it
-                    if (excludedCards.includes(task.card)) {
-                        console.log(`Skipping card ${task.card} as it is excluded.`);
-                        return;
-                    }
-                    // If the card is NOT in the priority list, wait 0.5 seconds before proceeding
-                    if (!priorityCards.includes(task.card)) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                    try {
-                        const result = await enrollOffer(task.accountToken, offer.offerId);
-                        if (result && result.isEnrolled) {
-                            successfulEnrollments++;
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) successful`);
-                            const idx = offer.eligibleCards.indexOf(task.card);
-                            if (idx !== -1) {
-                                offer.eligibleCards.splice(idx, 1);
-                            }
-                            if (!offer.enrolledCards.includes(task.card)) {
-                                offer.enrolledCards.push(task.card);
-                            }
-                        } else {
-                            console.log(`Enroll "${offer.name}" on card ${task.card} (${task.cardHolder}) failed`);
-                        }
-                    } catch (err) {
-                        console.error(`Error enrolling offer "${offer.name}" on card ${task.card} (${task.cardHolder}):`, err);
-                    }
-                });
-            }
-        }
-        globalViewState[currentView].scrollTop = content.scrollTop;
-        await runInBatches(tasks, runInBatchesLimit);
-        offerData = await refreshOffers();
-        await renderCurrentView();
-        if (totalEnrollAttempts > 0) {
-            const successRate = (successfulEnrollments / totalEnrollAttempts * 100).toFixed(2);
-            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
-        } else {
-            console.log('No enrollment attempts were made.');
-        }
-    }
-
-
-    async function refreshOffers() {
+    async function get_offers() {
         const offerInfoTable = {};
         const activeAccounts = accountData.filter(acc =>
             acc.account_status && acc.account_status.trim().toLowerCase() === "active"
@@ -931,7 +781,7 @@
             "Considering a Big Purchase"
         ];
         await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchOffersForAccount(acc.account_token);
+            const offers = await fetchRequest_offer(acc.account_token);
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
@@ -992,275 +842,402 @@
         return Object.values(offerInfoTable);
     }
 
-    function mergeFavorites(newOfferMap) {
-        const oldFavorites = {};
-        if (offerData && Array.isArray(offerData)) {
-            offerData.forEach(o => {
-                if (o.source_id) {
-                    oldFavorites[o.source_id] = o.favorite === true;
+    async function fetchRequest_balance(accountToken) {
+        if (!accountToken) {
+            console.error("Account token is required");
+            return null;
+        }
+        try {
+            const balancesUrl = FINANCIAL_BALANCES_API;
+            const transactionUrl = FINANCIAL_TRANSACTION_API;
+
+            const [balancesResponse, transactionResponse] = await Promise.all([
+                fetch(balancesUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'account_tokens': accountToken
+                    }
+                }),
+                fetch(transactionUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'account_tokens': accountToken
+                    }
+                })
+            ]);
+
+            if (!balancesResponse.ok) { console.error("Failed to fetch balances, status:", balancesResponse.status); return null; }
+            if (!transactionResponse.ok) { console.error("Failed to fetch transaction summary, status:", transactionResponse.status); return null; }
+
+            const balanceData = await balancesResponse.json();
+            const transactionData = await transactionResponse.json();
+
+            let balanceInfo = {};
+            if (Array.isArray(balanceData) && balanceData.length > 0) {
+                balanceInfo = {
+                    statement_balance_amount: balanceData[0].statement_balance_amount,
+                    remaining_statement_balance_amount: balanceData[0].remaining_statement_balance_amount
+                };
+            } else { console.error("Unexpected data format for balances:", balanceData); }
+
+            let transactionInfo = {};
+            if (Array.isArray(transactionData) && transactionData.length > 0) {
+                transactionInfo = {
+                    debits_credits_payments_total_amount: transactionData[0].total?.debits_credits_payments_total_amount
+                };
+            } else { console.error("Unexpected data format for transaction summary:", transactionData); }
+
+            return {
+                ...balanceInfo,
+                ...transactionInfo
+            };
+        } catch (error) { console.error("Error fetching financial data:", error); return null; }
+    }
+
+    async function get_balance() {
+        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
+        await Promise.all(basicAccounts.map(async (acc) => {
+            if (!acc.financialData) {
+                acc.financialData = await fetchRequest_balance(acc.account_token);
+            }
+        }));
+    }
+
+    async function fetchRequest_benefit(accountToken, locale = "en-US", limit = "ALL") {
+        const url = BENEFIT_API;
+        const payload = [{ accountToken, locale, limit }];
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "*/*"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                console.error("Failed to fetch Best Loyalty Benefits Trackers. Status:", response.status);
+                return null;
+            }
+
+            // The response is expected to be an array of objects, each containing a .trackers array.
+            const data = await response.json();
+            const trackers = [];
+
+            data.forEach(item => {
+                if (Array.isArray(item.trackers)) {
+                    item.trackers.forEach(trackerObj => {
+
+                        const {
+                            benefitId,
+                            sorBenefitId,
+                            category,
+                            periodStartDate,
+                            periodEndDate,
+                            trackerDuration,
+                            benefitName,
+                            qualifiedDetailAvailable,
+                            status,
+                            terms,
+                            tracker,   // subobject: { targetAmount, spentAmount, remainingAmount, targetUnit, targetCurrency, targetCurrencySymbol }
+                            progress   // subobject: { updateInterval, title, message, usedLabel, togoLabel, totalSavingsYearToDate, hideProgressBar }
+                        } = trackerObj;
+
+                        // Push everything into an array with a standardized structure
+                        trackers.push({
+                            benefitId,
+                            sorBenefitId,
+                            category,
+                            periodStartDate,
+                            periodEndDate,
+                            trackerDuration,        // e.g., "Monthly", "HalfYear", "CalenderYear", etc.
+                            benefitName,
+                            qualifiedDetailAvailable,
+                            status,
+                            terms,                  // array of HTML strings
+                            tracker: tracker ? {
+                                targetAmount: tracker.targetAmount,
+                                spentAmount: tracker.spentAmount,
+                                remainingAmount: tracker.remainingAmount,
+                                targetUnit: tracker.targetUnit,
+                                targetCurrency: tracker.targetCurrency,
+                                targetCurrencySymbol: tracker.targetCurrencySymbol
+                            } : null,
+                            progress: progress ? {
+                                updateInterval: progress.updateInterval,
+                                title: progress.title,
+                                message: progress.message,
+                                usedLabel: progress.usedLabel,
+                                togoLabel: progress.togoLabel,
+                                totalSavingsYearToDate: progress.totalSavingsYearToDate,
+                                hideProgressBar: progress.hideProgressBar
+                            } : null
+                        });
+                    });
                 }
             });
+
+            return trackers;
+        } catch (error) {
+            console.error("Error fetching Best Loyalty Benefits Trackers:", error);
+            return null;
         }
-        for (const sid in newOfferMap) {
-            if (oldFavorites.hasOwnProperty(sid)) {
-                newOfferMap[sid].favorite = oldFavorites[sid];
-            }
-        }
     }
 
-    // =========================================================================
-    // Section 7: UI Rendering Functions
-    // =========================================================================
-    function renderSummaryView() {
-        const numAccounts = accountData.length;
-        const updateTime = lastUpdate || "Never";
-        let distinctFullyEnrolled = 0;
-        let distinctNotFullyEnrolled = 0;
-        let totalEnrolled = 0;
-        let totalEligible = 0;
 
-        offerData.forEach(offer => {
-            if (offer.category === "DEFAULT") return;
-            const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
-            const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
-            totalEligible += eligibleCount;
-            totalEnrolled += enrolledCount;
-            const totalCount = eligibleCount + enrolledCount;
-            if (totalCount > 0 && enrolledCount === totalCount) {
-                distinctFullyEnrolled++;
-            } else if (eligibleCount > 0) {
-                distinctNotFullyEnrolled++;
+    async function get_benefit() {
+        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
+        let allTrackers = [];
+        await Promise.all(basicAccounts.map(async (acc) => {
+            const trackers = await fetchRequest_benefit(acc.account_token);
+            if (Array.isArray(trackers)) {
+                trackers.forEach(tracker => {
+                    // Attach the BASIC card's display number so we know which card the tracker is for
+                    tracker.cardEnding = acc.display_account_number;
+                    // Ensure numeric values for spent and target amounts
+                    tracker.spentAmount = parseFloat(tracker.spentAmount) || 0;
+                    tracker.targetAmount = parseFloat(tracker.targetAmount) || 0;
+                    allTrackers.push(tracker);
+                });
             }
-        });
+        }));
+        return allTrackers;
+    }
 
-        const summaryDiv = document.createElement('div');
-        summaryDiv.style.fontSize = '16px';
-        summaryDiv.style.lineHeight = '1.5';
-        summaryDiv.style.padding = '10px';
-        summaryDiv.style.textAlign = 'center';
-        summaryDiv.style.backgroundColor = '#f0f8ff';
-        summaryDiv.style.border = '1px solid #ccc';
-        summaryDiv.style.borderRadius = '8px';
-
-        summaryDiv.innerHTML = `
-            <p><strong>Number of Accounts:</strong> ${numAccounts} &nbsp;&nbsp; <strong>Last Update:</strong> ${updateTime}</p>
-            <p><strong>Distinct Offers Fully Enrolled:</strong> ${distinctFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Enrolled:</strong> ${totalEnrolled}</p>
-            <p><strong>Distinct Offers Not Fully Enrolled:</strong> ${distinctNotFullyEnrolled} &nbsp;&nbsp; <strong>Total Offers Eligible:</strong> ${totalEligible}</p>
-        `;
-
-        const btnContainer = document.createElement('div');
-        btnContainer.style.marginTop = '20px';
-        btnContainer.style.display = 'flex';
-        btnContainer.style.justifyContent = 'center';
-        btnContainer.style.gap = '60px';
-
-        const summaryRefreshBtn = document.createElement('button');
-        summaryRefreshBtn.textContent = 'Refresh';
-        summaryRefreshBtn.style.cursor = 'pointer';
-        summaryRefreshBtn.style.fontSize = '22px';
-        summaryRefreshBtn.style.padding = '8px 16px';
-        summaryRefreshBtn.addEventListener('click', async () => {
-            console.log("Refreshing data...");
-            const fetchStatus = await fetchAccount();
-            if (fetchStatus) {
-                const newOfferData = await refreshOffers();
-                await fetchFinancialDataForBasicCards();
-                const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
-                if (newOfferData && Array.isArray(newOfferData)) {
-                    offerData = newOfferData;
+    // Retrieve current user's trust level via USCF APIs
+    async function get_trustLevel() {
+        return new Promise((resolve) => {
+            GM.xmlHttpRequest({
+                method: "GET",
+                url: USCF1_API,
+                onload: function (response) {
+                    if (response.status !== 200) {
+                        console.log("Session request failed");
+                        return resolve(0);
+                    }
+                    try {
+                        const sessionData = JSON.parse(response.responseText);
+                        const username = sessionData?.current_user?.username;
+                        if (!username) {
+                            console.log("No current user found");
+                            return resolve(0);
+                        }
+                        GM.xmlHttpRequest({
+                            method: "GET",
+                            url: USCF2_API + encodeURIComponent(username) + ".json",
+                            onload: function (resp) {
+                                if (resp.status !== 200) {
+                                    console.log(`User JSON fetch failed for ${username}`);
+                                    return resolve(0);
+                                }
+                                try {
+                                    const userData = JSON.parse(resp.responseText);
+                                    const trustLevel = userData?.user?.trust_level;
+                                    resolve(trustLevel ?? 0);
+                                } catch (e) {
+                                    console.error("Error parsing user JSON:", e);
+                                    resolve(0);
+                                }
+                            },
+                            onerror: function (err) {
+                                console.error("Error fetching user JSON:", err);
+                                resolve(0);
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Error parsing session JSON:", e);
+                        resolve(0);
+                    }
+                },
+                onerror: function (err) {
+                    console.error("Error fetching session:", err);
+                    resolve(0);
                 }
-                if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
-                    benefitTrackers = newBenefitTrackers;
-                }
-                lastUpdate = new Date().toLocaleString();
-                await renderCurrentView();
-                setLocalStorage(accountData[0].account_token, ["accountData", "offerData", "lastUpdate", "benefitTrackers"]);
-            }
+            });
         });
-
-        const summaryEnrollBtn = document.createElement('button');
-        summaryEnrollBtn.textContent = 'Enroll All';
-        summaryEnrollBtn.style.cursor = 'pointer';
-        summaryEnrollBtn.style.fontSize = '22px';
-        summaryEnrollBtn.style.padding = '8px 16px';
-        summaryEnrollBtn.addEventListener('click', async () => {
-            await batchEnrollOffer();
-        });
-
-        btnContainer.appendChild(summaryEnrollBtn);
-        btnContainer.appendChild(summaryRefreshBtn);
-        summaryDiv.appendChild(btnContainer);
-        return summaryDiv;
     }
 
-
-    function renderMembersView() {
-        const containerDiv = document.createElement('div');
-        const filtersDiv = document.createElement('div');
-        filtersDiv.style.display = 'flex';
-        filtersDiv.style.alignItems = 'center';
-        filtersDiv.style.gap = '20px';
-        filtersDiv.style.marginBottom = '10px';
-
-        // Status Filter
-        const statusFilterDiv = document.createElement('div');
-        statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
-        const statusFilterLabel = document.createElement('label');
-        statusFilterLabel.textContent = 'Filter by Status: ';
-        statusFilterDiv.appendChild(statusFilterLabel);
-        const statusFilterSelect = document.createElement('select');
-        statusFilterSelect.id = 'status-filter';
-        const optionAll = document.createElement('option');
-        optionAll.value = 'all';
-        optionAll.textContent = 'All';
-        statusFilterSelect.appendChild(optionAll);
-        const optionActive = document.createElement('option');
-        optionActive.value = 'Active';
-        optionActive.textContent = 'Active';
-        statusFilterSelect.appendChild(optionActive);
-        const optionCanceled = document.createElement('option');
-        optionCanceled.value = 'Canceled';
-        optionCanceled.textContent = 'Canceled';
-        statusFilterSelect.appendChild(optionCanceled);
-        statusFilterSelect.value = currentStatusFilter;
-        statusFilterSelect.addEventListener('change', () => {
-            currentStatusFilter = statusFilterSelect.value;
-            renderCurrentView();
-        });
-        statusFilterDiv.appendChild(statusFilterSelect);
-        filtersDiv.appendChild(statusFilterDiv);
-
-        // Type Filter
-        const typeFilterDiv = document.createElement('div');
-        typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
-        const typeFilterLabel = document.createElement('label');
-        typeFilterLabel.textContent = 'Filter by Type: ';
-        typeFilterDiv.appendChild(typeFilterLabel);
-        const typeFilterSelect = document.createElement('select');
-        typeFilterSelect.id = 'type-filter';
-        const typeOptionAll = document.createElement('option');
-        typeOptionAll.value = 'all';
-        typeOptionAll.textContent = 'All';
-        typeFilterSelect.appendChild(typeOptionAll);
-        const typeOptionBasic = document.createElement('option');
-        typeOptionBasic.value = 'BASIC';
-        typeOptionBasic.textContent = 'BASIC';
-        typeFilterSelect.appendChild(typeOptionBasic);
-        const typeOptionSupp = document.createElement('option');
-        typeOptionSupp.value = 'SUPP';
-        typeOptionSupp.textContent = 'SUPP';
-        typeFilterSelect.appendChild(typeOptionSupp);
-        typeFilterSelect.value = currentTypeFilter;
-        typeFilterSelect.addEventListener('change', () => {
-            currentTypeFilter = typeFilterSelect.value;
-            renderCurrentView();
-        });
-        typeFilterDiv.appendChild(typeFilterSelect);
-        filtersDiv.appendChild(typeFilterDiv);
-
-        // Offer Search for Members
-        const offerSearchDiv = document.createElement('div');
-        offerSearchDiv.style.display = 'flex';
-        offerSearchDiv.style.alignItems = 'center';
-        const offerSearchLabel = document.createElement('label');
-        offerSearchLabel.textContent = 'Search Offer: ';
-        offerSearchDiv.appendChild(offerSearchLabel);
-        const offerSearchInput = document.createElement('input');
-        offerSearchInput.type = 'text';
-        offerSearchInput.placeholder = 'Enter offer keyword';
-        offerSearchInput.style.fontSize = '16px';
-        offerSearchInput.style.padding = '4px';
-        offerSearchInput.style.width = '200px';
-        offerSearchInput.value = offerSearchMembersKeyword;
-        offerSearchInput.addEventListener('input', debounce(() => {
-            offerSearchMembersKeyword = offerSearchInput.value.toLowerCase();
-            renderCurrentView();
-        }, 600));
-        offerSearchDiv.appendChild(offerSearchInput);
-        filtersDiv.appendChild(offerSearchDiv);
-
-        containerDiv.appendChild(filtersDiv);
-        containerDiv.appendChild(renderMembersTable());
-        return containerDiv;
-    }
-
-
-    function renderMembersTable() {
-        const headers = [
-            { label: "Logo", key: "small_card_art" },
-            { label: "Ending", key: "display_account_number" },
-            { label: "User", key: "embossed_name" },
-            { label: "Type", key: "relationship" },
-            { label: "Index", key: "cardIndex" },
-            { label: "Opening", key: "account_setup_date" },
-            { label: "Status", key: "account_status" },
-            { label: "Bal", key: "SB" },
-            { label: "Pending", key: "pending" },
-            { label: "Sta Bal", key: "remainingSB" },
-            { label: "Eligible", key: "eligibleOffers" },
-            { label: "Enrolled", key: "enrolledOffers" },
-            // New columns for per-account priority/exclusion
-            { label: "Priority", key: "priority" },
-            { label: "Excluded", key: "exclude" }
-        ];
-        const colWidths = {
-            small_card_art: "60px",
-            display_account_number: "80px",
-            embossed_name: "150px",
-            relationship: "80px",
-            cardIndex: "80px",
-            account_setup_date: "80px",
-            account_status: "80px",
-            SB: "80px",
-            pending: "80px",
-            remainingSB: "80px",
-            eligibleOffers: "80px",
-            enrolledOffers: "80px",
-            priority: "60px",
-            exclude: "60px"
+    async function fetchGet_enrollOffer(accountToken, offerIdentifier) {
+        const payload = {
+            accountNumberProxy: accountToken,
+            identifier: offerIdentifier,
+            identifierType: "OFFER",
+            locale: "en-US",
+            offerRequestType: "DETAILS",
+            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
+            userOffset: "-06:00"
         };
 
+        try {
+            const res = await fetch(ENROLL_API, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Origin': 'https://global.americanexpress.com'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+                console.error(`Enrollment fetch error: ${res.status}`);
+                return { offerId: offerIdentifier, accountToken: accountToken, result: false };
+            }
+            const json = await res.json();
+            return { offerId: offerIdentifier, accountToken: accountToken, result: json.isEnrolled };
+        } catch (error) {
+            console.error('Error enrolling offer:', error);
+            return { offerId: offerIdentifier, accountToken: accountToken, result: false };
+        }
+    }
+
+    async function get__batchEnrollOffer(offerSourceId, accountNumber) {
+        // Collect tasks for each eligible card in each offer
+        const tasks = [];
+        let totalEnrollAttempts = 0;
+        let successfulEnrollments = 0;
+
+        // Build tasks from offerData
+        for (const offer of offerData) {
+            // If a specific offer is targeted, skip others.
+            if (offerSourceId && offer.source_id !== offerSourceId) continue;
+            // Skip DEFAULT category offers.
+            if (offer.category === "DEFAULT") {
+                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
+                continue;
+            }
+            // For each eligible card
+            for (const card of offer.eligibleCards) {
+                // Find matching accounts that are active
+                const matchingAccounts = accountData.filter(acc =>
+                    acc.display_account_number === card &&
+                    acc.account_status?.trim().toLowerCase() === "active"
+                );
+                for (const acc of matchingAccounts) {
+                    // If a specific card (accountNumber) is requested, skip others.
+                    if (accountNumber && acc.display_account_number !== accountNumber) {
+                        continue;
+                    }
+                    // Create a task for each matching account.
+                    tasks.push(async () => {
+                        totalEnrollAttempts++;
+
+                        // Skip if the card is in the excluded list.
+                        if (excludedCards.includes(acc.display_account_number)) {
+                            console.log(`Skipping card ${acc.display_account_number} as it is excluded.`);
+                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                        }
+                        // For non-priority cards, wait 0.5 seconds.
+                        if (!priorityCards.includes(acc.display_account_number)) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                        try {
+                            const enrollResult = await fetchGet_enrollOffer(acc.account_token, offer.offerId);
+                            if (enrollResult.result) {
+                                successfulEnrollments++;
+                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} successful`);
+                                // Update offerData: remove from eligibleCards and add to enrolledCards
+                                const idx = offer.eligibleCards.indexOf(acc.display_account_number);
+                                if (idx !== -1) {
+                                    offer.eligibleCards.splice(idx, 1);
+                                }
+                                if (!offer.enrolledCards.includes(acc.display_account_number)) {
+                                    offer.enrolledCards.push(acc.display_account_number);
+                                }
+                                return { offerId: offer.offerId, accountToken: acc.account_token, result: true };
+                            } else {
+                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} failed`);
+                                return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                            }
+                        } catch (err) {
+                            console.error(`Error enrolling offer "${offer.name}" on card ${acc.display_account_number}:`, err);
+                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                        }
+                    });
+                }
+            }
+        }
+
+        // Run all tasks in batches and collect results.
+        const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
+
+        // Refresh the offer data and re-render the UI.
+        offerData = await get_offers();
+
+        if (totalEnrollAttempts > 0) {
+            const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
+            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
+        } else {
+            console.log('No enrollment attempts were made.');
+        }
+        // [ { offerId: "OFFER123", accountToken: "TOKEN_ABC", result: true }, ... ]
+        return enrollmentResults;
+    }
+
+    async function runInBatches(tasks, limit) {
+        const results = [];
+        let i = 0;
+        while (i < tasks.length) {
+            const chunk = tasks.slice(i, i + limit);
+            const chunkResults = await Promise.all(chunk.map(fn => fn()));
+            results.push(...chunkResults);
+            i += limit;
+        }
+        return results;
+    }
+
+
+    // =========================================================================
+    // Section 6: UI Rendering Functions
+    // =========================================================================
+
+    function renderTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '12px';
+        table.style.fontSize = '14px';
+        table.style.marginTop = '8px';
+        table.style.borderRadius = '8px';
+        table.style.overflow = 'hidden';
+        table.style.backgroundColor = '#fff';
+        table.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
 
         // Build table header
         const thead = document.createElement('thead');
+        thead.style.background = 'linear-gradient(to right, #f2f2f2, #e0e0e0)';
         const headerRow = document.createElement('tr');
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
-            th.style.borderBottom = '1px solid #000';
-            th.style.padding = '4px';
-            th.style.cursor = 'pointer';
+            th.style.padding = '12px';
             th.style.textAlign = 'center';
+            th.style.verticalAlign = 'middle';
+            th.style.fontWeight = '600';
+            th.style.color = '#333';
+            th.style.background = '#f8f9fa';
+            th.style.borderBottom = '2px solid #e0e0e0';
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
-                th.style.maxWidth = colWidths[headerItem.key];
-                th.style.whiteSpace = 'normal';
-                th.style.wordWrap = 'break-word';
             }
-            // Only add sort behavior for columns that exist in your data
-            if (["small_card_art", "display_account_number", "embossed_name", "relationship", "cardIndex", "account_setup_date", "account_status", "SB", "pending", "remainingSB", "eligibleOffers", "enrolledOffers"].includes(headerItem.key)) {
+            // Attach sort handler if this column is sortable.
+            if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
+                th.style.cursor = 'pointer';
                 th.setAttribute('data-sort-key', headerItem.key);
-                th.addEventListener('click', () => sortData(headerItem.key));
+                th.addEventListener('click', () => sortHandler(headerItem.key));
             }
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
-
-        // Filter accounts by status and type (do not filter by search term)
-        const filteredAccounts = accountData.filter(acc => {
-            const statusMatch = currentStatusFilter === 'all' ||
-                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
-            const typeMatch = currentTypeFilter === 'all' ||
-                acc.relationship === currentTypeFilter;
-            return statusMatch && typeMatch;
-        });
 
         // Helper: determine whether to highlight the account row based on the offer search keyword.
         function shouldHighlightAccount(acc) {
@@ -1277,108 +1254,33 @@
             });
         }
 
-        // Build table body.
+        // Build table body
         const tbody = document.createElement('tbody');
-        filteredAccounts.forEach(item => {
+        items.forEach((item, idx) => {
             const row = document.createElement('tr');
-
-            // Highlight row if account matches search
+            row.style.transition = 'background-color 0.3s ease, box-shadow 0.3s ease';
+            // Zebra stripes
+            row.style.backgroundColor = (idx % 2 === 0 ? '#fff' : '#fdfdfd');
             if (shouldHighlightAccount(item)) {
                 row.style.backgroundColor = 'lightyellow';
             }
-
             headers.forEach(headerItem => {
                 const td = document.createElement('td');
-                td.style.padding = '4px';
+                td.style.padding = '12px';
                 td.style.textAlign = 'center';
+                td.style.borderBottom = '1px solid #eee';
                 if (colWidths[headerItem.key]) {
                     td.style.width = colWidths[headerItem.key];
                     td.style.maxWidth = colWidths[headerItem.key];
                     td.style.whiteSpace = 'normal';
                     td.style.wordWrap = 'break-word';
                 }
-
-                // Render existing columns
-                if (headerItem.key === 'small_card_art') {
-                    if (item.small_card_art && item.small_card_art !== 'N/A') {
-                        const img = document.createElement('img');
-                        img.src = item.small_card_art;
-                        img.alt = "Card Logo";
-                        img.style.maxWidth = "40px";
-                        img.style.maxHeight = "40px";
-                        td.appendChild(img);
-                    } else {
-                        td.textContent = sanitizeValue('N/A');
-                    }
-                } else if (headerItem.key === 'eligibleOffers' || headerItem.key === 'enrolledOffers') {
-                    const count = item[headerItem.key];
-                    const btn = document.createElement('button');
-                    btn.textContent = sanitizeValue(count);
-                    btn.style.cursor = 'pointer';
-                    btn.addEventListener('click', () => {
-                        showMemberOffersPopup(
-                            item.display_account_number,
-                            headerItem.key === 'eligibleOffers' ? 'eligible' : 'enrolled'
-                        );
-                    });
-                    td.appendChild(btn);
-                } else if (headerItem.key === 'pending' || headerItem.key === 'remainingSB' || headerItem.key === 'SB') {
-                    // Only BASIC cards show financial data.
-                    if (item.relationship === "BASIC") {
-                        if (item.financialData) {
-                            if (headerItem.key === 'pending') {
-                                td.textContent = sanitizeValue(item.financialData.debits_credits_payments_total_amount);
-                            } else if (headerItem.key === 'remainingSB') {
-                                td.textContent = sanitizeValue(item.financialData.remaining_statement_balance_amount);
-                            } else if (headerItem.key === 'SB') {
-                                td.textContent = sanitizeValue(item.financialData.statement_balance_amount);
-                            }
-                        } else {
-                            td.textContent = "Loading...";
-                        }
-                    } else {
-                        td.textContent = "0";
-                    }
-                } else if (headerItem.key === 'relationship') {
-                    if (item.relationship === "SUPP") {
-                        td.textContent = getBasicAccountEndingForSuppAccount(item);
-                    } else {
-                        td.textContent = sanitizeValue(item[headerItem.key]);
-                    }
-                }
-                // Render new columns for Priority and Excluded
-                else if (headerItem.key === 'priority') {
-                    const chk = document.createElement('input');
-                    chk.type = 'checkbox';
-                    chk.checked = priorityCards.includes(item.display_account_number);
-                    chk.addEventListener('change', () => {
-                        if (chk.checked) {
-                            if (!priorityCards.includes(item.display_account_number)) {
-                                priorityCards.push(item.display_account_number);
-                            }
-                        } else {
-                            priorityCards = priorityCards.filter(num => num !== item.display_account_number);
-                        }
-                        setLocalStorage(accountData[0].account_token, ['priorityCards']);
-                    });
-                    td.appendChild(chk);
-                } else if (headerItem.key === 'exclude') {
-                    const chk = document.createElement('input');
-                    chk.type = 'checkbox';
-                    chk.checked = excludedCards.includes(item.display_account_number);
-                    chk.addEventListener('change', () => {
-                        if (chk.checked) {
-                            if (!excludedCards.includes(item.display_account_number)) {
-                                excludedCards.push(item.display_account_number);
-                            }
-                        } else {
-                            excludedCards = excludedCards.filter(num => num !== item.display_account_number);
-                        }
-                        setLocalStorage(accountData[0].account_token, ['excludedCards']);
-                    });
-                    td.appendChild(chk);
+                // Use the provided cellRenderer to fill the cell
+                const content = cellRenderer(item, headerItem);
+                if (content instanceof Node) {
+                    td.appendChild(content);
                 } else {
-                    td.textContent = sanitizeValue(item[headerItem.key]);
+                    td.textContent = content;
                 }
                 row.appendChild(td);
             });
@@ -1388,379 +1290,1159 @@
         return table;
     }
 
+    function createSearchInput(placeholder, value, callback) {
+        const container = document.createElement('div');
+        container.style.position = 'relative';
+        container.style.boxSizing = 'border-box';
+        container.style.width = '200px';  // fixed width for the search input
 
-    function renderOfferMap(offerArray) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = placeholder;
+        input.value = value;
+        input.style.width = '100%';
+        input.style.padding = '8px 32px 8px 12px';
+        input.style.borderRadius = '8px';
+        input.style.border = '1px solid #e0e0e0';
+        input.style.fontSize = '14px';
+        input.style.transition = 'all 0.3s ease';
+
+        input.addEventListener('input', debounce(() => {
+            callback(input.value.trim());
+            renderCurrentView();
+            setTimeout(() => input.focus(), 0);
+        }, 500));
+
+        // Search icon
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('width', '18');
+        icon.setAttribute('height', '18');
+        icon.style.position = 'absolute';
+        icon.style.right = '10px';
+        icon.style.top = '50%';
+        icon.style.transform = 'translateY(-50%)';
+        icon.style.opacity = '0.6';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z');
+        path.setAttribute('fill', 'currentColor');
+        icon.appendChild(path);
+
+        container.appendChild(input);
+        container.appendChild(icon);
+        return container;
+    }
+
+
+    async function renderSummary_page() {
+        // Compute offer statistics using reduce
+        const {
+            distinctFullyEnrolled,
+            distinctNotFullyEnrolled,
+            totalEligible,
+            totalEnrolled
+        } = offerData.reduce((stats, offer) => {
+            if (offer.category === "DEFAULT") return stats;
+            const eligible = offer.eligibleCards?.length || 0;
+            const enrolled = offer.enrolledCards?.length || 0;
+            stats.totalEligible += eligible;
+            stats.totalEnrolled += enrolled;
+            if (eligible + enrolled > 0) {
+                enrolled === (eligible + enrolled)
+                    ? stats.distinctFullyEnrolled++
+                    : stats.distinctNotFullyEnrolled++;
+            }
+            return stats;
+        }, { distinctFullyEnrolled: 0, distinctNotFullyEnrolled: 0, totalEligible: 0, totalEnrolled: 0 });
+
+        // Compute financial stats for BASIC accounts with financialData
+        const { totalBalance, totalPending, totalRemaining } = accountData
+            .filter(acc => acc.relationship === "BASIC" && acc.financialData)
+            .reduce((fin, acc) => {
+                fin.totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
+                fin.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
+                fin.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
+                return fin;
+            }, { totalBalance: 0, totalPending: 0, totalRemaining: 0 });
+
+        const numAccounts = accountData.length;
+        const updateTime = lastUpdate || "Never";
+
+        // Create main container
+        const summaryDiv = document.createElement('div');
+        summaryDiv.style.cssText = `
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            margin: 10px;
+            font-family: Arial, sans-serif;
+        `;
+
+        // Header: Title and Last Updated badge with fixed min-width and max-height
+        const header = document.createElement('div');
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e9ecef;
+        `;
+        const title = document.createElement('h2');
+        title.textContent = 'Account Overview';
+        title.style.cssText = `margin: 0; font-size: 1.5rem; color: #2d3436;`;
+        const updateBadge = document.createElement('div');
+        updateBadge.textContent = `Last Updated: ${updateTime}`;
+        updateBadge.style.cssText = `
+            background: #e3f2fd;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #1976d2;
+            min-width: 250px;
+            max-height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        header.appendChild(title);
+        header.appendChild(updateBadge);
+        summaryDiv.appendChild(header);
+
+        // Refresh container with status and refresh button
+        const refreshContainer = document.createElement('div');
+        refreshContainer.style.cssText = `display: flex; align-items: center; gap: 12px;`;
+        const refreshStatusEl = document.createElement('div');
+        refreshStatusEl.id = 'refresh-status';
+        refreshStatusEl.style.cssText = `font-size: 14px; color: #555;`;
+        refreshContainer.appendChild(refreshStatusEl);
+
+        // Helper function to create a stat card element with fixed min width and max height
+        const statItem = (label, value, color = '#2d3436') => {
+            const container = document.createElement('div');
+            container.style.cssText = `
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            flex: 1;
+            min-width: 160px;
+            max-width: 240px;
+            max-height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          `;
+            const statValue = document.createElement('div');
+            statValue.textContent = value;
+            statValue.style.cssText = `font-size: 1.8rem; font-weight: 600; color: ${color}; margin-bottom: 4px;`;
+            const statLabel = document.createElement('div');
+            statLabel.textContent = label;
+            statLabel.style.cssText = `font-size: 0.9rem; color: #6c757d;`;
+            container.append(statValue, statLabel);
+            return container;
+        };
+
+        // Helper to create a row of stat cards
+        const createStatRow = items => {
+            const row = document.createElement('div');
+            row.style.cssText = `display: flex; gap: 16px; justify-content: space-around;`;
+            items.forEach(item => row.appendChild(item));
+            return row;
+        };
+
+        const financialRow = createStatRow([
+            statItem('Basic Cards on Login', `${numAccounts}`, 'rgba(0, 0, 0, 0.69)'),
+            statItem('Total Balance', `$${totalBalance.toFixed(2)}`, 'rgba(22, 18, 19, 0.69)'),
+            statItem('Total Pending Charge', `$${totalPending.toFixed(2)}`, 'rgba(138, 113, 121, 0.65)'),
+            statItem('Remain Statement', `$${totalRemaining.toFixed(2)}`, 'rgba(231, 29, 99, 0.65)')
+        ]);
+        const enrollmentRow = createStatRow([
+            statItem('Offers Fully Enrolled', distinctFullyEnrolled, 'rgba(94, 14, 215, 0.8)'),
+            statItem('Offers Pending Enrollment', distinctNotFullyEnrolled, 'rgba(213, 36, 36, 0.77)'),
+            statItem('Total Eligible Offers', totalEligible, 'rgba(37, 108, 158, 0.74)'),
+            statItem('Total Enrolled Offers', totalEnrolled, 'rgba(3, 68, 114, 0.86)')
+        ]);
+
+        const statsContainer = document.createElement('div');
+        statsContainer.style.cssText = `display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;`;
+        statsContainer.append(financialRow, enrollmentRow);
+        summaryDiv.appendChild(statsContainer);
+
+        // Action buttons container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;`;
+
+        // Helper to create a button with icon and text
+        const createButton = (text, color, onClick) => {
+            const btn = document.createElement('button');
+            btn.style.cssText = `
+            padding: 12px 28px;
+            border: none;
+            border-radius: 6px;
+            background: ${color};
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.1s ease, opacity 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+          `;
+            btn.addEventListener('mouseover', () => btn.style.opacity = '0.9');
+            btn.addEventListener('mouseout', () => btn.style.opacity = '1');
+            btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.98)');
+            btn.addEventListener('mouseup', () => btn.style.transform = 'none');
+            btn.addEventListener('click', onClick);
+            return btn;
+        };
+
+        const refreshBtn = createButton('Refresh Data', '#3498db', async () => {
+            try {
+                refreshStatusEl.textContent = "Refreshing accounts...";
+                await get_accounts();
+                refreshStatusEl.textContent = "Refreshing offers...";
+                const newOfferData = await get_offers();
+                refreshStatusEl.textContent = "Refreshing balances...";
+                await get_balance();
+                refreshStatusEl.textContent = "Refreshing benefits...";
+                const newBenefitTrackers = await get_benefit();
+                if (Array.isArray(newOfferData)) offerData = newOfferData;
+                if (Array.isArray(newBenefitTrackers)) benefitTrackers = newBenefitTrackers;
+                lastUpdate = new Date().toLocaleString();
+                refreshStatusEl.textContent = "Refresh complete.";
+                await renderCurrentView();
+                setLocalStorage(accountData[0].account_token, [
+                    "accountData", "offerData", "lastUpdate", "benefitTrackers"
+                ]);
+            } catch (e) {
+                console.error('Error refreshing data:', e);
+                refreshStatusEl.textContent = "Error refreshing data.";
+            }
+        });
+        refreshBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
+          <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg> Refresh Data`;
+        refreshContainer.appendChild(refreshBtn);
+
+        const enrollBtn = createButton('Enroll All', '#27ae60', async () => {
+            try {
+                await get__batchEnrollOffer();
+                renderCurrentView();
+            } catch (e) {
+                console.error('Error enrolling all:', e);
+            }
+        });
+        enrollBtn.innerHTML = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
+          <path d="M19 13H5v-2h14v2z"/>
+        </svg> Enroll All`;
+        buttonContainer.append(refreshContainer, enrollBtn);
+        summaryDiv.appendChild(buttonContainer);
+
+        return summaryDiv;
+    }
+
+
+
+    function renderMembers_filterBar() {
+        const filtersCard = document.createElement('div');
+        filtersCard.style.background = '#ffffff';
+        filtersCard.style.borderRadius = '12px';
+        filtersCard.style.padding = '16px';
+        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        filtersCard.style.display = 'flex';
+        filtersCard.style.gap = '20px';
+        filtersCard.style.flexWrap = 'wrap';
+        filtersCard.style.width = '100%';
+        filtersCard.style.boxSizing = 'border-box';
+
+        // Status Filter: label and select side-by-side
+        const statusFilterDiv = document.createElement('div');
+        statusFilterDiv.style.display = 'flex';
+        statusFilterDiv.style.alignItems = 'center';
+        statusFilterDiv.style.gap = '8px';
+
+        const statusFilterLabel = document.createElement('label');
+        statusFilterLabel.textContent = 'Status:';
+        statusFilterLabel.style.fontWeight = '600';
+        statusFilterLabel.style.fontSize = '0.9rem';
+
+        const statusFilterSelect = document.createElement('select');
+        statusFilterSelect.id = 'status-filter';
+        statusFilterSelect.style.padding = '8px';
+        statusFilterSelect.style.borderRadius = '8px';
+        statusFilterSelect.style.border = '1px solid #e0e0e0';
+        statusFilterSelect.style.fontSize = '0.9rem';
+        statusFilterSelect.style.cursor = 'pointer';
+
+        const optionAll = document.createElement('option');
+        optionAll.value = 'all';
+        optionAll.textContent = 'All';
+        const optionActive = document.createElement('option');
+        optionActive.value = 'Active';
+        optionActive.textContent = 'Active';
+        const optionCanceled = document.createElement('option');
+        optionCanceled.value = 'Canceled';
+        optionCanceled.textContent = 'Canceled';
+
+        statusFilterSelect.appendChild(optionAll);
+        statusFilterSelect.appendChild(optionActive);
+        statusFilterSelect.appendChild(optionCanceled);
+        statusFilterSelect.value = currentStatusFilter;
+        statusFilterSelect.addEventListener('change', () => {
+            currentStatusFilter = statusFilterSelect.value;
+            renderCurrentView();
+        });
+
+        statusFilterDiv.appendChild(statusFilterLabel);
+        statusFilterDiv.appendChild(statusFilterSelect);
+        filtersCard.appendChild(statusFilterDiv);
+
+        // Type Filter: label and select side-by-side
+        const typeFilterDiv = document.createElement('div');
+        typeFilterDiv.style.display = 'flex';
+        typeFilterDiv.style.alignItems = 'center';
+        typeFilterDiv.style.gap = '8px';
+
+        const typeFilterLabel = document.createElement('label');
+        typeFilterLabel.textContent = 'Type:';
+        typeFilterLabel.style.fontWeight = '600';
+        typeFilterLabel.style.fontSize = '0.9rem';
+
+        const typeFilterSelect = document.createElement('select');
+        typeFilterSelect.id = 'type-filter';
+        typeFilterSelect.style.padding = '8px';
+        typeFilterSelect.style.borderRadius = '8px';
+        typeFilterSelect.style.border = '1px solid #e0e0e0';
+        typeFilterSelect.style.fontSize = '0.9rem';
+        typeFilterSelect.style.cursor = 'pointer';
+
+        const typeOptionAll = document.createElement('option');
+        typeOptionAll.value = 'all';
+        typeOptionAll.textContent = 'All';
+        const typeOptionBasic = document.createElement('option');
+        typeOptionBasic.value = 'BASIC';
+        typeOptionBasic.textContent = 'BASIC';
+        const typeOptionSupp = document.createElement('option');
+        typeOptionSupp.value = 'SUPP';
+        typeOptionSupp.textContent = 'SUPP';
+
+        typeFilterSelect.appendChild(typeOptionAll);
+        typeFilterSelect.appendChild(typeOptionBasic);
+        typeFilterSelect.appendChild(typeOptionSupp);
+        typeFilterSelect.value = currentTypeFilter;
+        typeFilterSelect.addEventListener('change', () => {
+            currentTypeFilter = typeFilterSelect.value;
+            renderCurrentView();
+        });
+
+        typeFilterDiv.appendChild(typeFilterLabel);
+        typeFilterDiv.appendChild(typeFilterSelect);
+        filtersCard.appendChild(typeFilterDiv);
+
+        // Offer Search Filter: label and search input on the same line
+        const offerSearchContainer = document.createElement('div');
+        offerSearchContainer.style.display = 'flex';
+        offerSearchContainer.style.alignItems = 'center';
+        offerSearchContainer.style.gap = '8px';
+
+        const offerSearchLabel = document.createElement('label');
+        offerSearchLabel.textContent = 'Search Offer:';
+        offerSearchLabel.style.fontWeight = '600';
+        offerSearchLabel.style.fontSize = '0.9rem';
+
+        // Reuse createSearchInput here. This function should return a container with the search input.
+        const offerSearchInputContainer = createSearchInput(
+            'Enter keyword',
+            offerSearchMembersKeyword,
+            val => {
+                offerSearchMembersKeyword = val.toLowerCase();
+                renderCurrentView();
+            }
+        );
+
+        offerSearchContainer.appendChild(offerSearchLabel);
+        offerSearchContainer.appendChild(offerSearchInputContainer);
+        filtersCard.appendChild(offerSearchContainer);
+
+        return filtersCard;
+    }
+
+
+    function renderMembers_table() {
+        const headers = [
+            { label: "Index", key: "cardIndex" },
+            { label: "Logo", key: "small_card_art" },
+            { label: "Ending", key: "display_account_number" },
+            { label: "User", key: "embossed_name" },
+            { label: "Type", key: "relationship" },
+            { label: "Opening", key: "account_setup_date" },
+            { label: "Status", key: "account_status" },
+            { label: "Bal", key: "StatementBalance" },
+            { label: "Pending", key: "pending" },
+            { label: "Rem StBl", key: "remainingStaBal" },
+            { label: "Elig", key: "eligibleOffers" },
+            { label: "Enrled", key: "enrolledOffers" },
+            { label: "Prior", key: "priority" },
+            { label: "Excld", key: "exclude" }
+        ];
+
+        const colWidths = {
+            cardIndex: "45px",
+            small_card_art: "60px",
+            display_account_number: "60px",
+            embossed_name: "150px",
+            relationship: "80px",
+            account_setup_date: "120px",
+            account_status: "80px",
+            StatementBalance: "80px",
+            pending: "80px",
+            remainingStaBal: "85px",
+            eligibleOffers: "60px",
+            enrolledOffers: "60px",
+            priority: "60px",
+            exclude: "60px"
+        };
+
+        // Filter accounts by status and type (do not filter by search term)
+        const filteredAccounts = accountData.filter(acc => {
+            const statusMatch = currentStatusFilter === 'all' ||
+                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
+            const typeMatch = currentTypeFilter === 'all' ||
+                acc.relationship === currentTypeFilter;
+            return statusMatch && typeMatch;
+        });
+
+
+        // Define cell rendering logic for members table
+        const cellRenderer = (item, headerItem) => {
+            const key = headerItem.key;
+            if (key === 'small_card_art') {
+                if (item.small_card_art && item.small_card_art !== 'N/A') {
+                    const img = document.createElement('img');
+                    img.src = item.small_card_art;
+                    img.alt = "Card Logo";
+                    img.style.maxWidth = "40px";
+                    img.style.maxHeight = "40px";
+                    return img;
+                }
+                return sanitizeValue('N/A');
+            } else if (key === 'eligibleOffers' || key === 'enrolledOffers') {
+                const count = item[key];
+                const btn = document.createElement('button');
+                btn.textContent = sanitizeValue(count);
+                btn.style.cursor = 'pointer';
+                btn.style.border = '1px solid #ccc';
+                btn.style.borderRadius = '4px';
+                btn.style.padding = '2px 6px';
+                btn.style.fontSize = '12px';
+                btn.style.backgroundColor = '#fafafa';
+                btn.addEventListener('mouseover', () => btn.style.backgroundColor = '#f0f0f0');
+                btn.addEventListener('mouseout', () => btn.style.backgroundColor = '#fafafa');
+                btn.addEventListener('click', () => {
+                    renderMembers_offerOnCard(item.display_account_number,
+                        (key === 'eligibleOffers') ? 'eligible' : 'enrolled');
+                });
+                return btn;
+            } else if (key === 'pending' || key === 'remainingStaBal' || key === 'StatementBalance') {
+                if (item.relationship === "BASIC") {
+                    if (item.financialData) {
+                        if (key === 'pending') {
+                            return sanitizeValue(item.financialData.debits_credits_payments_total_amount);
+                        } else if (key === 'remainingStaBal') {
+                            return sanitizeValue(item.financialData.remaining_statement_balance_amount);
+                        } else if (key === 'StatementBalance') {
+                            return sanitizeValue(item.financialData.statement_balance_amount);
+                        }
+                    }
+                    return "Loading...";
+                }
+                return "0";
+            } else if (key === 'relationship') {
+                if (item.relationship === "SUPP") {
+                    return getBasicAccountEndingForSuppAccount(item);
+                }
+                return sanitizeValue(item[key]);
+            } else if (key === 'priority') {
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = priorityCards.includes(item.display_account_number);
+                chk.addEventListener('change', () => {
+                    if (chk.checked) {
+                        if (!priorityCards.includes(item.display_account_number)) {
+                            priorityCards.push(item.display_account_number);
+                        }
+                    } else {
+                        priorityCards = priorityCards.filter(num => num !== item.display_account_number);
+                    }
+                    setLocalStorage(accountData[0].account_token, ['priorityCards']);
+                });
+                return chk;
+            } else if (key === 'exclude') {
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = excludedCards.includes(item.display_account_number);
+                chk.addEventListener('change', () => {
+                    if (chk.checked) {
+                        if (!excludedCards.includes(item.display_account_number)) {
+                            excludedCards.push(item.display_account_number);
+                        }
+                    } else {
+                        excludedCards = excludedCards.filter(num => num !== item.display_account_number);
+                    }
+                    setLocalStorage(accountData[0].account_token, ['excludedCards']);
+                });
+                return chk;
+            }
+            return sanitizeValue(item[key]);
+        };
+
+        // Define the sortable keys for members table
+        const sortableKeys = [
+            "cardIndex", "small_card_art", "display_account_number", "embossed_name",
+            "relationship", "account_setup_date", "account_status", "StatementBalance",
+            "pending", "remainingStaBal", "eligibleOffers", "enrolledOffers"
+        ];
+
+        const tableElement = renderTable(headers, colWidths, filteredAccounts, cellRenderer, sort_memberTab, sortableKeys);
         const containerDiv = document.createElement('div');
-        const filterRow = document.createElement('div');
-        filterRow.style.display = 'flex';
-        filterRow.style.alignItems = 'center';
-        filterRow.style.gap = '20px';
-        filterRow.style.margin = '10px';
+        containerDiv.appendChild(tableElement);
+        return containerDiv;
+    }
 
+    function renderMembers_offerOnCard(accountNumber, offerType) {
+        // Create the overlay with backdrop blur
+        const overlay = document.createElement('div');
+        overlay.id = 'offer-details-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        `;
+
+        // Modern popup container
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            position: relative;
+        `;
+
+        overlay.appendChild(popup);
+
+        // ───────── Top row: Title and Close Button ─────────
+        const topRow = document.createElement('div');
+        topRow.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        `;
+
+        const leftTitle = document.createElement('h3');
+        leftTitle.textContent = `Offers ${offerType} for card ending ${accountNumber}`;
+        leftTitle.style.cssText = `
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(45deg, #2c3e50, #4CAF50);
+            -webkit-background-clip: text;
+            color: transparent;
+        `;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        `;
+        closeBtn.addEventListener('mouseover', () => {
+            closeBtn.style.color = '#ff4444';
+        });
+        closeBtn.addEventListener('mouseout', () => {
+            closeBtn.style.color = '#666';
+        });
+        closeBtn.addEventListener('click', () => {
+            overlay.remove();
+        });
+
+        topRow.appendChild(leftTitle);
+        topRow.appendChild(closeBtn);
+        popup.appendChild(topRow);
+
+        // ───────── Content Area ─────────
+        const contentDiv = document.createElement('div');
+        contentDiv.style.cssText = `
+            font-size: 14px;
+            line-height: 1.4;
+        `;
+        popup.appendChild(contentDiv);
+
+        // Determine relevant offers based on offerType
+        let relevantOffers = [];
+        if (offerType === 'eligible') {
+            relevantOffers = offerData.filter(offer =>
+                Array.isArray(offer.eligibleCards) &&
+                offer.eligibleCards.includes(accountNumber)
+            );
+        } else if (offerType === 'enrolled') {
+            relevantOffers = offerData.filter(offer =>
+                Array.isArray(offer.enrolledCards) &&
+                offer.enrolledCards.includes(accountNumber)
+            );
+        }
+
+        if (relevantOffers.length === 0) {
+            contentDiv.textContent = `No ${offerType} offers found for card ${accountNumber}.`;
+        } else {
+            relevantOffers.forEach(offer => {
+                const offerPara = document.createElement('p');
+                offerPara.style.cssText = `
+                    margin: 6px 0;
+                    font-size: 14px;
+                    color: #333;
+                `;
+                offerPara.textContent = offer.name;
+                contentDiv.appendChild(offerPara);
+            });
+        }
+
+        document.body.appendChild(overlay);
+    }
+
+    function renderMembers_page() {
+        const containerDiv = document.createElement('div');
+        containerDiv.style.display = 'flex';
+        containerDiv.style.flexDirection = 'column';
+        containerDiv.style.gap = '16px';
+        containerDiv.style.padding = '16px';
+        containerDiv.style.maxWidth = '1300px';
+        containerDiv.style.margin = '0 auto';
+        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
+
+        return containerDiv;
+    }
+
+    function renderOffers_searchBar() {
+        const filterCard = document.createElement('div');
+        filterCard.style.background = '#ffffff';
+        filterCard.style.borderRadius = '12px';
+        filterCard.style.padding = '16px';
+        filterCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        filterCard.style.display = 'flex';
+        filterCard.style.gap = '20px';
+        filterCard.style.flexWrap = 'wrap';
+        filterCard.style.width = '100%';
+        filterCard.style.boxSizing = 'border-box';
+
+        // Favorites Toggle
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
         favCheckbox.checked = showFavoritesOnly;
+        favCheckbox.style.cursor = 'pointer';
         favCheckbox.addEventListener('change', () => {
             showFavoritesOnly = favCheckbox.checked;
             renderCurrentView();
         });
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
-        favLabel.style.fontSize = '16px';
+        favLabel.style.fontSize = '14px';
         favLabel.style.cursor = 'pointer';
+        favLabel.style.marginLeft = '4px';
+        const favContainer = document.createElement('div');
+        favContainer.style.display = 'flex';
+        favContainer.style.alignItems = 'center';
+        favContainer.appendChild(favCheckbox);
+        favContainer.appendChild(favLabel);
 
-        const searchInput = document.createElement('input');
-        searchInput.type = 'text';
-        searchInput.placeholder = 'Search Merchants...';
-        searchInput.style.fontSize = '16px';
-        searchInput.style.padding = '4px';
-        searchInput.style.width = '200px';
-        searchInput.value = offerSearchKeyword;
-        searchInput.addEventListener('input', debounce(() => {
-            offerSearchKeyword = searchInput.value.toLowerCase();
-            renderCurrentView();
-        }, 600));
+        // Search inputs
+        const merchantSearch = createSearchInput('Search merchants...', offerSearchKeyword,
+            val => offerSearchKeyword = val.toLowerCase());
+        const cardSearch = createSearchInput('Card ending...', offerSearchCardEnding,
+            val => offerSearchCardEnding = val);
 
-        filterRow.appendChild(favCheckbox);
-        filterRow.appendChild(favLabel);
-        filterRow.appendChild(searchInput);
-        containerDiv.appendChild(filterRow);
+        filterCard.appendChild(favContainer);
+        filterCard.appendChild(merchantSearch);
+        filterCard.appendChild(cardSearch);
 
-        const filteredOffers = offerArray.filter(o => {
+        return filterCard;
+    }
+
+    function renderOffers_table() {
+        // Filter offers based on search criteria.
+        const filteredOffers = offerData.filter(o => {
             if (showFavoritesOnly && !o.favorite) return false;
             if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
+            if (offerSearchCardEnding) {
+                const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(offerSearchCardEnding);
+                const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(offerSearchCardEnding);
+                if (!eligible && !enrolled) return false;
+            }
             return true;
         });
 
         const headers = [
-            { label: "Fav", key: "favorite" },
+            { label: "❤️", key: "favorite" },
             { label: "Logo", key: "logo" },
-            { label: "Name", key: "name" },
+            { label: "Offer", key: "name" },
             { label: "Type", key: "achievement_type" },
-            { label: "Category", key: "category" },
-            { label: "Exp Date", key: "expiry_date" },
-            { label: "Usage", key: "redemption_types" },
+            { label: "Cat", key: "category" },
+            { label: "Exp", key: "expiry_date" },
+            { label: "Usg", key: "redemption_types" },
             { label: "Description", key: "short_description" },
             { label: "Thres", key: "threshold" },
-            { label: "Reward", key: "reward" },
+            { label: "Rwd", key: "reward" },
             { label: "Pct", key: "percentage" },
             { label: "Elig", key: "eligibleCards" },
             { label: "Enrl", key: "enrolledCards" }
         ];
 
         const colWidths = {
-            favorite: "60px",
-            logo: "60px",
+            favorite: "35px",
+            logo: "70px",
             name: "220px",
-            achievement_type: "50px",
-            category: "60px",
-            expiry_date: "80px",
-            redemption_types: "45px",
-            short_description: "300px",
-            threshold: "80px",
+            achievement_type: "60px",
+            category: "40px",
+            expiry_date: "90px",
+            redemption_types: "80px",
+            short_description: "250px",
+            threshold: "90px",
             reward: "80px",
             percentage: "80px",
-            eligibleCards: "50px",
-            enrolledCards: "50px"
+            eligibleCards: "40px",
+            enrolledCards: "45px"
         };
 
-        const table = document.createElement('table');
-        table.style.width = '100%';
-        table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '12px';
-
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-        headers.forEach(headerItem => {
-            const th = document.createElement('th');
-            th.style.borderBottom = '1px solid #000';
-            th.style.padding = '4px';
-            th.style.cursor = 'pointer';
-            th.style.textAlign = 'center';
-            if (colWidths[headerItem.key]) {
-                th.style.width = colWidths[headerItem.key];
-                th.style.maxWidth = colWidths[headerItem.key];
-                th.style.whiteSpace = 'normal';
-                th.style.wordWrap = 'break-word';
+        // Define cell rendering logic for offers table
+        const cellRenderer = (item, headerItem) => {
+            const key = headerItem.key;
+            if (key === 'logo') {
+                if (item.logo && item.logo !== "N/A") {
+                    const img = document.createElement('img');
+                    img.src = item.logo;
+                    img.alt = "Offer Logo";
+                    img.style.maxWidth = "60px";
+                    img.style.maxHeight = "60px";
+                    return img;
+                }
+                return 'N/A';
+            } else if (key === 'achievement_type') {
+                let value = item.achievement_type;
+                if (value === "STATEMENT_CREDIT") {
+                    value = "Cash";
+                } else if (value === "MEMBERSHIP_REWARDS") {
+                    value = "MR";
+                }
+                return value;
+            } else if (key === 'category') {
+                if (item.category && item.category !== "N/A") {
+                    const cat = item.category.toString().toLowerCase().trim();
+                    // Map full names to an emoji (or short text)
+                    const categoryMap = {
+                        "default": "🔰",
+                        "dining": "🍽️",
+                        "entertainment": "🎭",
+                        "services": "⚙️",
+                        "shopping": "🛍️",
+                        "travel": "✈️"
+                    };
+                    return categoryMap[cat] || (cat.charAt(0).toUpperCase() + cat.slice(1));
+                }
+                return 'N/A';
+            } else if (key === 'redemption_types') {
+                if (item.redemption_types && item.redemption_types !== "N/A") {
+                    let parts = item.redemption_types.toString().split(",");
+                    let abbreviatedParts = parts.map(val => {
+                        let trimmed = val.trim().toLowerCase();
+                        if (trimmed.includes("instore")) return "🏬";
+                        if (trimmed.includes("online")) return "🌐";
+                        // Fallback: take the first three letters in uppercase
+                        return trimmed.toUpperCase().slice(0, 3);
+                    });
+                    return abbreviatedParts.join(", ");
+                }
+                return "N/A";
+            } else if (key === 'expiry_date') {
+                if (item.expiry_date && item.expiry_date !== 'N/A') {
+                    const d = new Date(item.expiry_date);
+                    if (!isNaN(d)) {
+                        const yy = d.getFullYear().toString().slice(-2);
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        return `${mm}-${dd}-${yy}`;
+                    }
+                    return 'N/A';
+                }
+                return 'N/A';
+            } else if (key === 'favorite') {
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = item.favorite === true;
+                chk.style.cursor = 'pointer';
+                chk.addEventListener('change', () => {
+                    item.favorite = chk.checked;
+                    setLocalStorage(accountData[0].account_token, ["offerData"]);
+                });
+                return chk;
+            } else if (key === 'eligibleCards' || key === 'enrolledCards') {
+                const cards = Array.isArray(item[key]) ? item[key] : [];
+                const count = cards.length;
+                const span = document.createElement('span');
+                span.textContent = count;
+                span.style.cursor = count > 0 ? 'pointer' : 'default';
+                span.style.color = count > 0 ? '#007bff' : '#999';
+                span.style.textDecoration = count > 0 ? 'underline' : 'none';
+                span.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (count > 0) {
+                        renderOffers_enrollCard(item.offerId);
+                    }
+                });
+                return span;
             }
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = headerItem.label;
-            labelSpan.style.cursor = 'pointer';
-            labelSpan.addEventListener('click', (event) => {
-                sortOfferData(headerItem.key);
-                event.stopPropagation();
-            });
-            th.appendChild(labelSpan);
-            th.dataset.colKey = headerItem.key;
-            headerRow.appendChild(th);
-        });
-        thead.appendChild(headerRow);
-        table.appendChild(thead);
+            return item[key];
+        };
 
-        const tbody = document.createElement('tbody');
-        filteredOffers.forEach(item => {
-            const row = document.createElement('tr');
-            headers.forEach(headerItem => {
-                const td = document.createElement('td');
-                td.style.padding = '4px';
-                td.style.textAlign = 'center';
-                td.dataset.colKey = headerItem.key;
-                if (colWidths[headerItem.key]) {
-                    td.style.width = colWidths[headerItem.key];
-                    td.style.maxWidth = colWidths[headerItem.key];
-                    td.style.whiteSpace = 'normal';
-                    td.style.wordWrap = 'break-word';
-                }
-                let cellValue = item[headerItem.key];
-                if (headerItem.key === 'logo') {
-                    if (cellValue && cellValue !== "N/A") {
-                        const img = document.createElement('img');
-                        img.src = cellValue;
-                        img.alt = "Logo";
-                        img.style.maxWidth = "60px";
-                        img.style.maxHeight = "60px";
-                        td.appendChild(img);
-                    } else {
-                        td.textContent = 'N/A';
-                    }
-                } else if (headerItem.key === 'achievement_type') {
-                    if (cellValue === "STATEMENT_CREDIT") {
-                        cellValue = "Cash";
-                    } else if (cellValue === "MEMBERSHIP_REWARDS") {
-                        cellValue = "MR";
-                    }
-                    td.textContent = cellValue;
-                } else if (headerItem.key === 'category') {
-                    if (cellValue && cellValue !== "N/A") {
-                        const str = cellValue.toString().toLowerCase();
-                        td.textContent = str.charAt(0).toUpperCase() + str.slice(1);
-                    } else {
-                        td.textContent = 'N/A';
-                    }
-                } else if (headerItem.key === 'redemption_types') {
-                    if (cellValue && cellValue !== "N/A") {
-                        let parts = cellValue.toString().split(",");
-                        let abbreviatedParts = parts.map(val => {
-                            let trimmed = val.trim().toLowerCase();
-                            if (trimmed.includes("instore")) return "INS";
-                            if (trimmed.includes("online")) return "ONL";
-                            return trimmed.toUpperCase().slice(0, 3);
-                        });
-                        td.textContent = abbreviatedParts.join(", ");
-                    } else {
-                        td.textContent = "N/A";
-                    }
-                } else if (headerItem.key === 'eligibleCards' || headerItem.key === 'enrolledCards') {
-                    const cards = Array.isArray(cellValue) ? cellValue : [];
-                    const count = cards.length;
-                    const containerDiv = document.createElement('div');
-                    containerDiv.style.display = 'flex';
-                    containerDiv.style.alignItems = 'center';
-                    containerDiv.style.justifyContent = 'center';
+        // Define the sortable keys for offers table
+        const sortableKeysOffers = [
+            "favorite", "logo", "name", "achievement_type", "category",
+            "expiry_date", "redemption_types", "short_description", "threshold",
+            "reward", "percentage", "eligibleCards", "enrolledCards"
+        ];
 
-                    const countSpan = document.createElement('span');
-                    countSpan.textContent = count;
-                    containerDiv.appendChild(countSpan);
-
-                    const viewBtn = document.createElement('button');
-                    viewBtn.textContent = 'View';
-                    viewBtn.style.marginLeft = '5px';
-                    viewBtn.style.fontSize = '10px';
-                    viewBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        WindowrRender_ViewCard(
-                            cards,
-                            item.offerId,
-                            headerItem.key === 'eligibleCards' ? "Eligible Cards" : "Enrolled Cards",
-                            e.clientX,
-                            e.clientY,
-                            headerItem.key === 'eligibleCards'
-                        );
-                    });
-                    containerDiv.appendChild(viewBtn);
-                    td.appendChild(containerDiv);
-                } else if (headerItem.key === 'expiry_date') {
-                    if (cellValue && cellValue !== 'N/A') {
-                        const d = new Date(cellValue);
-                        if (!isNaN(d)) {
-                            const yy = d.getFullYear().toString().slice(-2);
-                            const mm = String(d.getMonth() + 1).padStart(2, '0');
-                            const dd = String(d.getDate()).padStart(2, '0');
-                            td.textContent = `${mm}-${dd}-${yy}`;
-                        } else {
-                            td.textContent = 'N/A';
-                        }
-                    } else {
-                        td.textContent = 'N/A';
-                    }
-                } else if (headerItem.key === 'favorite') {
-                    const favCheckbox = document.createElement('input');
-                    favCheckbox.type = 'checkbox';
-                    favCheckbox.checked = item.favorite === true;
-                    favCheckbox.addEventListener('change', () => {
-                        item.favorite = favCheckbox.checked;
-                        setLocalStorage(accountData[0].account_token, ["offerData"]);
-                    });
-                    td.appendChild(favCheckbox);
-                } else {
-                    td.textContent = cellValue;
-                }
-                row.appendChild(td);
-            });
-            tbody.appendChild(row);
-        });
-        table.appendChild(tbody);
-        containerDiv.appendChild(table);
+        const tableElement = renderTable(headers, colWidths, filteredOffers, cellRenderer, sort_offerTab, sortableKeysOffers);
+        const containerDiv = document.createElement('div');
+        containerDiv.appendChild(tableElement);
         return containerDiv;
     }
 
 
-    function WindowrRender_ViewCard(cards, offerId, winTitle, clickX, clickY, isEligibleView) {
-        const win = document.createElement('div');
-        win.style.backgroundColor = '#fff';
-        win.style.border = '2px solid #000';
-        win.style.padding = '10px';
-        win.style.zIndex = '11000';
-        win.style.width = '400px';
-        win.style.maxWidth = '500px';
-        win.style.maxHeight = '400px';
-        win.style.overflowY = 'auto';
-        win.style.position = 'fixed';
-        win.style.top = clickY + 'px';
-        win.style.left = (clickX - 400) + 'px';
+    async function renderOffers_enrollCard(offerId) {
+        // Remove existing overlay
+        const existingOverlay = document.getElementById('offer-details-overlay');
+        if (existingOverlay) existingOverlay.remove();
 
+        // Retrieve the offer from offerData
+        const foundOffer = offerData.find(o => o.offerId === offerId);
+        const offerName = foundOffer ? foundOffer.name : 'Unknown Offer';
+
+        // Create overlay with backdrop blur
+        const overlay = document.createElement('div');
+        overlay.id = 'offer-details-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        `;
+
+        // Modern popup container
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            position: relative;
+        `;
+
+        // Header section
         const header = document.createElement('div');
-        header.style.fontWeight = 'bold';
-        header.style.marginBottom = '10px';
-        header.textContent = winTitle;
-        win.appendChild(header);
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        `;
 
-        const contentDiv = document.createElement('div');
-        const sortedCards = cards.slice();
-        sortedCards.sort((a, b) => {
-            const accA = accountData.find(acc => acc.display_account_number === a);
-            const accB = accountData.find(acc => acc.display_account_number === b);
-            if (accA && accB) {
-                const [aMain, aSub] = parseCardIndex(accA.cardIndex);
-                const [bMain, bSub] = parseCardIndex(accB.cardIndex);
-                if (aMain === bMain) {
-                    return aSub - bSub;
-                }
-                return aMain - bMain;
-            }
-            return 0;
-        });
+        // Title with gradient text
+        const title = document.createElement('h3');
+        title.textContent = foundOffer?.name || 'Unknown Offer';
+        title.style.cssText = `
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(45deg, #2c3e50, #4CAF50);
+            -webkit-background-clip: text;
+            color: transparent;
+        `;
 
-        if (Array.isArray(sortedCards)) {
-            const chunkSize = 6;
-            for (let i = 0; i < sortedCards.length; i += chunkSize) {
-                const chunk = sortedCards.slice(i, i + chunkSize);
-                const lineDiv = document.createElement('div');
-                lineDiv.style.display = 'flex';
-                lineDiv.style.flexWrap = 'wrap';
-                lineDiv.style.marginBottom = '8px';
-                chunk.forEach(cardEnd => {
-                    const cardSpan = document.createElement('span');
-                    cardSpan.textContent = cardEnd;
-                    cardSpan.style.marginRight = '12px';
-                    cardSpan.style.marginBottom = '4px';
-                    if (isEligibleView) {
-                        cardSpan.style.cursor = 'pointer';
-                        cardSpan.addEventListener('click', async () => {
-                            const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
-                            if (!matchingAcc) {
-                                console.log(`No matching account token for card ending ${cardEnd}`);
-                                return;
-                            }
-                            const accountToken = matchingAcc.account_token;
-                            const foundOffer = offerData.find(o => o.offerId === offerId);
-                            const result = await enrollOffer(accountToken, offerId);
-                            console.log(result && result.isEnrolled
-                                ? `Enrollment successful for card ${cardEnd}, offer "${foundOffer.name}"`
-                                : `Enrollment failed for card ${cardEnd}, offer "${foundOffer.name}"`);
-                        });
-                    } else {
-                        cardSpan.style.cursor = 'default';
-                    }
-                    lineDiv.appendChild(cardSpan);
-                });
-                contentDiv.appendChild(lineDiv);
-            }
-        } else {
-            contentDiv.textContent = cards;
-        }
-        win.appendChild(contentDiv);
+        // Modern close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        `;
+        closeBtn.addEventListener('mouseover', () => closeBtn.style.color = '#ff4444');
+        closeBtn.addEventListener('mouseout', () => closeBtn.style.color = '#666');
+        closeBtn.addEventListener('click', () =>
+            overlay.remove(),
+            saveCurrentScrollState,
+            renderCurrentView());
 
-        if (Array.isArray(cards) && cards.length > 0 && isEligibleView) {
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        popup.appendChild(header);
+
+        // Enroll All Button
+        if (foundOffer?.eligibleCards?.length) {
             const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Cards in This Offer';
-            enrollAllBtn.style.display = 'block';
-            enrollAllBtn.style.margin = '10px auto 0';
+            enrollAllBtn.textContent = 'Enroll All Cards';
+            enrollAllBtn.style.cssText = `
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                padding: 12px;
+                margin: 0 0 20px 0;
+                background: linear-gradient(45deg, rgb(84, 99, 86), rgb(27, 66, 29));
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            `;
+            // Add icon
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            icon.setAttribute('viewBox', '0 0 24 24');
+            icon.setAttribute('width', '18');
+            icon.setAttribute('height', '18');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
+            path.setAttribute('fill', 'currentColor');
+            icon.appendChild(path);
+            enrollAllBtn.prepend(icon);
+
+            enrollAllBtn.addEventListener('mouseover', () => enrollAllBtn.style.transform = 'scale(1.02)');
+            enrollAllBtn.addEventListener('mouseout', () => enrollAllBtn.style.transform = 'none');
             enrollAllBtn.addEventListener('click', async () => {
-                const foundOffer = offerData.find(o => o.offerId === offerId);
                 if (!foundOffer) return;
                 const sourceId = foundOffer.source_id;
-                console.log(`Calling batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
-                await batchEnrollOffer(sourceId);
-                currentView = 'offers';
-                renderCurrentView();
+                console.log(`Calling get__batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
+                const results = await get__batchEnrollOffer(sourceId);
+                highlightBatchEnrollmentResults(results);
+                setTimeout(() => renderOffers_enrollCard(offerId), 3000);
             });
-            win.appendChild(enrollAllBtn);
+            popup.appendChild(enrollAllBtn);
         }
 
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close';
-        closeBtn.style.display = 'block';
-        closeBtn.style.margin = '10px auto 0';
-        closeBtn.addEventListener('click', () => {
-            document.body.removeChild(win);
-        });
-        win.appendChild(closeBtn);
-        document.body.appendChild(win);
+        // Helper: highlightCard for single enrollment
+        function highlightCard(cardElem, success) {
+            cardElem.style.backgroundColor = success ? '#c0ffc0' : '#ffc0c0';
+            setTimeout(() => {
+                cardElem.style.backgroundColor = success ? '#e8f5e9' : '#e3f2fd';
+            }, 3000);
+        }
+
+        // Card Sections
+        const createSection = (titleText, cards, isEnrolled) => {
+            const section = document.createElement('div');
+            section.style.marginBottom = '24px';
+
+            const sectionTitle = document.createElement('h4');
+            sectionTitle.textContent = titleText;
+            sectionTitle.style.cssText = `
+                margin: 0 0 12px 0;
+                color: ${isEnrolled ? '#4CAF50' : '#2196F3'};
+                font-size: 0.95rem;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+            // Section icon
+            const sectionIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            sectionIcon.setAttribute('viewBox', '0 0 24 24');
+            sectionIcon.setAttribute('width', '16');
+            sectionIcon.setAttribute('height', '16');
+            const sectionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            sectionPath.setAttribute('d', isEnrolled ? 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' : 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
+            sectionPath.setAttribute('fill', 'currentColor');
+            sectionIcon.appendChild(sectionPath);
+            sectionTitle.prepend(sectionIcon);
+
+            const grid = document.createElement('div');
+            grid.style.cssText = `
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                gap: 8px;
+            `;
+
+            cards.forEach(cardEnd => {
+                const card = document.createElement('div');
+                card.textContent = cardEnd;
+                // Add an id attribute so that highlightBatchEnrollmentResults and highlightCard can find this element
+                card.id = `offerCard_${offerId}_${cardEnd}`;
+                card.style.cssText = `
+                    padding: 8px;
+                    background: ${isEnrolled ? '#e8f5e9' : '#e3f2fd'};
+                    border-radius: 6px;
+                    text-align: center;
+                    font-size: 0.85rem;
+                    transition: all 0.2s ease;
+                    ${!isEnrolled ? 'cursor: pointer;' : ''}
+                `;
+                if (!isEnrolled) {
+                    card.addEventListener('mouseover', () => card.style.transform = 'translateY(-2px)');
+                    card.addEventListener('mouseout', () => card.style.transform = 'none');
+                    card.style.cursor = 'pointer';
+                    card.addEventListener('click', async () => {
+                        const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
+                        if (!matchingAcc) {
+                            console.log(`No matching account token for card ending ${cardEnd}`);
+                            return;
+                        }
+                        // Single enrollment
+                        const singleResult = await fetchGet_enrollOffer(matchingAcc.account_token, offerId);
+                        if (singleResult.result) {
+                            console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
+                            // Temporarily highlight green
+                            highlightCard(card, true);
+                            // Move the card from eligible to enrolled
+                            const idx = foundOffer.eligibleCards.indexOf(cardEnd);
+                            if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
+                            if (!foundOffer.enrolledCards.includes(cardEnd)) {
+                                foundOffer.enrolledCards.push(cardEnd);
+                            }
+                        } else {
+                            console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
+                            // Temporarily highlight red
+                            highlightCard(card, false);
+                        }
+                        // After 3 seconds, re-render the entire popup
+                        setTimeout(() => renderOffers_enrollCard(offerId), 3000);
+                    });
+                }
+                grid.appendChild(card);
+            });
+
+            section.appendChild(sectionTitle);
+            section.appendChild(grid);
+            return section;
+        };
+
+        // Add sections
+        if (foundOffer) {
+            popup.appendChild(createSection('Eligible Cards', foundOffer.eligibleCards, false));
+            popup.appendChild(createSection('Enrolled Cards', foundOffer.enrolledCards, true));
+        } else {
+            const error = document.createElement('div');
+            error.style.cssText = `
+                padding: 16px;
+                background: #ffebee;
+                border-radius: 8px;
+                color: #c62828;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+            error.textContent = 'Offer not found';
+            popup.appendChild(error);
+        }
+
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+
+        function highlightBatchEnrollmentResults(results) {
+            // For batch enrollments (unchanged)
+            results.forEach(r => {
+                if (r.offerId !== offerId) return;
+                const matchingAcc = accountData.find(a => a.account_token === r.accountToken);
+                if (!matchingAcc) return;
+                const cardEnd = matchingAcc.display_account_number;
+                const spanElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
+                if (spanElem) {
+                    spanElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
+                    setTimeout(() => {
+                        spanElem.style.backgroundColor = r.result ? '#e8f5e9' : '#e3f2fd';
+                    }, 3000);
+                }
+                if (r.result) {
+                    const idx = foundOffer.eligibleCards.indexOf(cardEnd);
+                    if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
+                    if (!foundOffer.enrolledCards.includes(cardEnd)) {
+                        foundOffer.enrolledCards.push(cardEnd);
+                    }
+                }
+            });
+        }
     }
 
-    async function renderCurrentView() {
-        if (currentView === 'members') {
-            applyMemberSort();
-        } else if (currentView === 'offers') {
-            applyOfferSort();
-        }
-        content.innerHTML = '';
-        let viewContent;
-        if (currentView === 'members') {
-            viewContent = renderMembersView();
-        } else if (currentView === 'offers') {
-            viewContent = renderOfferMap(offerData);
-        } else if (currentView === 'summary') {
-            viewContent = renderSummaryView();
-        } else if (currentView === 'benefits') {
-            viewContent = await renderBenefitsView();
-        }
-        if (viewContent && typeof viewContent.then === 'function') {
-            viewContent = await viewContent;
-        }
-        content.appendChild(viewContent);
-        if (globalViewState[currentView] && typeof globalViewState[currentView].scrollTop === 'number') {
-            content.scrollTop = globalViewState[currentView].scrollTop;
-        }
+    function renderOffers_page() {
+        const containerDiv = document.createElement('div');
+        containerDiv.style.display = 'flex';
+        containerDiv.style.flexDirection = 'column';
+        containerDiv.style.gap = '16px';
+        containerDiv.style.padding = '16px';
+        containerDiv.style.maxWidth = '1300px';
+        containerDiv.style.margin = '0 auto';
+        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
+
+        return containerDiv;
     }
 
-    // ==================== Updated Benefits Tracker View with Refined UI ====================
-
-    async function renderBenefitsView() {
-
+    async function renderBenefits() {
         const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
-
         if (!benefitTrackers || benefitTrackers.length === 0) {
-            benefitTrackers = await fetchBenefitTrackersForBasicCards();
+            benefitTrackers = await get_benefit();
             if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
         }
 
         const containerDiv = document.createElement('div');
-        containerDiv.style.padding = '10px';
-        containerDiv.style.fontFamily = 'Arial, sans-serif';
+        containerDiv.style.padding = '20px 16px';
+        containerDiv.style.fontFamily = "'Segoe UI', system-ui, sans-serif";
+        // transparent background
+        containerDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+        containerDiv.style.borderRadius = '12px';
 
+        containerDiv.style.maxWidth = '800px';
+        containerDiv.style.margin = '0 auto';
 
+        // Group trackers by benefitId
         const grouped = {};
         benefitTrackers.forEach(trackerObj => {
             const key = trackerObj.benefitId;
@@ -1770,135 +2452,412 @@
             grouped[key].push(trackerObj);
         });
 
+        // Define sorting/renaming for known benefits
         const benefitSortMapping = {
             "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
             "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
-            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400-hilton-aspire-resort-credit" },
+            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit" },
             "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
             "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
-            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit for Gold Card" },
+            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)" },
             "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
             "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
             "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
-            "digital entertainment": { order: 10, newName: "20 $Digital Entertainment" },
+            "digital entertainment": { order: 10, newName: "$20 Digital Entertainment" },
             "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
-            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Monthly Membership Credit" },
+            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit" },
             "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
             "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
-            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" },
+            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" }
         };
 
-        // Helper: return sort order and display name for a benefit group.
         function getGroupSortData(trackerGroup) {
             const first = trackerGroup[0];
             const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
             const benefitNameKey = (first.benefitName || "").toLowerCase().trim();
-            let sortData = benefitSortMapping[benefitIdKey];
-            if (!sortData) {
-                sortData = benefitSortMapping[benefitNameKey];
-            }
-            if (!sortData) {
+            let sort_memberTab = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
+            if (!sort_memberTab) {
                 return { order: Infinity, displayName: first.benefitName || "" };
             }
-            return { order: sortData.order, displayName: sortData.newName };
+            // Fallback: if newName is missing, use benefitName from the first tracker
+            return { order: sort_memberTab.order, displayName: sort_memberTab.newName || first.benefitName || "" };
         }
 
-        // Build an array of groups with sort data.
+        // Build and sort group array
         const groupArray = [];
         for (const key in grouped) {
             const group = grouped[key];
-            const sortData = getGroupSortData(group);
-            // Use sortData.displayName here to ensure it's defined.
-            groupArray.push({ key, trackers: group, order: sortData.order, displayName: sortData.displayName });
+            const sort_memberTab = getGroupSortData(group);
+            groupArray.push({
+                key,
+                trackers: group,
+                order: sort_memberTab.order,
+                displayName: sort_memberTab.displayName
+            });
         }
-
-        // Sort groups by the custom order, then alphabetically by displayName.
         groupArray.sort((a, b) => {
             if (a.order !== b.order) return a.order - b.order;
-            return a.displayName.localeCompare(b.displayName);
+            return (a.displayName || "").localeCompare(b.displayName || "");
         });
 
-        // Render each group.
+        // Add status legend
+        const legend = document.createElement('div');
+        legend.style.display = 'flex';
+        legend.style.gap = '15px';
+        legend.style.marginBottom = '25px';
+        legend.style.justifyContent = 'center';
+        legend.style.flexWrap = 'wrap';
+
+        const statusLegend = {
+            'ACHIEVED': { label: 'Completed', color: '#4CAF50' },
+            'IN_PROGRESS': { label: 'In Progress', color: '#2196F3' }
+        };
+
+        Object.entries(statusLegend).forEach(([status, { label, color }]) => {
+            const legendItem = document.createElement('div');
+            legendItem.style.display = 'flex';
+            legendItem.style.alignItems = 'center';
+            legendItem.style.gap = '6px';
+
+            const colorDot = document.createElement('div');
+            colorDot.style.width = '12px';
+            colorDot.style.height = '12px';
+            colorDot.style.borderRadius = '50%';
+
+            colorDot.style.backgroundColor = color;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = label;
+            labelSpan.style.color = '#424242';
+            labelSpan.style.fontSize = '14px';
+
+            legendItem.appendChild(colorDot);
+            legendItem.appendChild(labelSpan);
+            legend.appendChild(legendItem);
+        });
+
+        containerDiv.appendChild(legend);
+
+        if (groupArray.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.style.textAlign = 'center';
+            emptyState.style.padding = '40px 20px';
+            emptyState.style.color = '#616161';
+
+            const emptyText = document.createElement('p');
+            emptyText.textContent = 'No benefits available to display';
+            emptyText.style.fontSize = '16px';
+
+            emptyState.appendChild(emptyText);
+            containerDiv.appendChild(emptyState);
+            return containerDiv;
+        }
+
         groupArray.forEach(groupObj => {
             const trackersGroup = groupObj.trackers;
-            const groupDiv = document.createElement('div');
-            groupDiv.style.marginBottom = '30px';
-
-            // Retrieve trackerDuration (either as top-level or nested).
-            let durationText =
+            // Use trackerDuration if available, otherwise empty string
+            const durationText =
                 trackersGroup[0].trackerDuration ||
                 (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
                 "";
-            const title = document.createElement('h3');
-            title.textContent = groupObj.displayName + (durationText ? ` (${durationText})` : "");
-            groupDiv.appendChild(title);
 
-            // Render each tracker in the group.
+            // Accordion container
+            const accordionItem = document.createElement('div');
+            accordionItem.style.border = '1px solid #e0e0e0';
+            accordionItem.style.borderRadius = '12px';
+            accordionItem.style.marginBottom = '15px';
+            accordionItem.style.backgroundColor = '#ffffff';
+            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+            accordionItem.style.transition = 'box-shadow 0.2s ease, transform 0.2s ease';
+
+            accordionItem.addEventListener('mouseenter', () => {
+                accordionItem.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                accordionItem.style.transform = 'translateY(-2px)';
+            });
+            accordionItem.addEventListener('mouseleave', () => {
+                accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+                accordionItem.style.transform = 'translateY(0)';
+            });
+
+            // Accordion Header
+            const headerDiv = document.createElement('div');
+            headerDiv.style.padding = '16px';
+            headerDiv.style.cursor = 'pointer';
+            headerDiv.style.transition = 'background-color 0.2s ease';
+
+            headerDiv.addEventListener('mouseenter', () => {
+                headerDiv.style.backgroundColor = '#f5f5f5';
+            });
+            headerDiv.addEventListener('mouseleave', () => {
+                headerDiv.style.backgroundColor = '#ffffff';
+            });
+
+            // Header content
+            const titleRow = document.createElement('div');
+            titleRow.style.display = 'flex';
+            titleRow.style.justifyContent = 'space-between';
+            titleRow.style.alignItems = 'center';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.style.fontSize = '16px';
+            titleSpan.style.fontWeight = 'bold';
+            titleSpan.style.color = '#2c3e50';
+            // Fallback to first tracker's benefitName if displayName is empty
+            titleSpan.textContent = (groupObj.displayName || trackersGroup[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
+
+            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            arrowIcon.setAttribute('viewBox', '0 0 24 24');
+            arrowIcon.setAttribute('width', '20');
+            arrowIcon.setAttribute('height', '20');
+            arrowIcon.style.transition = 'transform 0.3s ease';
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M7 10l5 5 5-5');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#666');
+            path.setAttribute('stroke-width', '2');
+            arrowIcon.appendChild(path);
+
+            titleRow.appendChild(titleSpan);
+            titleRow.appendChild(arrowIcon);
+            headerDiv.appendChild(titleRow);
+
+            // Mini Bar: a summary of each tracker's card ending with color coding.
+            const miniBarDiv = document.createElement('div');
+            miniBarDiv.style.display = 'flex';
+            miniBarDiv.style.flexWrap = 'wrap';
+            miniBarDiv.style.gap = '8px';
+            miniBarDiv.style.marginTop = '12px';
+
+            trackersGroup.forEach(trackerObj => {
+                const miniCard = document.createElement('div');
+                miniCard.style.display = 'flex';
+                miniCard.style.alignItems = 'center';
+                miniCard.style.gap = '6px';
+                miniCard.style.padding = '6px 10px';
+                miniCard.style.borderRadius = '6px';
+                miniCard.style.fontSize = '13px';
+                miniCard.style.background = statusLegend[trackerObj.status].color + '15';
+                miniCard.style.border = `1px solid ${statusLegend[trackerObj.status].color}30`;
+                miniCard.style.color = statusLegend[trackerObj.status].color;
+
+                const cardEnding = document.createElement('span');
+                cardEnding.textContent = trackerObj.cardEnding;
+                cardEnding.style.fontWeight = '500';
+
+                const statusDot = document.createElement('div');
+                statusDot.style.width = '8px';
+                statusDot.style.height = '8px';
+                statusDot.style.borderRadius = '50%';
+                statusDot.style.backgroundColor = statusLegend[trackerObj.status].color;
+
+                miniCard.appendChild(statusDot);
+                miniCard.appendChild(cardEnding);
+                miniBarDiv.appendChild(miniCard);
+            });
+
+            headerDiv.appendChild(miniBarDiv);
+
+            // Accordion Body: Full tracker cards (detailed view)
+            const bodyDiv = document.createElement('div');
+            bodyDiv.style.padding = '10px';
+            bodyDiv.style.display = 'none'; // collapsed by default
+
+            // Render full tracker cards for this group
             trackersGroup.forEach(trackerObj => {
                 const t = trackerObj.tracker || trackerObj;
-                const barContainer = document.createElement('div');
-                barContainer.style.marginBottom = '10px';
+                const trackerCard = document.createElement('div');
+                trackerCard.style.border = '1px solid #ddd';
+                trackerCard.style.borderRadius = '8px';
+                trackerCard.style.padding = '16px';
+                trackerCard.style.margin = '12px 0';
+                trackerCard.style.backgroundColor = '#fcfcfc';
+                trackerCard.style.transition = 'background-color 0.3s ease';
 
-                // Determine amount label based on targetUnit.
-                let amountLabel = "";
-                if (t.targetUnit === "MONETARY") {
-                    amountLabel = `Spent: ${t.targetCurrencySymbol}${parseFloat(t.spentAmount).toFixed(2)} / ${t.targetCurrencySymbol}${parseFloat(t.targetAmount).toFixed(2)}`;
-                } else if (t.targetUnit === "PASSES") {
-                    amountLabel = `Used: ${parseInt(t.spentAmount)} / ${parseInt(t.targetAmount)} passes`;
-                } else {
-                    amountLabel = `Spent: ${t.spentAmount} / ${t.targetAmount}`;
-                }
+                // Card header
+                const cardHeader = document.createElement('div');
+                cardHeader.style.display = 'flex';
+                cardHeader.style.justifyContent = 'space-between';
+                cardHeader.style.marginBottom = '12px';
 
-                // Info label: card ending, period dates, and amounts.
-                const infoLabel = document.createElement('div');
-                infoLabel.style.fontSize = '14px';
-                infoLabel.style.marginBottom = '4px';
-                infoLabel.textContent = `Card Ending: ${trackerObj.cardEnding} | ${formatDate(trackerObj.periodStartDate)} - ${formatDate(trackerObj.periodEndDate, true)} | ${amountLabel}`;
-                barContainer.appendChild(infoLabel);
+                const cardNumber = document.createElement('div');
+                cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
+                cardNumber.style.fontWeight = '500';
+                cardNumber.style.color = '#555';
 
-                // Create a refined progress bar.
-                const progressBar = document.createElement('div');
-                progressBar.style.width = '300px';
-                progressBar.style.height = '12px';
-                progressBar.style.backgroundColor = '#f0f0f0';
-                progressBar.style.border = '1px solid #ccc';
-                progressBar.style.borderRadius = '6px';
-                progressBar.style.overflow = 'hidden';
-                progressBar.style.marginTop = '4px';
+                // Only display formatted dates if available, otherwise fallback to a message
+                const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
+                const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
+                const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
+
+                const dateRange = document.createElement('div');
+                dateRange.textContent = dateRangeText;
+                dateRange.style.color = '#757575';
+                dateRange.style.fontSize = '14px';
+
+                cardHeader.appendChild(cardNumber);
+                cardHeader.appendChild(dateRange);
+
+                // Progress bar
+                const progressContainer = document.createElement('div');
+                progressContainer.style.marginBottom = '12px';
+
+                const progressText = document.createElement('div');
+                progressText.style.display = 'flex';
+                progressText.style.justifyContent = 'space-between';
+                progressText.style.marginBottom = '8px';
+                progressText.style.fontSize = '14px';
+
+                const progressLabel = document.createElement('span');
+                progressLabel.textContent = 'Progress:';
+                progressLabel.style.color = '#666';
+
+                const progressAmount = document.createElement('span');
+                const spent = parseFloat(t.spentAmount).toFixed(2);
+                const target = parseFloat(t.targetAmount).toFixed(2);
+                progressAmount.textContent = `${t.targetCurrencySymbol || ''}${spent} / ${t.targetCurrencySymbol || ''}${target}`;
+                progressAmount.style.fontWeight = '500';
+                progressAmount.style.color = statusLegend[trackerObj.status].color;
+
+                progressText.appendChild(progressLabel);
+                progressText.appendChild(progressAmount);
+
+                const progressBarWrapper = document.createElement('div');
+                progressBarWrapper.style.height = '12px';
+                progressBarWrapper.style.borderRadius = '6px';
+                progressBarWrapper.style.backgroundColor = '#eee';
+                progressBarWrapper.style.position = 'relative';
+                progressBarWrapper.style.overflow = 'hidden';
+                progressBarWrapper.style.border = '1px solid #ccc';
+                progressBarWrapper.style.width = '100%';
 
                 let percent = 0;
-                const targetAmount = parseFloat(t.targetAmount);
-                const spentAmount = parseFloat(t.spentAmount);
-                if (targetAmount > 0) {
-                    percent = (spentAmount / targetAmount) * 100;
-                    percent = Math.min(100, percent);
+                const targetAmountNum = parseFloat(t.targetAmount);
+                const spentAmountNum = parseFloat(t.spentAmount);
+                if (targetAmountNum > 0) {
+                    percent = (spentAmountNum / targetAmountNum) * 100;
+                    if (percent > 100) percent = 100;
                 }
+
                 const progressFill = document.createElement('div');
                 progressFill.style.height = '100%';
                 progressFill.style.width = percent + '%';
-                progressFill.style.borderRadius = '6px';
-                // Set fill color based on status.
-                if (trackerObj.status === "ACHIEVED") {
-                    progressFill.style.backgroundColor = "#90ee90"; // light green
-                } else if (trackerObj.status === "IN_PROGRESS") {
-                    progressFill.style.backgroundColor = "#add8e6"; // light blue
+                progressFill.style.position = 'absolute';
+                progressFill.style.top = '0';
+                progressFill.style.left = '0';
+                progressFill.style.transition = 'width 0.3s ease';
+                if (trackerObj.status === 'ACHIEVED') {
+                    progressFill.style.backgroundColor = "#90ee90";
+                } else if (trackerObj.status === 'IN_PROGRESS') {
+                    progressFill.style.backgroundColor = "#add8e6";
                 } else {
-                    progressFill.style.backgroundColor = "#cccccc"; // default gray
+                    progressFill.style.backgroundColor = "#ccc";
                 }
-                progressBar.appendChild(progressFill);
-                barContainer.appendChild(progressBar);
-                groupDiv.appendChild(barContainer);
+                progressBarWrapper.appendChild(progressFill);
+
+                progressContainer.appendChild(progressText);
+                progressContainer.appendChild(progressBarWrapper);
+
+                // Message (if any)
+                if (trackerObj.progress && trackerObj.progress.message) {
+                    const message = document.createElement('div');
+                    message.style.marginTop = '12px';
+                    message.style.padding = '10px';
+                    message.style.background = '#f5f5f5';
+                    message.style.borderRadius = '6px';
+                    message.style.color = '#616161';
+                    message.style.fontSize = '14px';
+                    message.innerHTML = trackerObj.progress.message;
+                    trackerCard.appendChild(message);
+                }
+
+                trackerCard.appendChild(cardHeader);
+                trackerCard.appendChild(progressContainer);
+                bodyDiv.appendChild(trackerCard);
             });
-            containerDiv.appendChild(groupDiv);
+
+            // Accordion toggle logic
+            headerDiv.addEventListener('click', () => {
+                const isOpen = bodyDiv.style.display === 'block';
+                arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+                bodyDiv.style.display = isOpen ? 'none' : 'block';
+                if (!isOpen) {
+                    bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
+                    bodyDiv.style.padding = '10px';
+                } else {
+                    bodyDiv.style.maxHeight = '0';
+                    bodyDiv.style.padding = '0 16px';
+                }
+            });
+
+            accordionItem.appendChild(headerDiv);
+            accordionItem.appendChild(bodyDiv);
+            containerDiv.appendChild(accordionItem);
         });
+
         return containerDiv;
     }
 
 
 
+    // Update your renderCurrentView to use the cruiser tracker.
+    async function renderCurrentView() {
+        content.innerHTML = '';
+        let viewContent;
+
+        switch (currentView) {
+            case 'members':
+                viewContent = renderMembers_page();
+                viewContent.appendChild(renderMembers_filterBar());
+                {
+                    const container = document.createElement('div');
+                    container.id = 'members-table-container';
+                    container.appendChild(renderMembers_table());
+                    viewContent.appendChild(container);
+                }
+                break;
+
+            case 'offers':
+                viewContent = renderOffers_page(offerData);
+                viewContent.appendChild(renderOffers_searchBar());
+                {
+                    const container = document.createElement('div');
+                    container.id = 'offers-table-container';
+                    container.appendChild(renderOffers_table());
+                    viewContent.appendChild(container);
+                }
+                break;
+
+            case 'summary':
+                viewContent = renderSummary_page();
+                break;
+
+            case 'benefits':
+                viewContent = await renderBenefits();
+                break;
+
+            default:
+                viewContent = document.createElement('div');
+                viewContent.textContent = 'Unknown view';
+        }
+
+        // In case viewContent is a promise
+        if (viewContent && typeof viewContent.then === 'function') {
+            viewContent = await viewContent;
+        }
+
+        content.appendChild(viewContent);
+
+        // Restore scroll state if available
+        const viewState = globalViewState[currentView];
+        if (viewState && typeof viewState.scrollTop === 'number') {
+            content.scrollTop = viewState.scrollTop;
+        }
+    }
+
+
 
     // =========================================================================
-    // Section 8: Local Storage Handling
+    // Section 7: Local Storage Handling
     // =========================================================================
 
     function setLocalStorage(tokenSuffix, keys) {
@@ -1918,7 +2877,7 @@
         }
         try {
             keys.forEach(key => {
-                localStorage.setItem(key + "_" + tokenSuffix, JSON.stringify(allData[key]));
+                localStorage.setItem("AMaxOffer_" + key + "_" + tokenSuffix, JSON.stringify(allData[key]));
             });
             console.log("Data saved to localStorage with token: " + tokenSuffix + " for keys: " + keys.join(", "));
         } catch (e) {
@@ -1927,47 +2886,30 @@
     }
 
     function loadLocalStorage(tokenSuffix, keys) {
-        // Define the full set of keys.
         const allKeys = ["accountData", "offerData", "lastUpdate", "priorityCards", "excludedCards", "benefitTrackers", "ScriptVersion"];
-        // If keys not provided or empty, default to all.
         if (!keys || keys.length === 0) {
             keys = allKeys;
         }
-        // Attempt to retrieve each specified item.
         const loaded = {};
         let allExist = true;
         keys.forEach(key => {
-            const item = localStorage.getItem(key + "_" + tokenSuffix);
+            const item = localStorage.getItem("AMaxOffer_" + key + "_" + tokenSuffix);
             if (item === null) {
                 allExist = false;
             } else {
                 loaded[key] = item;
             }
         });
-        // For backward compatibility: if accountData and offerData are required and missing, return 0.
         if (keys.includes("accountData") && keys.includes("offerData") && (!loaded.accountData || !loaded.offerData)) {
             return 0;
         }
         try {
-            // Check the ScriptVersion first if it's one of the requested keys.
-            if (keys.includes("accountData") && loaded.accountData) {
-                accountData = JSON.parse(loaded.accountData);
-            }
-            if (keys.includes("offerData") && loaded.offerData) {
-                offerData = JSON.parse(loaded.offerData);
-            }
-            if (keys.includes("lastUpdate")) {
-                lastUpdate = loaded.lastUpdate || "";
-            }
-            if (keys.includes("priorityCards")) {
-                priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : [];
-            }
-            if (keys.includes("excludedCards")) {
-                excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : [];
-            }
-            if (keys.includes("benefitTrackers")) {
-                benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : [];
-            }
+            if (keys.includes("accountData") && loaded.accountData) { accountData = JSON.parse(loaded.accountData); }
+            if (keys.includes("offerData") && loaded.offerData) { offerData = JSON.parse(loaded.offerData); }
+            if (keys.includes("lastUpdate")) { lastUpdate = loaded.lastUpdate || ""; }
+            if (keys.includes("priorityCards")) { priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : []; }
+            if (keys.includes("excludedCards")) { excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : []; }
+            if (keys.includes("benefitTrackers")) { benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : []; }
             if (keys.includes("ScriptVersion")) {
                 if (!loaded.ScriptVersion || JSON.parse(loaded.ScriptVersion) !== ScriptVersion) {
                     console.error("Script version mismatch or missing.");
@@ -1991,110 +2933,47 @@
         }
     }
 
-
     // =========================================================================
-    // Section 10: Event Listeners & UI Interaction
-    // =========================================================================
-
-    // Draggable header implementation
-    header.addEventListener('mousedown', function (e) {
-        let shiftX = e.clientX - container.getBoundingClientRect().left;
-        let shiftY = e.clientY - container.getBoundingClientRect().top;
-        function onMouseMove(e2) {
-            container.style.left = (e2.clientX - shiftX) + 'px';
-            container.style.top = (e2.clientY - shiftY) + 'px';
-        }
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', function onMouseUp() {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        });
-    });
-
-    // View switching buttons
-    btnSummary.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'summary';
-        btnSummary.style.fontWeight = 'bold';
-        btnMembers.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    btnMembers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'members';
-        btnMembers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnOffers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    btnOffers.addEventListener('click', () => {
-        saveCurrentScrollState();
-        currentView = 'offers';
-        btnOffers.style.fontWeight = 'bold';
-        btnSummary.style.fontWeight = 'normal';
-        btnMembers.style.fontWeight = 'normal';
-        renderCurrentView();
-    });
-
-    // Toggle minimize/expand functionality
-    toggleBtn.addEventListener('click', () => {
-        isMinimized = !isMinimized;
-        if (isMinimized) {
-            content.style.display = 'none';
-            viewButtons.style.display = 'none';
-            toggleBtn.textContent = 'Expand';
-            container.style.width = '200px';
-        } else {
-            content.style.display = 'block';
-            viewButtons.style.display = 'flex';
-            toggleBtn.textContent = 'Minimize';
-            container.style.width = '90%';
-        }
-    });
-
-    // =========================================================================
-    // Section 11: Initialization Functions
+    // Section 8: Event Listeners & UI Interaction
     // =========================================================================
 
-    function createUI() {
-        document.body.appendChild(container);
-        if (isMinimized) {
-            content.style.display = 'none';
-            viewButtons.style.display = 'none';
-            toggleBtn.textContent = 'Expand';
-            container.style.width = '200px';
-        }
-    }
+
+
+    // =========================================================================
+    // Section 9: Initialization Functions
+    // =========================================================================
+
 
     async function init() {
-        const tl = await getCurrentUserTrustLevel();
+        const tl = await get_trustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
             return;
         }
-        const fetchStatus = await fetchAccount();
+        const fetchStatus = await get_accounts();
         if (!fetchStatus || accountData.length === 0) {
             console.error("Failed to fetch account data or no accounts found.");
             return;
         }
         const tokenSuffix = accountData[0].account_token;
         const localDataStatus = loadLocalStorage(tokenSuffix);
-        createUI();
 
         if (localDataStatus === 0 || localDataStatus === 2) {
             // Refresh offers and benefit trackers
-            const newOfferData = await refreshOffers();
-            const newBenefitTrackers = await fetchBenefitTrackersForBasicCards();
+            const newOfferData = await get_offers();
+            const newBenefitTrackers = await get_benefit();
+            const newBalance = await get_balance();
 
             if (newOfferData && Array.isArray(newOfferData)) {
                 offerData = newOfferData;
-            } else { console.error("refreshOffers failed. Not updating offerData."); }
+            } else { console.error("get_offers failed. Not updating offerData."); }
 
             if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
                 benefitTrackers = newBenefitTrackers;
             } else { console.error("Fetching benefit trackers failed. Not updating benefitTrackers."); }
+
+            if (newBalance && newBalance.length > 0) {
+                balanceData = newBalance;
+            } else { console.error("Fetching balance data failed. Not updating balanceData."); }
 
             lastUpdate = new Date().toLocaleString();
             await renderCurrentView();
@@ -2104,7 +2983,7 @@
             console.log("Using data from LocalStorage. No forced fetch.");
         }
 
-        await fetchFinancialDataForBasicCards();
+        await get_balance();
         if (currentView === 'members') {
             renderCurrentView();
         }
