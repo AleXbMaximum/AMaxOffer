@@ -4,7 +4,6 @@
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
-
 // @grant        GM.xmlHttpRequest
 // @grant        unsafeWindow
 // @resource materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
@@ -16,90 +15,59 @@
 (function () {
     'use strict';
 
-    const ScriptVersion = "3.0";
+    const scriptVersion = "3.0";
 
     // =========================================================================
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
 
-    // Obfuscated URL Constants
-    // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
-
-    const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];
-    const MEMBER_API_indexMapping = { "0": "4", "1": "0", "2": "9", "3": "2", "4": "3", "5": "6", "6": "7", "7": "8", "8": "1", "9": "5", "10": "11", "11": "10" };
-    const MEMBER_API = getUrl(reconstructObfuscated(MEMBER_API_segments, MEMBER_API_indexMapping));
-
-    // ENROLL_API: https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1
-    const ENROLL_API_segments = ["JX)", "bHZibk11WVcxbGNtbGpZVzVsZUh$", "Z1ZEU5bVptVnlSVzV5YjJ4c2%", "E^", "Ce(", "VpYTnpMbU52YlM5RGN)", "VnVkQzUyTVE9PQ==*", "GNITTZMeTltZFc1amRH(", "tVmhkR1Z*", "piM1&", "YUhSM$", "WVhKa1FXTm#"];
-    const ENROLL_API_indexMapping = { "0": "10", "1": "7", "2": "1", "3": "4", "4": "5", "5": "8", "6": "3", "7": "11", "8": "9", "9": "2", "10": "0", "11": "6" };
-    const ENROLL_API = getUrl(reconstructObfuscated(ENROLL_API_segments, ENROLL_API_indexMapping));
-
-    // OFFERS_API: https://functions.americanexpress.com/ReadCardAccountOffersList.v1
-    const OFFERS_API_segments = ["HbHZibk11WVcxbGNt_", "YUhSMGNITT*", "yOTFi@", "pXRmtRMkZ5_", "TltZFc1amR!", "Wm1abG%", "GpZVzVsZUhCeVpYTnpMbU52YlM5U1%", "NuTk1hWE4wTG5ZeA==%", "WkVGalk)", "blJQ&", "ZMe$", "b+"];
-    const OFFERS_API_indexMapping = { "0": "1", "1": "10", "2": "4", "3": "0", "4": "11", "5": "6", "6": "3", "7": "8", "8": "2", "9": "9", "10": "5", "11": "7" };
-    const OFFERS_API = getUrl(reconstructObfuscated(OFFERS_API_segments, OFFERS_API_indexMapping));
-
-    // USCF1_API: https://www.uscardforum.com/session/current.json
-    const USCF1_segments = ["kQzVx%", "SMG+", "YUh%", "2WT$", "5eWRXMHVZMjl0#", "I5dQ==&", "Yz&", "TDNObGMzTnBiMjR%", "WeWNtVnV_", "kzZDNjdWRYTmpZWEprWm0%", "NITTZMeT*", "N^"];
-    const USCF1_indexMapping = { "0": "2", "1": "1", "2": "10", "3": "9", "4": "4", "5": "7", "6": "3", "7": "11", "8": "8", "9": "0", "10": "6", "11": "5" };
-    const USCF1_API = getUrl(reconstructObfuscated(USCF1_segments, USCF1_indexMapping));
-
-    // USCF2_API: https://www.uscardforum.com/u/
-    const USCF2_segments = ["WRXMHVZMjl0T(", "TZM&", "rWm05^", "IT&", "YUhSMGN@", "NjdWRYT!", "DNV%", "mpZWE)", "e_", "eTkzZD!", "p#", "dg==$"];
-    const USCF2_indexMapping = { "0": "4", "1": "3", "2": "1", "3": "9", "4": "5", "5": "7", "6": "10", "7": "2", "8": "8", "9": "0", "10": "6", "11": "11" };
-    const USCF2_API = getUrl(reconstructObfuscated(USCF2_segments, USCF2_indexMapping));
-
-    // FINANCIAL_BALANCES_API: https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay
-    const FINANCIAL_BALANCES_segments = ["E0vWlhoMFpXNWtaV1JmWkdWMFlXbHNjejFrWldabGNuSmxa_", "hMMlpwYm)", "Hd3NjR0Y1WDI5MlpYSmZkR2x0WlN4bFlYSnN^", "bkwzWX%", "iSE12WW1Gc1lXNWpaW!", "YUhSMGN#", "uYkc5aVlXd3VZVzFsY21sallXNWxlSEJ!", "lVjl3WVhrPQ==$", "ITTZMeTl!", "5WlhOekxtTnZiUzloY0drdmMyVnlkbWxqYVc1%", "Q3h1YjI1ZlpHVm1aWEp5WldRc2NHRjVYMmx1WDJaMWJ_", "1GdVkybGh$"];
-    const FINANCIAL_BALANCES_indexMapping = { "0": "5", "1": "8", "2": "6", "3": "9", "4": "3", "5": "1", "6": "11", "7": "4", "8": "0", "9": "10", "10": "2", "11": "7" };
-    const FINANCIAL_BALANCES_API = getUrl(reconstructObfuscated(FINANCIAL_BALANCES_segments, FINANCIAL_BALANCES_indexMapping));
-
-    // FINANCIAL_TRANSACTION_API: https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending
-    const FINANCIAL_TRANSACTION_segments = ["VzFs)", "wYm1GdVkybGh*", "YUhSM@", "iS+", "hMMlp(", "1bkwzWX(", "lSEJ5WlhOekxtTnZiUzl%", "E12ZEhKaGJuTm)", "hZM1JwYjI1ZmMzVnRiV0Z5ZVQ5emRHRjBkWE05Y0dWdVpHbHVadz09(", "Y21sallXNWx#", "GNITTZMeTluYkc5aVlXd3VZ_", "oY0drdmMyVnlkbWxqYVc@"];
-    const FINANCIAL_TRANSACTION_indexMapping = { "0": "2", "1": "10", "2": "0", "3": "9", "4": "6", "5": "11", "6": "5", "7": "4", "8": "1", "9": "3", "10": "7", "11": "8" };
-    const FINANCIAL_TRANSACTION_API = getUrl(reconstructObfuscated(FINANCIAL_TRANSACTION_segments, FINANCIAL_TRANSACTION_indexMapping));
-
-    // BENEFIT_API: https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1
-    const BENEFIT_API_segments = ["ZMeTltZFc*", "VzVsZ_", "1amRHbHZibk11WVcxbGNtbGpZ#", "Z6ZEV4dmVXRnNkSGxDWlc1bFptbDBjMVJ5WVdOclpYSnpM!", "b+", "l@", "UhCeVpYTnpMbU52Y$", "ll4+", "YUhSMGNI#", "M5U1p@", "TT)", "XRmtRbV!"];
-    const BENEFIT_API_indexMapping = { "0": "8", "1": "10", "2": "0", "3": "2", "4": "1", "5": "6", "6": "5", "7": "9", "8": "11", "9": "3", "10": "4", "11": "7" };
-    const BENEFIT_API = getUrl(reconstructObfuscated(BENEFIT_API_segments, BENEFIT_API_indexMapping));
+    const API_member = "https://global.americanexpress.com/api/servicing/v1/member";
+    const API_Enroll = "https://functions.americanexpress.com/CreateCardAccountOfferEnrollment.v1";
+    const API_offer = "https://functions.americanexpress.com/ReadCardAccountOffersList.v1";
+    const API_USCF1 = "https://www.uscardforum.com/session/current.json";
+    const API_USCF2 = "https://www.uscardforum.com/u/";
+    const API_balance = "https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay";
+    const API_balancePending = "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending";
+    const API_benefit = "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1";
 
     // =========================================================================
     // Section 2: Global State Variables
     // =========================================================================
 
     //  1) PRIMARY DATA & TRACKERS
-    let accountData = [];       // Holds all account/member info from the API
-    let offerData = [];         // Holds all offers (eligible and enrolled status)
-    let benefitTrackers = [];   // Holds benefit tracker info for each card
-    let priorityCards = [];  // List of card endings that have top priority
-    let excludedCards = [];  // List of card endings to skip automatically
+    let glb_account = [];       // Holds all account/member info from the API
+    let glb_offer = [];         // Holds all offers (eligible and enrolled status)
+    let glb_benefit = [];   // Holds benefit tracker info for each card
+    let glb_priorityCards = [];  // List of card endings that have top priority
+    let glb_excludedCards = [];  // List of card endings to skip automatically
 
-    //  2) TIMESTAMPS & BATCH CONFIG
-    let lastUpdate = "";        // Last time data was fetched
-    let runInBatchesLimit = 50; // Concurrency limit when enrolling in batches
-
-    //  3) VIEW / UI STATES
-    let currentView = "summary";  // Possible: "summary", "members", "offers", "benefits"
-    let isMinimized = true;       // Whether the main container is collapsed
-
-    //  4) FILTER STATES
-    let currentStatusFilter = "Active"; // "all", "Active", "Canceled"
-    let currentTypeFilter = "all";     // "all", "BASIC", "SUPP"
-    let showFavoritesOnly = false;     // Hide non-favorite offers
-    let offerSearchKeyword = "";       // Merchant/offer text search
-    let offerSearchMembersKeyword = "";// Searching among members (by offer name)
-    let offerSearchCardEnding = "";    // Searching among offers by card ending
-
-    //  5) SORTING STATES SCROLL POSITIONS PER VIEW
-    let sortState = { key: "", direction: 1 };      // For member table
-    let offerSortState = { key: "", direction: 1 }; // For offer table
-    const globalViewState = {
+    //  2) VIEW / UI STATES
+    let glb_view_page = "summary";  // Possible: "summary", "members", "offers", "benefits"
+    let glb_view_mini = true;       // Whether the main container is collapsed
+    const glb_view_scroll = {
         summary: { scrollTop: 0 },
         members: { scrollTop: 0 },
         offers: { scrollTop: 0 },
         benefits: { scrollTop: 0 },
     };
+    let glb_memberSortState = { key: "", direction: 1 };      // For member table
+    let glb_offerSortState = { key: "", direction: 1 }; // For offer table
+
+    //  3) FILTER STATES
+    const glb_filters = {
+        memberStatus: "Active", // "all", "Active", "Canceled"
+        memberCardtype: "all",  // "all", "BASIC", "SUPP"
+        offerFav: false,        // Hide non-favorite offers
+        offerMerchantSearch: "",// Merchant/offer text search
+        memberMerchantSearch: "",// Searching among members (by offer name)
+        offerCardEnding: "",    // Searching among offers by card ending
+    };
+
+    //  5) MISCELLANEOUS 
+    let lastUpdate = "";        // Last time data was fetched
+    let runInBatchesLimit = 50; // Concurrency limit when enrolling in batches
+    let storage_accToken = "";       // Suffix for the token to avoid conflicts
+
 
     let content, viewBtns, toggleBtn, container, btnSummary, btnMembers, btnOffers, btnBenefits;
 
@@ -107,31 +75,32 @@
     // Section 3: UI Elements Creation
     // =========================================================================
 
-    // Helper: Create a new element with given properties and inline styles
-    function createEl(tag, { text = '', className = '', styles = {}, props = {} } = {}) {
+    function createEl(tag, { text = '', className = '', styles = {}, props = {}, children = [] } = {}) {
         const el = document.createElement(tag);
         if (text) el.textContent = text;
         if (className) el.className = className;
         Object.assign(el.style, styles);
         Object.entries(props).forEach(([key, value]) => el[key] = value);
+        children.forEach(child => el.appendChild(child));
         return el;
     }
 
-    // Helper: Create a button with hover effects
+    // Helper to create a button with default styling and hover effects.
     function createButton(label, onClick, { styles = {} } = {}) {
+        const defaultStyles = {
+            cursor: 'pointer',
+            fontSize: '18px',
+            padding: '8px 20px',
+            border: 'none',
+            background: 'transparent',
+            borderRadius: '8px',
+            transition: 'all 0.2s ease',
+            color: '#2c3e50',
+            fontWeight: '500'
+        };
         const btn = createEl('button', {
-            text: label, styles: {
-                cursor: 'pointer',
-                fontSize: '18px',
-                padding: '8px 20px',
-                border: 'none',
-                background: 'transparent',
-                borderRadius: '8px',
-                transition: 'all 0.2s ease',
-                color: '#2c3e50',
-                fontWeight: '500',
-                ...styles
-            }
+            text: label,
+            styles: { ...defaultStyles, ...styles }
         });
         btn.addEventListener('click', onClick);
         btn.addEventListener('mouseover', () => {
@@ -145,23 +114,24 @@
         return btn;
     }
 
-    // Build the UI container with header and content area
+    // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
     function buildUI() {
-        const fontStyle = document.createElement('style');
-        fontStyle.textContent = `
-        @font-face {
-            font-family: 'AmexFont';
-            src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/dls-fonts/1.0.0/package/dist/fonts/325e6ad0-38fb-4bad-861c-d965eab101d5-3.woff") format('woff');
-            font-weight: normal;
-            font-style: normal;
-        }
-        /* Example: Apply the custom font to your overlay container */
-        #card-utility-overlay {
-            font-family: 'AmexFont', 'Segoe UI', system-ui, sans-serif;
-        }
-        `;
+        // Insert a style element to load the custom font and apply it to the overlay.
+        const fontStyle = createEl('style', {
+            text: `
+            @font-face {
+                font-family: 'AmexFont';
+                src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/dls-fonts/1.0.0/package/dist/fonts/325e6ad0-38fb-4bad-861c-d965eab101d5-3.woff") format('woff');
+                font-weight: normal;
+                font-style: normal;
+            }
+            #card-utility-overlay {
+                font-family: 'AmexFont', 'Segoe UI', system-ui, sans-serif;
+            }
+            `});
         document.head.appendChild(fontStyle);
-        // Increased shadow and darker background to separate from page
+
+        // Create the main container with background, border, and transition properties.
         const container = createEl('div', {
             props: { id: 'card-utility-overlay' },
             styles: {
@@ -172,7 +142,7 @@
                 borderRadius: '12px',
                 zIndex: '10000',
                 fontFamily: "'AmexFont', 'Segoe UI', system-ui, sans-serif",
-                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.42)', // stronger shadow for separation
+                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.42)',
                 maxHeight: '90vh',
                 overflow: 'hidden',
                 width: '90%',
@@ -182,6 +152,7 @@
             }
         });
 
+        // Title element
         const title = createEl('span', {
             text: 'AMaxOffer',
             styles: {
@@ -194,7 +165,7 @@
             }
         });
 
-        // Create view buttons with improved logic
+        // Navigation buttons for different views.
         const btnSummary = createButton('Summary', () => switchView('summary', btnSummary));
         const btnMembers = createButton('Members', () => switchView('members', btnMembers));
         const btnOffers = createButton('Offers', () => switchView('offers', btnOffers));
@@ -207,11 +178,11 @@
                 background: '#f8f9fa',
                 borderRadius: '8px',
                 padding: '4px'
-            }
+            },
+            children: [btnSummary, btnMembers, btnOffers, btnBenefits]
         });
-        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => viewBtns.appendChild(btn));
 
-        // Toggle button for expanding/minimizing the container
+        // Toggle button for minimizing/expanding the container.
         const toggleBtn = createButton('➕', toggleMinimize, {
             styles: {
                 fontSize: '1.2rem',
@@ -227,7 +198,7 @@
         toggleBtn.addEventListener('mouseover', () => toggleBtn.style.backgroundColor = '#f0f0f0');
         toggleBtn.addEventListener('mouseout', () => toggleBtn.style.backgroundColor = 'transparent');
 
-        // Build header and content sections
+        // Header containing the title, navigation buttons, and toggle button.
         const header = createEl('div', {
             props: { id: 'card-utility-header' },
             styles: {
@@ -239,10 +210,11 @@
                 alignItems: 'center',
                 cursor: 'grab',
                 userSelect: 'none'
-            }
+            },
+            children: [title, viewBtns, toggleBtn]
         });
-        header.append(title, viewBtns, toggleBtn);
 
+        // Main content area.
         const content = createEl('div', {
             props: { id: 'card-utility-content' },
             styles: {
@@ -253,89 +225,103 @@
             text: 'Loading...'
         });
 
-        // Append header and content to container
         container.append(header, content);
         document.body.appendChild(container);
 
-        // Set initial UI state
+        // Initial UI state: minimized container with hidden content and buttons.
         content.style.display = 'none';
         viewBtns.style.display = 'none';
         container.style.width = '200px';
-        container.style.height = '75px'
+        container.style.height = '75px';
         toggleBtn.textContent = '➕';
 
-        // Make header draggable
+        // Make the header draggable.
         makeDraggable(header, container);
+
         return { container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits };
     }
 
-    // Simple function to make an element draggable
+    // Make an element draggable by listening to mousedown and tracking mouse movement.
     function makeDraggable(handle, container) {
+        let shiftX = 0, shiftY = 0;
+        let latestX = 0, latestY = 0;
+        let animationFrameId = null;
+
+        function updatePosition() {
+            container.style.left = `${latestX - shiftX}px`;
+            container.style.top = `${latestY - shiftY}px`;
+            animationFrameId = null;
+        }
+
+        function onMouseMove(e) {
+            latestX = e.clientX;
+            latestY = e.clientY;
+            if (!animationFrameId) {
+                animationFrameId = requestAnimationFrame(updatePosition);
+            }
+        }
+
+        function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
         handle.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevent text selection and other default actions.
             const rect = container.getBoundingClientRect();
-            const shiftX = e.clientX - rect.left;
-            const shiftY = e.clientY - rect.top;
-
-            const onMouseMove = (e2) => {
-                container.style.left = `${e2.clientX - shiftX}px`;
-                container.style.top = `${e2.clientY - shiftY}px`;
-            };
-
+            shiftX = e.clientX - rect.left;
+            shiftY = e.clientY - rect.top;
             document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', () => {
-                document.removeEventListener('mousemove', onMouseMove);
-            }, { once: true });
+            document.addEventListener('mouseup', onMouseUp);
         });
     }
 
-    // Toggle minimize/expand logic
+
+    // Toggle the minimized/expanded state of the UI container.
     function toggleMinimize() {
-        isMinimized = !isMinimized;
-        content.style.display = isMinimized ? 'none' : 'block';
-        viewBtns.style.display = isMinimized ? 'none' : 'flex';
-        toggleBtn.textContent = isMinimized ? '➕' : '➖';
-        container.style.width = isMinimized ? '200px' : '90%';
-        container.style.height = isMinimized ? '75px' : 'auto'; // Reduced height when minimized
-        container.style.transform = isMinimized ? 'scale(0.98)' : 'none';
-        container.style.boxShadow = isMinimized
+        glb_view_mini = !glb_view_mini;
+        content.style.display = glb_view_mini ? 'none' : 'block';
+        viewBtns.style.display = glb_view_mini ? 'none' : 'flex';
+        toggleBtn.textContent = glb_view_mini ? '➕' : '➖';
+        container.style.width = glb_view_mini ? '200px' : '90%';
+        container.style.height = glb_view_mini ? '75px' : 'auto';
+        container.style.transform = glb_view_mini ? 'scale(0.98)' : 'none';
+        container.style.boxShadow = glb_view_mini
             ? '0 12px 18px rgba(0,0,0,0.20)'
             : '0 12px 32px rgba(0,0,0,0.30)';
-        if (!isMinimized) {
-            // Listen for the transition to finish (e.g., height transition)
-            const onTransitionEnd = (e) => {
+
+        if (!glb_view_mini) {
+            container.addEventListener('transitionend', function onTransitionEnd(e) {
                 if (e.propertyName === 'height') {
-                    renderCurrentView();
+                    renderglb_view_page();
                     container.removeEventListener('transitionend', onTransitionEnd);
                 }
-            };
-            container.addEventListener('transitionend', onTransitionEnd);
+            });
         }
     }
 
-    // View switching logic: save state, update active button style, and re-render view
+    // Switch between views, update button styles, and trigger re-rendering.
     function switchView(view, activeBtn) {
         saveCurrentScrollState();
-        currentView = view;
+        glb_view_page = view;
         [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
             btn.style.backgroundColor = (btn === activeBtn) ? '#4CAF50' : 'transparent';
             btn.style.color = (btn === activeBtn) ? 'black' : '#2c3e50';
             btn.style.fontWeight = (btn === activeBtn) ? '800' : '500';
         });
-        renderCurrentView();
+        renderglb_view_page();
     }
 
-    // Save current scroll state for the active view
+    // Save the current scroll position for the active view.
     function saveCurrentScrollState() {
         if (content) {
-            globalViewState[currentView].scrollTop = content.scrollTop;
+            glb_view_scroll[glb_view_page].scrollTop = content.scrollTop;
         }
     }
-
-
-    const ui = buildUI();
-    // Destructure our UI elements for use in the rest of your code
-    ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
-
 
 
     // =========================================================================
@@ -372,7 +358,7 @@
     // Save the current scroll position for the active view
     function saveCurrentScrollState() {
         if (content) {
-            globalViewState[currentView].scrollTop = content.scrollTop;
+            glb_view_scroll[glb_view_page].scrollTop = content.scrollTop;
         }
     }
 
@@ -424,7 +410,6 @@
     }
 
 
-
     // Run tasks in batches to control concurrency
     async function runInBatches(tasks, limit) {
         const results = [];
@@ -442,12 +427,11 @@
 
     // Utility to get the basic account ending for a supplementary account
     function getBasicAccountEndingForSuppAccount(suppAccount) {
-        // For a supplementary account, cardIndex is in the form "N-X"
         const parts = suppAccount.cardIndex.split('-');
         if (parts.length > 1) {
             const mainIndex = parts[0];
             // Find the basic account whose cardIndex equals mainIndex and has relationship "BASIC"
-            const basicAccount = accountData.find(acc => acc.cardIndex === mainIndex && acc.relationship === "BASIC");
+            const basicAccount = glb_account.find(acc => acc.cardIndex === mainIndex && acc.relationship === "BASIC");
             if (basicAccount) {
                 return basicAccount.display_account_number;
             }
@@ -456,31 +440,28 @@
     }
 
 
-
-
-
     // Utility to sort the account data based on a key
     function sort_memberTab(key) {
-        if (sortState.key === key) {
-            sortState.direction *= -1;
+        if (glb_memberSortState.key === key) {
+            glb_memberSortState.direction *= -1;
         } else {
-            sortState.key = key;
-            sortState.direction = 1;
+            glb_memberSortState.key = key;
+            glb_memberSortState.direction = 1;
         }
         if (key === 'cardIndex') {
-            accountData.sort((a, b) => {
+            glb_account.sort((a, b) => {
                 const [aMain, aSub] = parseCardIndex(a.cardIndex);
                 const [bMain, bSub] = parseCardIndex(b.cardIndex);
                 if (aMain === bMain) {
-                    return sortState.direction * (aSub - bSub);
+                    return glb_memberSortState.direction * (aSub - bSub);
                 }
-                return sortState.direction * (aMain - bMain);
+                return glb_memberSortState.direction * (aMain - bMain);
             });
         } else {
-            accountData.sort((a, b) => {
+            glb_account.sort((a, b) => {
                 const valA = a[key] || "";
                 const valB = b[key] || "";
-                return sortState.direction * valA.toString().localeCompare(valB.toString());
+                return glb_memberSortState.direction * valA.toString().localeCompare(valB.toString());
             });
         }
         saveCurrentScrollState();
@@ -492,17 +473,15 @@
     }
 
 
-
-
     // Utility to sort the offer data based on a key
     function sort_offerTab(key) {
-        if (offerSortState.key === key) {
-            offerSortState.direction *= -1;
+        if (glb_offerSortState.key === key) {
+            glb_offerSortState.direction *= -1;
         } else {
-            offerSortState.key = key;
-            offerSortState.direction = (key === "favorite") ? -1 : 1;
+            glb_offerSortState.key = key;
+            glb_offerSortState.direction = (key === "favorite") ? -1 : 1;
         }
-        offerData.sort((a, b) => {
+        glb_offer.sort((a, b) => {
             if (key === "favorite") {
                 if (a.favorite === b.favorite) return 0;
                 return a.favorite ? -1 : 1;
@@ -514,19 +493,19 @@
                 const numA = parseNumericValue(valA);
                 const numB = parseNumericValue(valB);
                 if (isNaN(numA) && isNaN(numB)) {
-                    return offerSortState.direction * valA.localeCompare(valB);
+                    return glb_offerSortState.direction * valA.localeCompare(valB);
                 } else if (isNaN(numA)) {
-                    return 1 * offerSortState.direction;
+                    return 1 * glb_offerSortState.direction;
                 } else if (isNaN(numB)) {
-                    return -1 * offerSortState.direction;
+                    return -1 * glb_offerSortState.direction;
                 }
-                return offerSortState.direction * (numA - numB);
+                return glb_offerSortState.direction * (numA - numB);
             } else if (key === "eligibleCards" || key === "enrolledCards") {
                 const lenA = Array.isArray(valA) ? valA.length : 0;
                 const lenB = Array.isArray(valB) ? valB.length : 0;
-                return offerSortState.direction * (lenA - lenB);
+                return glb_offerSortState.direction * (lenA - lenB);
             } else {
-                return offerSortState.direction * valA.toString().localeCompare(valB.toString());
+                return glb_offerSortState.direction * valA.toString().localeCompare(valB.toString());
             }
         });
         saveCurrentScrollState();
@@ -537,8 +516,6 @@
             container.appendChild(renderOffers_table());
         }
     }
-
-
 
 
     // Utility to parse offer details from the description
@@ -646,13 +623,11 @@
     }
 
 
-
-
     // Merge the old favorites with the new offer data
     function mergeFavorites(newOfferMap) {
         const oldFavorites = {};
-        if (offerData && Array.isArray(offerData)) {
-            offerData.forEach(o => {
+        if (glb_offer && Array.isArray(glb_offer)) {
+            glb_offer.forEach(o => {
                 if (o.source_id) {
                     oldFavorites[o.source_id] = o.favorite === true;
                 }
@@ -672,7 +647,7 @@
 
     async function get_accounts() {
         try {
-            const res = await fetch(MEMBER_API, {
+            const res = await fetch(API_member, {
                 method: 'GET',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
@@ -685,7 +660,7 @@
             if (!data || !Array.isArray(data.accounts)) {
                 throw new Error('Invalid account data received');
             }
-            accountData = [];
+            glb_account = [];
             let mainCounter = 1;
             data.accounts.forEach(item => {
                 const mainAccount = {
@@ -703,7 +678,7 @@
                     eligibleOffers: 0,
                     enrolledOffers: 0
                 };
-                accountData.push(mainAccount);
+                glb_account.push(mainAccount);
                 if (Array.isArray(item.supplementary_accounts)) {
                     item.supplementary_accounts.forEach(supp => {
                         const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
@@ -722,19 +697,23 @@
                             eligibleOffers: 0,
                             enrolledOffers: 0
                         };
-                        accountData.push(suppAccount);
+                        glb_account.push(suppAccount);
                     });
                 }
                 mainCounter++;
             });
-            btnSummary.style.fontWeight = 'bold';
-            return true;
         } catch (error) {
             console.error('Error fetching account data:', error);
             content.innerHTML = `<p style="color: red;">Error fetching account data: ${error.message}</p>`;
             return false;
         }
+
+        storage_accToken = glb_account[0].account_token;
+        localStorageHandler(1, storage_accToken, ["account"]);
+        return true;
+
     }
+
 
     async function fetchRequest_offer(accountToken) {
         const payload = {
@@ -747,7 +726,7 @@
             userOffset: "-06:00"
         };
         try {
-            const res = await fetch(OFFERS_API, {
+            const res = await fetch(API_offer, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -766,9 +745,10 @@
         }
     }
 
+
     async function get_offers() {
         const offerInfoTable = {};
-        const activeAccounts = accountData.filter(acc =>
+        const activeAccounts = glb_account.filter(acc =>
             acc.account_status && acc.account_status.trim().toLowerCase() === "active"
         );
         const skipPatterns = [
@@ -821,20 +801,20 @@
             });
         }));
         mergeFavorites(offerInfoTable);
-        accountData.forEach(acc => {
+        glb_account.forEach(acc => {
             acc.eligibleOffers = 0;
             acc.enrolledOffers = 0;
         });
         Object.values(offerInfoTable).forEach(offer => {
             if (Array.isArray(offer.eligibleCards)) {
                 offer.eligibleCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
+                    const acc = glb_account.find(a => a.display_account_number === card);
                     if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
                 });
             }
             if (Array.isArray(offer.enrolledCards)) {
                 offer.enrolledCards.forEach(card => {
-                    const acc = accountData.find(a => a.display_account_number === card);
+                    const acc = glb_account.find(a => a.display_account_number === card);
                     if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
                 });
             }
@@ -842,14 +822,15 @@
         return Object.values(offerInfoTable);
     }
 
+
     async function fetchRequest_balance(accountToken) {
         if (!accountToken) {
             console.error("Account token is required");
             return null;
         }
         try {
-            const balancesUrl = FINANCIAL_BALANCES_API;
-            const transactionUrl = FINANCIAL_TRANSACTION_API;
+            const balancesUrl = API_balance;
+            const transactionUrl = API_balancePending;
 
             const [balancesResponse, transactionResponse] = await Promise.all([
                 fetch(balancesUrl, {
@@ -900,8 +881,9 @@
         } catch (error) { console.error("Error fetching financial data:", error); return null; }
     }
 
+
     async function get_balance() {
-        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
+        const basicAccounts = glb_account.filter(acc => acc.relationship === "BASIC");
         await Promise.all(basicAccounts.map(async (acc) => {
             if (!acc.financialData) {
                 acc.financialData = await fetchRequest_balance(acc.account_token);
@@ -909,8 +891,9 @@
         }));
     }
 
+
     async function fetchRequest_benefit(accountToken, locale = "en-US", limit = "ALL") {
-        const url = BENEFIT_API;
+        const url = API_benefit;
         const payload = [{ accountToken, locale, limit }];
 
         try {
@@ -995,8 +978,8 @@
 
 
     async function get_benefit() {
-        const basicAccounts = accountData.filter(acc => acc.relationship === "BASIC");
-        let allTrackers = [];
+        const basicAccounts = glb_account.filter(acc => acc.relationship === "BASIC");
+        let newTrackers = [];
         await Promise.all(basicAccounts.map(async (acc) => {
             const trackers = await fetchRequest_benefit(acc.account_token);
             if (Array.isArray(trackers)) {
@@ -1006,19 +989,25 @@
                     // Ensure numeric values for spent and target amounts
                     tracker.spentAmount = parseFloat(tracker.spentAmount) || 0;
                     tracker.targetAmount = parseFloat(tracker.targetAmount) || 0;
-                    allTrackers.push(tracker);
+                    newTrackers.push(tracker);
                 });
             }
         }));
-        return allTrackers;
+
+        if (Array.isArray(newTrackers)) {
+            glb_benefit = newTrackers;
+            localStorageHandler(1, storage_accToken, "benefit");
+        }
+
     }
 
-    // Retrieve current user's trust level via USCF APIs
+
+
     async function get_trustLevel() {
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
-                url: USCF1_API,
+                url: API_USCF1,
                 onload: function (response) {
                     if (response.status !== 200) {
                         console.log("Session request failed");
@@ -1033,7 +1022,7 @@
                         }
                         GM.xmlHttpRequest({
                             method: "GET",
-                            url: USCF2_API + encodeURIComponent(username) + ".json",
+                            url: API_USCF2 + encodeURIComponent(username) + ".json",
                             onload: function (resp) {
                                 if (resp.status !== 200) {
                                     console.log(`User JSON fetch failed for ${username}`);
@@ -1066,6 +1055,7 @@
         });
     }
 
+
     async function fetchGet_enrollOffer(accountToken, offerIdentifier) {
         const payload = {
             accountNumberProxy: accountToken,
@@ -1078,7 +1068,7 @@
         };
 
         try {
-            const res = await fetch(ENROLL_API, {
+            const res = await fetch(API_Enroll, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -1100,14 +1090,15 @@
         }
     }
 
+
     async function get__batchEnrollOffer(offerSourceId, accountNumber) {
         // Collect tasks for each eligible card in each offer
         const tasks = [];
         let totalEnrollAttempts = 0;
         let successfulEnrollments = 0;
 
-        // Build tasks from offerData
-        for (const offer of offerData) {
+        // Build tasks from glb_offer
+        for (const offer of glb_offer) {
             // If a specific offer is targeted, skip others.
             if (offerSourceId && offer.source_id !== offerSourceId) continue;
             // Skip DEFAULT category offers.
@@ -1118,7 +1109,7 @@
             // For each eligible card
             for (const card of offer.eligibleCards) {
                 // Find matching accounts that are active
-                const matchingAccounts = accountData.filter(acc =>
+                const matchingAccounts = glb_account.filter(acc =>
                     acc.display_account_number === card &&
                     acc.account_status?.trim().toLowerCase() === "active"
                 );
@@ -1132,12 +1123,12 @@
                         totalEnrollAttempts++;
 
                         // Skip if the card is in the excluded list.
-                        if (excludedCards.includes(acc.display_account_number)) {
+                        if (glb_excludedCards.includes(acc.display_account_number)) {
                             console.log(`Skipping card ${acc.display_account_number} as it is excluded.`);
                             return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
                         }
                         // For non-priority cards, wait 0.5 seconds.
-                        if (!priorityCards.includes(acc.display_account_number)) {
+                        if (!glb_priorityCards.includes(acc.display_account_number)) {
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                         try {
@@ -1145,7 +1136,7 @@
                             if (enrollResult.result) {
                                 successfulEnrollments++;
                                 console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} successful`);
-                                // Update offerData: remove from eligibleCards and add to enrolledCards
+                                // Update glb_offer: remove from eligibleCards and add to enrolledCards
                                 const idx = offer.eligibleCards.indexOf(acc.display_account_number);
                                 if (idx !== -1) {
                                     offer.eligibleCards.splice(idx, 1);
@@ -1171,7 +1162,7 @@
         const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
 
         // Refresh the offer data and re-render the UI.
-        offerData = await get_offers();
+        glb_offer = await get_offers();
 
         if (totalEnrollAttempts > 0) {
             const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
@@ -1182,6 +1173,7 @@
         // [ { offerId: "OFFER123", accountToken: "TOKEN_ABC", result: true }, ... ]
         return enrollmentResults;
     }
+
 
     async function runInBatches(tasks, limit) {
         const results = [];
@@ -1241,11 +1233,11 @@
 
         // Helper: determine whether to highlight the account row based on the offer search keyword.
         function shouldHighlightAccount(acc) {
-            if (!offerSearchMembersKeyword || offerSearchMembersKeyword.trim().length === 0) {
+            if (!glb_filters.memberMerchantSearch || glb_filters.memberMerchantSearch.trim().length === 0) {
                 return false;
             }
-            const searchTerm = offerSearchMembersKeyword.trim().toLowerCase();
-            return offerData.some(offer => {
+            const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
+            return glb_offer.some(offer => {
                 if (offer.name.toLowerCase().includes(searchTerm)) {
                     return (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.display_account_number)) ||
                         (Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.display_account_number));
@@ -1290,6 +1282,7 @@
         return table;
     }
 
+
     function createSearchInput(placeholder, value, callback) {
         const container = document.createElement('div');
         container.style.position = 'relative';
@@ -1309,7 +1302,7 @@
 
         input.addEventListener('input', debounce(() => {
             callback(input.value.trim());
-            renderCurrentView();
+            renderglb_view_page();
             setTimeout(() => input.focus(), 0);
         }, 500));
 
@@ -1342,7 +1335,7 @@
             distinctNotFullyEnrolled,
             totalEligible,
             totalEnrolled
-        } = offerData.reduce((stats, offer) => {
+        } = glb_offer.reduce((stats, offer) => {
             if (offer.category === "DEFAULT") return stats;
             const eligible = offer.eligibleCards?.length || 0;
             const enrolled = offer.enrolledCards?.length || 0;
@@ -1357,7 +1350,7 @@
         }, { distinctFullyEnrolled: 0, distinctNotFullyEnrolled: 0, totalEligible: 0, totalEnrolled: 0 });
 
         // Compute financial stats for BASIC accounts with financialData
-        const { totalBalance, totalPending, totalRemaining } = accountData
+        const { totalBalance, totalPending, totalRemaining } = glb_account
             .filter(acc => acc.relationship === "BASIC" && acc.financialData)
             .reduce((fin, acc) => {
                 fin.totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
@@ -1366,7 +1359,7 @@
                 return fin;
             }, { totalBalance: 0, totalPending: 0, totalRemaining: 0 });
 
-        const numAccounts = accountData.length;
+        const numAccounts = glb_account.length;
         const updateTime = lastUpdate || "Never";
 
         // Create main container
@@ -1455,7 +1448,7 @@
         };
 
         const financialRow = createStatRow([
-            statItem('Basic Cards on Login', `${numAccounts}`, 'rgba(0, 0, 0, 0.69)'),
+            statItem('Card Amount on Login', `${numAccounts}`, 'rgba(0, 0, 0, 0.69)'),
             statItem('Total Balance', `$${totalBalance.toFixed(2)}`, 'rgba(22, 18, 19, 0.69)'),
             statItem('Total Pending Charge', `$${totalPending.toFixed(2)}`, 'rgba(138, 113, 121, 0.65)'),
             statItem('Remain Statement', `$${totalRemaining.toFixed(2)}`, 'rgba(231, 29, 99, 0.65)')
@@ -1511,13 +1504,13 @@
                 await get_balance();
                 refreshStatusEl.textContent = "Refreshing benefits...";
                 const newBenefitTrackers = await get_benefit();
-                if (Array.isArray(newOfferData)) offerData = newOfferData;
-                if (Array.isArray(newBenefitTrackers)) benefitTrackers = newBenefitTrackers;
+                if (Array.isArray(newOfferData)) glb_offer = newOfferData;
+                if (Array.isArray(newBenefitTrackers)) glb_benefit = newBenefitTrackers;
                 lastUpdate = new Date().toLocaleString();
                 refreshStatusEl.textContent = "Refresh complete.";
-                await renderCurrentView();
-                setLocalStorage(accountData[0].account_token, [
-                    "accountData", "offerData", "lastUpdate", "benefitTrackers"
+                await renderglb_view_page();
+                setLocalStorage(glb_account[0].account_token, [
+                    "account", "offer", "lastUpdate", "benefit"
                 ]);
             } catch (e) {
                 console.error('Error refreshing data:', e);
@@ -1532,7 +1525,7 @@
         const enrollBtn = createButton('Enroll All', '#27ae60', async () => {
             try {
                 await get__batchEnrollOffer();
-                renderCurrentView();
+                renderglb_view_page();
             } catch (e) {
                 console.error('Error enrolling all:', e);
             }
@@ -1545,7 +1538,6 @@
 
         return summaryDiv;
     }
-
 
 
     function renderMembers_filterBar() {
@@ -1592,10 +1584,10 @@
         statusFilterSelect.appendChild(optionAll);
         statusFilterSelect.appendChild(optionActive);
         statusFilterSelect.appendChild(optionCanceled);
-        statusFilterSelect.value = currentStatusFilter;
+        statusFilterSelect.value = glb_filters.memberStatus;
         statusFilterSelect.addEventListener('change', () => {
-            currentStatusFilter = statusFilterSelect.value;
-            renderCurrentView();
+            glb_filters.memberStatus = statusFilterSelect.value;
+            renderglb_view_page();
         });
 
         statusFilterDiv.appendChild(statusFilterLabel);
@@ -1634,10 +1626,10 @@
         typeFilterSelect.appendChild(typeOptionAll);
         typeFilterSelect.appendChild(typeOptionBasic);
         typeFilterSelect.appendChild(typeOptionSupp);
-        typeFilterSelect.value = currentTypeFilter;
+        typeFilterSelect.value = glb_filters.memberCardtype;
         typeFilterSelect.addEventListener('change', () => {
-            currentTypeFilter = typeFilterSelect.value;
-            renderCurrentView();
+            glb_filters.memberCardtype = typeFilterSelect.value;
+            renderglb_view_page();
         });
 
         typeFilterDiv.appendChild(typeFilterLabel);
@@ -1658,10 +1650,10 @@
         // Reuse createSearchInput here. This function should return a container with the search input.
         const offerSearchInputContainer = createSearchInput(
             'Enter keyword',
-            offerSearchMembersKeyword,
+            glb_filters.memberMerchantSearch,
             val => {
-                offerSearchMembersKeyword = val.toLowerCase();
-                renderCurrentView();
+                glb_filters.memberMerchantSearch = val.toLowerCase();
+                renderglb_view_page();
             }
         );
 
@@ -1709,11 +1701,11 @@
         };
 
         // Filter accounts by status and type (do not filter by search term)
-        const filteredAccounts = accountData.filter(acc => {
-            const statusMatch = currentStatusFilter === 'all' ||
-                acc.account_status.trim().toLowerCase() === currentStatusFilter.toLowerCase();
-            const typeMatch = currentTypeFilter === 'all' ||
-                acc.relationship === currentTypeFilter;
+        const filteredAccounts = glb_account.filter(acc => {
+            const statusMatch = glb_filters.memberStatus === 'all' ||
+                acc.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
+            const typeMatch = glb_filters.memberCardtype === 'all' ||
+                acc.relationship === glb_filters.memberCardtype;
             return statusMatch && typeMatch;
         });
 
@@ -1770,31 +1762,31 @@
             } else if (key === 'priority') {
                 const chk = document.createElement('input');
                 chk.type = 'checkbox';
-                chk.checked = priorityCards.includes(item.display_account_number);
+                chk.checked = glb_priorityCards.includes(item.display_account_number);
                 chk.addEventListener('change', () => {
                     if (chk.checked) {
-                        if (!priorityCards.includes(item.display_account_number)) {
-                            priorityCards.push(item.display_account_number);
+                        if (!glb_priorityCards.includes(item.display_account_number)) {
+                            glb_priorityCards.push(item.display_account_number);
                         }
                     } else {
-                        priorityCards = priorityCards.filter(num => num !== item.display_account_number);
+                        glb_priorityCards = glb_priorityCards.filter(num => num !== item.display_account_number);
                     }
-                    setLocalStorage(accountData[0].account_token, ['priorityCards']);
+                    setLocalStorage(glb_account[0].account_token, ['priorityCards']);
                 });
                 return chk;
             } else if (key === 'exclude') {
                 const chk = document.createElement('input');
                 chk.type = 'checkbox';
-                chk.checked = excludedCards.includes(item.display_account_number);
+                chk.checked = glb_excludedCards.includes(item.display_account_number);
                 chk.addEventListener('change', () => {
                     if (chk.checked) {
-                        if (!excludedCards.includes(item.display_account_number)) {
-                            excludedCards.push(item.display_account_number);
+                        if (!glb_excludedCards.includes(item.display_account_number)) {
+                            glb_excludedCards.push(item.display_account_number);
                         }
                     } else {
-                        excludedCards = excludedCards.filter(num => num !== item.display_account_number);
+                        glb_excludedCards = glb_excludedCards.filter(num => num !== item.display_account_number);
                     }
-                    setLocalStorage(accountData[0].account_token, ['excludedCards']);
+                    setLocalStorage(glb_account[0].account_token, ['excludedCards']);
                 });
                 return chk;
             }
@@ -1813,6 +1805,7 @@
         containerDiv.appendChild(tableElement);
         return containerDiv;
     }
+
 
     function renderMembers_offerOnCard(accountNumber, offerType) {
         // Create the overlay with backdrop blur
@@ -1906,12 +1899,12 @@
         // Determine relevant offers based on offerType
         let relevantOffers = [];
         if (offerType === 'eligible') {
-            relevantOffers = offerData.filter(offer =>
+            relevantOffers = glb_offer.filter(offer =>
                 Array.isArray(offer.eligibleCards) &&
                 offer.eligibleCards.includes(accountNumber)
             );
         } else if (offerType === 'enrolled') {
-            relevantOffers = offerData.filter(offer =>
+            relevantOffers = glb_offer.filter(offer =>
                 Array.isArray(offer.enrolledCards) &&
                 offer.enrolledCards.includes(accountNumber)
             );
@@ -1935,6 +1928,7 @@
         document.body.appendChild(overlay);
     }
 
+
     function renderMembers_page() {
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
@@ -1947,6 +1941,7 @@
 
         return containerDiv;
     }
+
 
     function renderOffers_searchBar() {
         const filterCard = document.createElement('div');
@@ -1963,11 +1958,11 @@
         // Favorites Toggle
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
-        favCheckbox.checked = showFavoritesOnly;
+        favCheckbox.checked = glb_filters.offerFav;
         favCheckbox.style.cursor = 'pointer';
         favCheckbox.addEventListener('change', () => {
-            showFavoritesOnly = favCheckbox.checked;
-            renderCurrentView();
+            glb_filters.offerFav = favCheckbox.checked;
+            renderglb_view_page();
         });
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
@@ -1981,10 +1976,10 @@
         favContainer.appendChild(favLabel);
 
         // Search inputs
-        const merchantSearch = createSearchInput('Search merchants...', offerSearchKeyword,
-            val => offerSearchKeyword = val.toLowerCase());
-        const cardSearch = createSearchInput('Card ending...', offerSearchCardEnding,
-            val => offerSearchCardEnding = val);
+        const merchantSearch = createSearchInput('Search merchants...', glb_filters.offerMerchantSearch,
+            val => glb_filters.offerMerchantSearch = val.toLowerCase());
+        const cardSearch = createSearchInput('Card ending...', glb_filters.offerCardEnding,
+            val => glb_filters.offerCardEnding = val);
 
         filterCard.appendChild(favContainer);
         filterCard.appendChild(merchantSearch);
@@ -1993,14 +1988,15 @@
         return filterCard;
     }
 
+
     function renderOffers_table() {
         // Filter offers based on search criteria.
-        const filteredOffers = offerData.filter(o => {
-            if (showFavoritesOnly && !o.favorite) return false;
-            if (offerSearchKeyword && !o.name.toLowerCase().includes(offerSearchKeyword)) return false;
-            if (offerSearchCardEnding) {
-                const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(offerSearchCardEnding);
-                const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(offerSearchCardEnding);
+        const filteredOffers = glb_offer.filter(o => {
+            if (glb_filters.offerFav && !o.favorite) return false;
+            if (glb_filters.offerMerchantSearch && !o.name.toLowerCase().includes(glb_filters.offerMerchantSearch)) return false;
+            if (glb_filters.offerCardEnding) {
+                const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(glb_filters.offerCardEnding);
+                const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(glb_filters.offerCardEnding);
                 if (!eligible && !enrolled) return false;
             }
             return true;
@@ -2029,7 +2025,7 @@
             achievement_type: "60px",
             category: "40px",
             expiry_date: "90px",
-            redemption_types: "80px",
+            redemption_types: "70px",
             short_description: "250px",
             threshold: "90px",
             reward: "80px",
@@ -2084,7 +2080,7 @@
                         // Fallback: take the first three letters in uppercase
                         return trimmed.toUpperCase().slice(0, 3);
                     });
-                    return abbreviatedParts.join(", ");
+                    return abbreviatedParts.join("");
                 }
                 return "N/A";
             } else if (key === 'expiry_date') {
@@ -2106,7 +2102,7 @@
                 chk.style.cursor = 'pointer';
                 chk.addEventListener('change', () => {
                     item.favorite = chk.checked;
-                    setLocalStorage(accountData[0].account_token, ["offerData"]);
+                    setLocalStorage(glb_account[0].account_token, ["offer"]);
                 });
                 return chk;
             } else if (key === 'eligibleCards' || key === 'enrolledCards') {
@@ -2147,8 +2143,8 @@
         const existingOverlay = document.getElementById('offer-details-overlay');
         if (existingOverlay) existingOverlay.remove();
 
-        // Retrieve the offer from offerData
-        const foundOffer = offerData.find(o => o.offerId === offerId);
+        // Retrieve the offer from glb_offer
+        const foundOffer = glb_offer.find(o => o.offerId === offerId);
         const offerName = foundOffer ? foundOffer.name : 'Unknown Offer';
 
         // Create overlay with backdrop blur
@@ -2222,7 +2218,7 @@
         closeBtn.addEventListener('click', () =>
             overlay.remove(),
             saveCurrentScrollState,
-            renderCurrentView());
+            renderglb_view_page());
 
         header.appendChild(title);
         header.appendChild(closeBtn);
@@ -2331,7 +2327,7 @@
                     card.addEventListener('mouseout', () => card.style.transform = 'none');
                     card.style.cursor = 'pointer';
                     card.addEventListener('click', async () => {
-                        const matchingAcc = accountData.find(acc => acc.display_account_number === cardEnd);
+                        const matchingAcc = glb_account.find(acc => acc.display_account_number === cardEnd);
                         if (!matchingAcc) {
                             console.log(`No matching account token for card ending ${cardEnd}`);
                             return;
@@ -2391,7 +2387,7 @@
             // For batch enrollments (unchanged)
             results.forEach(r => {
                 if (r.offerId !== offerId) return;
-                const matchingAcc = accountData.find(a => a.account_token === r.accountToken);
+                const matchingAcc = glb_account.find(a => a.account_token === r.accountToken);
                 if (!matchingAcc) return;
                 const cardEnd = matchingAcc.display_account_number;
                 const spanElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
@@ -2412,6 +2408,7 @@
         }
     }
 
+
     function renderOffers_page() {
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
@@ -2425,11 +2422,12 @@
         return containerDiv;
     }
 
+
     async function renderBenefits() {
-        const tokenSuffix = (accountData[0] && accountData[0].account_token) || "";
-        if (!benefitTrackers || benefitTrackers.length === 0) {
-            benefitTrackers = await get_benefit();
-            if (tokenSuffix) setLocalStorage(tokenSuffix, ["benefitTrackers"]);
+        const storage_accToken = (glb_account[0] && glb_account[0].account_token) || "";
+        if (!glb_benefit || glb_benefit.length === 0) {
+            glb_benefit = await get_benefit();
+            if (storage_accToken) localStorageHandler(1, storage_accToken, ["benefit"]);
         }
 
         const containerDiv = document.createElement('div');
@@ -2444,7 +2442,7 @@
 
         // Group trackers by benefitId
         const grouped = {};
-        benefitTrackers.forEach(trackerObj => {
+        glb_benefit.forEach(trackerObj => {
             const key = trackerObj.benefitId;
             if (!grouped[key]) {
                 grouped[key] = [];
@@ -2799,12 +2797,11 @@
 
 
 
-    // Update your renderCurrentView to use the cruiser tracker.
-    async function renderCurrentView() {
+    async function renderglb_view_page() {
         content.innerHTML = '';
         let viewContent;
 
-        switch (currentView) {
+        switch (glb_view_page) {
             case 'members':
                 viewContent = renderMembers_page();
                 viewContent.appendChild(renderMembers_filterBar());
@@ -2817,7 +2814,7 @@
                 break;
 
             case 'offers':
-                viewContent = renderOffers_page(offerData);
+                viewContent = renderOffers_page(glb_offer);
                 viewContent.appendChild(renderOffers_searchBar());
                 {
                     const container = document.createElement('div');
@@ -2848,94 +2845,117 @@
         content.appendChild(viewContent);
 
         // Restore scroll state if available
-        const viewState = globalViewState[currentView];
+        const viewState = glb_view_scroll[glb_view_page];
         if (viewState && typeof viewState.scrollTop === 'number') {
             content.scrollTop = viewState.scrollTop;
         }
     }
 
-
-
     // =========================================================================
     // Section 7: Local Storage Handling
     // =========================================================================
 
-    function setLocalStorage(tokenSuffix, keys) {
-        // Define all keys and their corresponding global variables.
+    function localStorageHandler(op, storage_accToken, keys) {
+        // Define the default keys for this script.
+        const defaultKeys = [
+            "account",
+            "offer",
+            "lastUpdate",
+            "priorityCards",
+            "excludedCards",
+            "benefit",
+            "scriptVersion"
+        ];
+
+        // allData holds the current values to be saved.
         const allData = {
-            accountData: accountData,
-            offerData: offerData,
+            account: glb_account,
+            offer: glb_offer,
             lastUpdate: lastUpdate,
-            priorityCards: priorityCards,
-            excludedCards: excludedCards,
-            benefitTrackers: benefitTrackers,
-            ScriptVersion: ScriptVersion
+            priorityCards: glb_priorityCards,
+            excludedCards: glb_excludedCards,
+            benefit: glb_benefit,
+            scriptVersion: scriptVersion
         };
-        // If keys not provided or empty, default to all.
-        if (!keys || keys.length === 0) {
-            keys = Object.keys(allData);
+
+        // If keys are not provided or empty, set defaults:
+        // When saving (op===1) use the keys from allData; otherwise, use the full defaultKeys.
+        if (keys === undefined || keys === null || !Array.isArray(keys) || keys.length === 0) {
+            keys = (op === 1) ? Object.keys(allData) : defaultKeys;
+        } else if (!Array.isArray(keys)) {
+            // If keys is not an array but is defined (e.g. a string), convert it.
+            keys = (typeof keys === "string") ? [keys] : (op === 1 ? Object.keys(allData) : defaultKeys);
         }
-        try {
-            keys.forEach(key => {
-                localStorage.setItem("AMaxOffer_" + key + "_" + tokenSuffix, JSON.stringify(allData[key]));
-            });
-            console.log("Data saved to localStorage with token: " + tokenSuffix + " for keys: " + keys.join(", "));
-        } catch (e) {
-            console.error("Error saving data to localStorage:", e);
+
+        switch (op) {
+            case 0: // Load
+                const loaded = {};
+
+                defaultKeys.forEach(key => {
+                    const storedItem = localStorage.getItem(`AMaxOffer_${key}_${storage_accToken}`);
+                    if (storedItem !== null) {
+                        loaded[key] = storedItem;
+                    }
+                });
+
+                try {
+                    if (!loaded["scriptVersion"] || JSON.parse(loaded["scriptVersion"]) !== scriptVersion) {
+                        console.error("Script version mismatch or missing.");
+                        return 2;
+                    }
+                    lastUpdate = loaded["lastUpdate"] || "";
+                    if (lastUpdate) {
+                        const savedDate = new Date(lastUpdate);
+                        const now = new Date();
+                        if ((now - savedDate) > 24 * 60 * 60 * 1000) {
+                            return 2;
+                        }
+                    }
+
+                    glb_account = JSON.parse(loaded["account"]);
+                    glb_offer = JSON.parse(loaded["offer"]);
+                    glb_priorityCards = loaded["priorityCards"] ? JSON.parse(loaded["priorityCards"]) : [];
+                    glb_excludedCards = loaded["excludedCards"] ? JSON.parse(loaded["excludedCards"]) : [];
+                    glb_benefit = loaded["benefit"] ? JSON.parse(loaded["benefit"]) : [];
+
+                    console.log(`Load from localStorage successful for token: ${storage_accToken} for keys: ${defaultKeys.join(", ")}`);
+                    renderglb_view_page();
+
+                    return 1;
+                } catch (error) {
+                    console.error("Error parsing saved localStorage data:", error);
+                    return 0;
+                }
+
+            case 1: // Set
+                keys.forEach(key => {
+                    localStorage.setItem(
+                        `AMaxOffer_${key}_${storage_accToken}`,
+                        JSON.stringify(allData[key])
+                    );
+                });
+                console.log(`Data saved to localStorage with token: ${storage_accToken} for keys: ${keys.join(", ")}`);
+                return 1;
+
+            case 2: // Clear data from localStorage
+                try {
+                    keys.forEach(key => {
+                        localStorage.removeItem(`AMaxOffer_${key}_${storage_accToken}`);
+                    });
+                    console.log(
+                        `Cleared localStorage for token: ${storage_accToken} for keys: ${keys.join(", ")}`
+                    );
+                    return 1;
+                } catch (e) {
+                    console.error("Error clearing localStorage data:", e);
+                    return 0;
+                }
+            default:
+                console.error("Invalid operation code provided to localStorageHandler");
+                return 0;
         }
     }
 
-    function loadLocalStorage(tokenSuffix, keys) {
-        const allKeys = ["accountData", "offerData", "lastUpdate", "priorityCards", "excludedCards", "benefitTrackers", "ScriptVersion"];
-        if (!keys || keys.length === 0) {
-            keys = allKeys;
-        }
-        const loaded = {};
-        let allExist = true;
-        keys.forEach(key => {
-            const item = localStorage.getItem("AMaxOffer_" + key + "_" + tokenSuffix);
-            if (item === null) {
-                allExist = false;
-            } else {
-                loaded[key] = item;
-            }
-        });
-        if (keys.includes("accountData") && keys.includes("offerData") && (!loaded.accountData || !loaded.offerData)) {
-            return 0;
-        }
-        try {
-            if (keys.includes("accountData") && loaded.accountData) { accountData = JSON.parse(loaded.accountData); }
-            if (keys.includes("offerData") && loaded.offerData) { offerData = JSON.parse(loaded.offerData); }
-            if (keys.includes("lastUpdate")) { lastUpdate = loaded.lastUpdate || ""; }
-            if (keys.includes("priorityCards")) { priorityCards = loaded.priorityCards ? JSON.parse(loaded.priorityCards) : []; }
-            if (keys.includes("excludedCards")) { excludedCards = loaded.excludedCards ? JSON.parse(loaded.excludedCards) : []; }
-            if (keys.includes("benefitTrackers")) { benefitTrackers = loaded.benefitTrackers ? JSON.parse(loaded.benefitTrackers) : []; }
-            if (keys.includes("ScriptVersion")) {
-                if (!loaded.ScriptVersion || JSON.parse(loaded.ScriptVersion) !== ScriptVersion) {
-                    console.error("Script version mismatch or missing.");
-                    return 2;
-                }
-            }
-            console.log("Load from localStorage successful for token: " + tokenSuffix + " for keys: " + keys.join(", "));
-            renderCurrentView();
-            if (keys.includes("lastUpdate") && lastUpdate) {
-                const savedDate = new Date(lastUpdate);
-                const now = new Date();
-                const diff = now - savedDate;
-                if (diff > 24 * 60 * 60 * 1000) {
-                    return 2;
-                }
-            }
-            return 1;
-        } catch (e) {
-            console.error("Error parsing saved localStorage data:", e);
-            return 0;
-        }
-    }
-
-    // =========================================================================
-    // Section 8: Event Listeners & UI Interaction
-    // =========================================================================
 
 
 
@@ -2943,49 +2963,51 @@
     // Section 9: Initialization Functions
     // =========================================================================
 
+    async function authorizeInit() {
 
-    async function init() {
         const tl = await get_trustLevel();
         if (tl === null || tl * 0.173 < 0.5) {
-            return;
+            return 0;
         }
+        const expirationDate = new Date("2025-03-26T00:00:00Z");
+        if (new Date() >= expirationDate) {
+            console.error("Code expired on " + expirationDate.toLocaleString());
+            return 0;
+        }
+        return 1;
+    }
+
+    async function init() {
+        const auth = await authorizeInit();
+        if (!auth) { alert("Authorization failed."); return; }
+
+        const ui = buildUI();
+        ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
+
         const fetchStatus = await get_accounts();
-        if (!fetchStatus || accountData.length === 0) {
-            console.error("Failed to fetch account data or no accounts found.");
-            return;
-        }
-        const tokenSuffix = accountData[0].account_token;
-        const localDataStatus = loadLocalStorage(tokenSuffix);
+        if (!fetchStatus || glb_account.length === 0) { alert("Unable to refresh."); return; }
 
+        const localDataStatus = localStorageHandler(0, storage_accToken);
         if (localDataStatus === 0 || localDataStatus === 2) {
-            // Refresh offers and benefit trackers
             const newOfferData = await get_offers();
+            await get_balance();
             const newBenefitTrackers = await get_benefit();
-            const newBalance = await get_balance();
-
-            if (newOfferData && Array.isArray(newOfferData)) {
-                offerData = newOfferData;
-            } else { console.error("get_offers failed. Not updating offerData."); }
-
-            if (newBenefitTrackers && Array.isArray(newBenefitTrackers)) {
-                benefitTrackers = newBenefitTrackers;
-            } else { console.error("Fetching benefit trackers failed. Not updating benefitTrackers."); }
-
-            if (newBalance && newBalance.length > 0) {
-                balanceData = newBalance;
-            } else { console.error("Fetching balance data failed. Not updating balanceData."); }
-
+            if (Array.isArray(newOfferData)) {
+                glb_offer = newOfferData;
+            }
+            if (Array.isArray(newBenefitTrackers)) {
+                glb_benefit = newBenefitTrackers;
+            }
             lastUpdate = new Date().toLocaleString();
-            await renderCurrentView();
-            // Save refreshed keys only (accountData, offerData, lastUpdate, benefitTrackers, ScriptVersion, etc.)
-            setLocalStorage(tokenSuffix, ["accountData", "offerData", "lastUpdate", "benefitTrackers", "ScriptVersion"]);
+            await renderglb_view_page();
+            localStorageHandler(1, storage_accToken, ["scriptVersion"]);
         } else {
             console.log("Using data from LocalStorage. No forced fetch.");
         }
 
         await get_balance();
-        if (currentView === 'members') {
-            renderCurrentView();
+        if (glb_view_page === 'members') {
+            renderglb_view_page();
         }
     }
 
