@@ -1,3 +1,28 @@
+// Utility to reconstruct obfuscated URLs
+function reconstructObfuscated(obfSegments, indexMap) {
+    let ordered = [];
+    Object.keys(indexMap)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .forEach(key => {
+            let seg = obfSegments[Number(indexMap[key])];
+            seg = seg.slice(0, -1);
+            ordered.push(seg);
+        });
+    return ordered.join('');
+}
+
+
+// Utility to decode Base64 twice to retrieve original URL
+function getUrl(encoded) {
+    try {
+        let firstDecoding = atob(encoded);
+        let originalUrl = atob(firstDecoding);
+        return originalUrl;
+    } catch (e) {
+        console.error("Error decoding URL:", e, "Encoded string:", encoded);
+        return "";
+    }
+}
 // MEMBER_API: https://global.americanexpress.com/api/servicing/v1/member
 
 const MEMBER_API_segments = ["hS$", "yVnlkbWxq_", "Ykc5aVlXd3V%", "ZVz_", "YU$", "YVc1bkwzWXh%", "FsY2$", "1sallXNW@", "xlSEJ5WlhOekxtTnZiUzloY0drdmM*", "MGNITTZMeTlu@", "MjFsYldKbGNnPT0=$", "M("];

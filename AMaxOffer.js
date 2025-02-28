@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      3.0
+// @version      3.0.2
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
@@ -35,11 +35,12 @@
     // =========================================================================
 
     //  1) PRIMARY DATA & TRACKERS
-    let glb_account = [];       // Holds all account/member info from the API
-    let glb_offer = [];         // Holds all offers (eligible and enrolled status)
-    let glb_benefit = [];   // Holds benefit tracker info for each card
-    let glb_priorityCards = [];  // List of card endings that have top priority
-    let glb_excludedCards = [];  // List of card endings to skip automatically
+    let glb_account = [];
+    let glb_offer = [];
+    let glb_benefit = [];
+    let glb_balance = {};
+    let glb_priorityCards = [];
+    let glb_excludedCards = [];
 
     //  2) VIEW / UI STATES
     let glb_view_page = "summary";  // Possible: "summary", "members", "offers", "benefits"
@@ -50,22 +51,22 @@
         offers: { scrollTop: 0 },
         benefits: { scrollTop: 0 },
     };
-    let glb_memberSortState = { key: "", direction: 1 };      // For member table
-    let glb_offerSortState = { key: "", direction: 1 }; // For offer table
+    let glb_memberSortState = { key: "", direction: 1 };
+    let glb_offerSortState = { key: "", direction: 1 };
 
     //  3) FILTER STATES
     const glb_filters = {
         memberStatus: "Active", // "all", "Active", "Canceled"
         memberCardtype: "all",  // "all", "BASIC", "SUPP"
         offerFav: false,        // Hide non-favorite offers
-        offerMerchantSearch: "",// Merchant/offer text search
-        memberMerchantSearch: "",// Searching among members (by offer name)
-        offerCardEnding: "",    // Searching among offers by card ending
+        offerMerchantSearch: "",
+        memberMerchantSearch: "",
+        offerCardEnding: "",
     };
 
     //  5) MISCELLANEOUS 
     let lastUpdate = "";        // Last time data was fetched
-    let runInBatchesLimit = 50; // Concurrency limit when enrolling in batches
+    let runInBatchesLimit = 100; // Concurrency limit when enrolling in batches
     let storage_accToken = "";       // Suffix for the token to avoid conflicts
 
 
@@ -121,7 +122,7 @@
             text: `
             @font-face {
                 font-family: 'AmexFont';
-                src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/dls-fonts/1.0.0/package/dist/fonts/325e6ad0-38fb-4bad-861c-d965eab101d5-3.woff") format('woff');
+                src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.31.2/package/dist/iconfont/dls-icons.woff?v=2.31.2") format('woff');
                 font-weight: normal;
                 font-style: normal;
             }
@@ -297,7 +298,7 @@
         if (!glb_view_mini) {
             container.addEventListener('transitionend', function onTransitionEnd(e) {
                 if (e.propertyName === 'height') {
-                    renderglb_view_page();
+                    renderPage();
                     container.removeEventListener('transitionend', onTransitionEnd);
                 }
             });
@@ -313,7 +314,7 @@
             btn.style.color = (btn === activeBtn) ? 'black' : '#2c3e50';
             btn.style.fontWeight = (btn === activeBtn) ? '800' : '500';
         });
-        renderglb_view_page();
+        renderPage();
     }
 
     // Save the current scroll position for the active view.
@@ -327,33 +328,6 @@
     // =========================================================================
     // Section 4: General Helper Functions
     // =========================================================================
-
-    // Utility to reconstruct obfuscated URLs
-    function reconstructObfuscated(obfSegments, indexMap) {
-        let ordered = [];
-        Object.keys(indexMap)
-            .sort((a, b) => parseInt(a) - parseInt(b))
-            .forEach(key => {
-                let seg = obfSegments[Number(indexMap[key])];
-                seg = seg.slice(0, -1);
-                ordered.push(seg);
-            });
-        return ordered.join('');
-    }
-
-
-    // Utility to decode Base64 twice to retrieve original URL
-    function getUrl(encoded) {
-        try {
-            let firstDecoding = atob(encoded);
-            let originalUrl = atob(firstDecoding);
-            return originalUrl;
-        } catch (e) {
-            console.error("Error decoding URL:", e, "Encoded string:", encoded);
-            return "";
-        }
-    }
-
 
     // Save the current scroll position for the active view
     function saveCurrentScrollState() {
@@ -645,7 +619,7 @@
     // Section 5: Data Fetching Functions
     // =========================================================================
 
-    async function get_accounts() {
+    async function get_accounts(readonly = false) {
         try {
             const res = await fetch(API_member, {
                 method: 'GET',
@@ -708,10 +682,13 @@
             return false;
         }
 
-        storage_accToken = glb_account[0].account_token;
-        localStorageHandler(1, storage_accToken, ["account"]);
-        return true;
-
+        if (Array.isArray(glb_account) && glb_account.length > 0) {
+            storage_accToken = glb_account[0].account_token;
+            if (!readonly) {
+                localStorageHandler("set", storage_accToken, ["account"]);
+            }
+            return true;
+        }
     }
 
 
@@ -819,7 +796,12 @@
                 });
             }
         });
-        return Object.values(offerInfoTable);
+
+        // Refresh the offer data and re-render the UI.
+        if (offerInfoTable && typeof offerInfoTable === 'object') {
+            glb_offer = Object.values(offerInfoTable);
+            localStorageHandler("set", storage_accToken, ["offer"]);
+        }
     }
 
 
@@ -830,9 +812,9 @@
         }
         try {
             const balancesUrl = API_balance;
-            const transactionUrl = API_balancePending;
+            const pTransactionUrl = API_balancePending;
 
-            const [balancesResponse, transactionResponse] = await Promise.all([
+            const [balancesResponse, pTransactionResponse] = await Promise.all([
                 fetch(balancesUrl, {
                     method: 'GET',
                     credentials: 'include',
@@ -842,7 +824,7 @@
                         'account_tokens': accountToken
                     }
                 }),
-                fetch(transactionUrl, {
+                fetch(pTransactionUrl, {
                     method: 'GET',
                     credentials: 'include',
                     headers: {
@@ -854,10 +836,10 @@
             ]);
 
             if (!balancesResponse.ok) { console.error("Failed to fetch balances, status:", balancesResponse.status); return null; }
-            if (!transactionResponse.ok) { console.error("Failed to fetch transaction summary, status:", transactionResponse.status); return null; }
+            if (!pTransactionResponse.ok) { console.error("Failed to fetch pending transaction summary, status:", pTransactionResponse.status); return null; }
 
             const balanceData = await balancesResponse.json();
-            const transactionData = await transactionResponse.json();
+            const pTransactionData = await pTransactionResponse.json();
 
             let balanceInfo = {};
             if (Array.isArray(balanceData) && balanceData.length > 0) {
@@ -867,16 +849,16 @@
                 };
             } else { console.error("Unexpected data format for balances:", balanceData); }
 
-            let transactionInfo = {};
-            if (Array.isArray(transactionData) && transactionData.length > 0) {
-                transactionInfo = {
-                    debits_credits_payments_total_amount: transactionData[0].total?.debits_credits_payments_total_amount
+            let pTransactionInfo = {};
+            if (Array.isArray(pTransactionData) && pTransactionData.length > 0) {
+                pTransactionInfo = {
+                    debits_credits_payments_total_amount: pTransactionData[0].total?.debits_credits_payments_total_amount
                 };
-            } else { console.error("Unexpected data format for transaction summary:", transactionData); }
+            } else { console.error("Unexpected data format for pending transaction  summary:", pTransactionData); }
 
             return {
                 ...balanceInfo,
-                ...transactionInfo
+                ...pTransactionInfo
             };
         } catch (error) { console.error("Error fetching financial data:", error); return null; }
     }
@@ -884,11 +866,18 @@
 
     async function get_balance() {
         const basicAccounts = glb_account.filter(acc => acc.relationship === "BASIC");
-        await Promise.all(basicAccounts.map(async (acc) => {
-            if (!acc.financialData) {
-                acc.financialData = await fetchRequest_balance(acc.account_token);
-            }
-        }));
+        try {
+            await Promise.all(basicAccounts.map(async (acc) => {
+                if (!acc.financialData) {
+                    acc.financialData = await fetchRequest_balance(acc.account_token);
+                }
+            }));
+
+            localStorageHandler("set", storage_accToken, ["account"]);
+        } catch (error) {
+            return;
+        }
+
     }
 
 
@@ -996,7 +985,7 @@
 
         if (Array.isArray(newTrackers)) {
             glb_benefit = newTrackers;
-            localStorageHandler(1, storage_accToken, "benefit");
+            localStorageHandler("set", storage_accToken, "benefit");
         }
 
     }
@@ -1055,15 +1044,17 @@
         });
     }
 
-
     async function fetchGet_enrollOffer(accountToken, offerIdentifier) {
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        const offsetTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const requestDateTimeWithOffset = `${offsetTime.getUTCFullYear()}-${pad(offsetTime.getUTCMonth() + 1)}-${pad(offsetTime.getUTCDate())}T${pad(offsetTime.getUTCHours())}:${pad(offsetTime.getUTCMinutes())}:${pad(offsetTime.getUTCSeconds())}-06:00`;
+
         const payload = {
             accountNumberProxy: accountToken,
             identifier: offerIdentifier,
-            identifierType: "OFFER",
             locale: "en-US",
-            offerRequestType: "DETAILS",
-            requestDateTimeWithOffset: new Date().toISOString().replace("Z", "-06:00"),
+            requestDateTimeWithOffset: requestDateTimeWithOffset,
             userOffset: "-06:00"
         };
 
@@ -1078,91 +1069,108 @@
                 },
                 body: JSON.stringify(payload)
             });
-            if (!res.ok) {
-                console.error(`Enrollment fetch error: ${res.status}`);
-                return { offerId: offerIdentifier, accountToken: accountToken, result: false };
-            }
+
             const json = await res.json();
-            return { offerId: offerIdentifier, accountToken: accountToken, result: json.isEnrolled };
+            if (json.isEnrolled) {
+                return { offerId: offerIdentifier, accountToken, result: true };
+            } else {
+                // Record explanationMessage when enrollment fails.
+                return {
+                    offerId: offerIdentifier,
+                    accountToken,
+                    result: false,
+                    explanationMessage: json.explanationMessage
+                };
+            }
         } catch (error) {
-            console.error('Error enrolling offer:', error);
-            return { offerId: offerIdentifier, accountToken: accountToken, result: false };
+            return { offerId: offerIdentifier, accountToken, result: false };
         }
     }
 
 
+
     async function get__batchEnrollOffer(offerSourceId, accountNumber) {
-        // Collect tasks for each eligible card in each offer
-        const tasks = [];
+        // Helper to delay execution
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Counters for statistics.
         let totalEnrollAttempts = 0;
         let successfulEnrollments = 0;
+        const tasks = [];
 
-        // Build tasks from glb_offer
-        for (const offer of glb_offer) {
-            // If a specific offer is targeted, skip others.
-            if (offerSourceId && offer.source_id !== offerSourceId) continue;
-            // Skip DEFAULT category offers.
+        // Filter out offers that are not eligible.
+        const eligibleOffers = glb_offer.filter(offer => {
+            if (offerSourceId && offer.source_id !== offerSourceId) return false;
             if (offer.category === "DEFAULT") {
                 console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-                continue;
+                return false;
             }
-            // For each eligible card
-            for (const card of offer.eligibleCards) {
-                // Find matching accounts that are active
+            return true;
+        });
+
+        // Helper to update the enrollment status in the offer object.
+        const updateOfferEnrollment = (offer, account) => {
+            const cardNumber = account.display_account_number;
+            offer.eligibleCards = offer.eligibleCards.filter(c => c !== cardNumber);
+            if (!offer.enrolledCards.includes(cardNumber)) {
+                offer.enrolledCards.push(cardNumber);
+            }
+        };
+
+        // Build tasks: for each offer, for each eligible card, find active matching accounts.
+        eligibleOffers.forEach(offer => {
+            offer.eligibleCards.forEach(card => {
                 const matchingAccounts = glb_account.filter(acc =>
                     acc.display_account_number === card &&
-                    acc.account_status?.trim().toLowerCase() === "active"
+                    acc.account_status?.trim().toLowerCase() === "active" &&
+                    (!accountNumber || acc.display_account_number === accountNumber)
                 );
-                for (const acc of matchingAccounts) {
-                    // If a specific card (accountNumber) is requested, skip others.
-                    if (accountNumber && acc.display_account_number !== accountNumber) {
-                        continue;
-                    }
-                    // Create a task for each matching account.
+                matchingAccounts.forEach(account => {
                     tasks.push(async () => {
                         totalEnrollAttempts++;
+                        const cardNumber = account.display_account_number;
 
-                        // Skip if the card is in the excluded list.
-                        if (glb_excludedCards.includes(acc.display_account_number)) {
-                            console.log(`Skipping card ${acc.display_account_number} as it is excluded.`);
-                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                        if (glb_excludedCards.includes(cardNumber)) {
+                            console.log(`Skipping card ${cardNumber} as it is excluded.`);
+                            return { offerId: offer.offerId, accountToken: account.account_token, result: false, explanationMessage: "Card excluded" };
                         }
-                        // For non-priority cards, wait 0.5 seconds.
-                        if (!glb_priorityCards.includes(acc.display_account_number)) {
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                        // Delay for non-priority cards.
+                        if (!glb_priorityCards.includes(cardNumber)) {
+                            await delay(500);
                         }
                         try {
-                            const enrollResult = await fetchGet_enrollOffer(acc.account_token, offer.offerId);
+                            const enrollResult = await fetchGet_enrollOffer(account.account_token, offer.offerId);
                             if (enrollResult.result) {
                                 successfulEnrollments++;
-                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} successful`);
-                                // Update glb_offer: remove from eligibleCards and add to enrolledCards
-                                const idx = offer.eligibleCards.indexOf(acc.display_account_number);
-                                if (idx !== -1) {
-                                    offer.eligibleCards.splice(idx, 1);
-                                }
-                                if (!offer.enrolledCards.includes(acc.display_account_number)) {
-                                    offer.enrolledCards.push(acc.display_account_number);
-                                }
-                                return { offerId: offer.offerId, accountToken: acc.account_token, result: true };
+                                console.log(`Enroll "${offer.name}" on card ${cardNumber} successful`);
+                                updateOfferEnrollment(offer, account);
+                                return { offerId: offer.offerId, accountToken: account.account_token, result: true };
                             } else {
-                                console.log(`Enroll "${offer.name}" on card ${acc.display_account_number} failed`);
-                                return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                                console.log(`Enroll "${offer.name}" on card ${cardNumber} failed. Reason: ${enrollResult.explanationMessage || "No explanation provided."}`);
+                                return {
+                                    offerId: offer.offerId,
+                                    accountToken: account.account_token,
+                                    result: false,
+                                    explanationMessage: enrollResult.explanationMessage
+                                };
                             }
                         } catch (err) {
-                            console.error(`Error enrolling offer "${offer.name}" on card ${acc.display_account_number}:`, err);
-                            return { offerId: offer.offerId, accountToken: acc.account_token, result: false };
+                            console.log(`Enroll "${offer.name}" on card ${cardNumber} errored:`, err);
+                            return {
+                                offerId: offer.offerId,
+                                accountToken: account.account_token,
+                                result: false,
+                                explanationMessage: err.message || "Error occurred"
+                            };
                         }
                     });
-                }
-            }
-        }
+                });
+            });
+        });
 
-        // Run all tasks in batches and collect results.
+        // Execute tasks in batches.
         const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
-
-        // Refresh the offer data and re-render the UI.
-        glb_offer = await get_offers();
+        await get_offers();
 
         if (totalEnrollAttempts > 0) {
             const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
@@ -1170,9 +1178,9 @@
         } else {
             console.log('No enrollment attempts were made.');
         }
-        // [ { offerId: "OFFER123", accountToken: "TOKEN_ABC", result: true }, ... ]
         return enrollmentResults;
     }
+
 
 
     async function runInBatches(tasks, limit) {
@@ -1302,7 +1310,7 @@
 
         input.addEventListener('input', debounce(() => {
             callback(input.value.trim());
-            renderglb_view_page();
+            renderPage();
             setTimeout(() => input.focus(), 0);
         }, 500));
 
@@ -1499,19 +1507,15 @@
                 refreshStatusEl.textContent = "Refreshing accounts...";
                 await get_accounts();
                 refreshStatusEl.textContent = "Refreshing offers...";
-                const newOfferData = await get_offers();
+                await get_offers();
                 refreshStatusEl.textContent = "Refreshing balances...";
                 await get_balance();
                 refreshStatusEl.textContent = "Refreshing benefits...";
-                const newBenefitTrackers = await get_benefit();
-                if (Array.isArray(newOfferData)) glb_offer = newOfferData;
-                if (Array.isArray(newBenefitTrackers)) glb_benefit = newBenefitTrackers;
+                await get_benefit();
                 lastUpdate = new Date().toLocaleString();
+                localStorageHandler("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
                 refreshStatusEl.textContent = "Refresh complete.";
-                await renderglb_view_page();
-                setLocalStorage(glb_account[0].account_token, [
-                    "account", "offer", "lastUpdate", "benefit"
-                ]);
+                await renderPage();
             } catch (e) {
                 console.error('Error refreshing data:', e);
                 refreshStatusEl.textContent = "Error refreshing data.";
@@ -1525,7 +1529,7 @@
         const enrollBtn = createButton('Enroll All', '#27ae60', async () => {
             try {
                 await get__batchEnrollOffer();
-                renderglb_view_page();
+                renderPage();
             } catch (e) {
                 console.error('Error enrolling all:', e);
             }
@@ -1587,7 +1591,7 @@
         statusFilterSelect.value = glb_filters.memberStatus;
         statusFilterSelect.addEventListener('change', () => {
             glb_filters.memberStatus = statusFilterSelect.value;
-            renderglb_view_page();
+            renderPage();
         });
 
         statusFilterDiv.appendChild(statusFilterLabel);
@@ -1629,7 +1633,7 @@
         typeFilterSelect.value = glb_filters.memberCardtype;
         typeFilterSelect.addEventListener('change', () => {
             glb_filters.memberCardtype = typeFilterSelect.value;
-            renderglb_view_page();
+            renderPage();
         });
 
         typeFilterDiv.appendChild(typeFilterLabel);
@@ -1653,7 +1657,7 @@
             glb_filters.memberMerchantSearch,
             val => {
                 glb_filters.memberMerchantSearch = val.toLowerCase();
-                renderglb_view_page();
+                renderPage();
             }
         );
 
@@ -1771,7 +1775,7 @@
                     } else {
                         glb_priorityCards = glb_priorityCards.filter(num => num !== item.display_account_number);
                     }
-                    setLocalStorage(glb_account[0].account_token, ['priorityCards']);
+                    localStorageHandler("set", storage_accToken, ["priorityCards"]);
                 });
                 return chk;
             } else if (key === 'exclude') {
@@ -1786,7 +1790,7 @@
                     } else {
                         glb_excludedCards = glb_excludedCards.filter(num => num !== item.display_account_number);
                     }
-                    setLocalStorage(glb_account[0].account_token, ['excludedCards']);
+                    localStorageHandler("set", storage_accToken, ["excludedCards"]);
                 });
                 return chk;
             }
@@ -1962,7 +1966,7 @@
         favCheckbox.style.cursor = 'pointer';
         favCheckbox.addEventListener('change', () => {
             glb_filters.offerFav = favCheckbox.checked;
-            renderglb_view_page();
+            renderPage();
         });
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
@@ -2102,7 +2106,7 @@
                 chk.style.cursor = 'pointer';
                 chk.addEventListener('change', () => {
                     item.favorite = chk.checked;
-                    setLocalStorage(glb_account[0].account_token, ["offer"]);
+                    localStorageHandler("set", storage_accToken, ["offer"]);
                 });
                 return chk;
             } else if (key === 'eligibleCards' || key === 'enrolledCards') {
@@ -2140,273 +2144,163 @@
 
     async function renderOffers_enrollCard(offerId) {
         // Remove existing overlay
-        const existingOverlay = document.getElementById('offer-details-overlay');
-        if (existingOverlay) existingOverlay.remove();
+        const overlayId = 'offer-details-overlay';
+        const existing = document.getElementById(overlayId);
+        if (existing) existing.remove();
 
-        // Retrieve the offer from glb_offer
-        const foundOffer = glb_offer.find(o => o.offerId === offerId);
-        const offerName = foundOffer ? foundOffer.name : 'Unknown Offer';
+        // Get offer data
+        const offer = glb_offer.find(o => o.offerId === offerId);
+        const offerName = offer ? offer.name : 'Unknown Offer';
 
-        // Create overlay with backdrop blur
+        // Create overlay and popup
         const overlay = document.createElement('div');
-        overlay.id = 'offer-details-overlay';
+        overlay.id = overlayId;
         overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(4px);
-            z-index: 10000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+          background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10000;
+          display: flex; justify-content: center; align-items: center;
         `;
-
-        // Modern popup container
         const popup = document.createElement('div');
         popup.style.cssText = `
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 24px;
-            width: 90%;
-            max-width: 440px;
-            max-height: 90vh;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            position: relative;
+          background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 440px;
+          max-height: 90vh; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15); position: relative;
         `;
-
-        // Header section
+        // Header
         const header = document.createElement('div');
-        header.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #eee;
-        `;
-
-        // Title with gradient text
+        header.style.cssText = `display: flex; justify-content: space-between; align-items: center;
+          margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #eee;`;
         const title = document.createElement('h3');
-        title.textContent = foundOffer?.name || 'Unknown Offer';
-        title.style.cssText = `
-            margin: 0;
-            font-size: 1.2rem;
-            font-weight: 600;
-            background: linear-gradient(45deg, #2c3e50, #4CAF50);
-            -webkit-background-clip: text;
-            color: transparent;
-        `;
-
-        // Modern close button
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '&times;';
-        closeBtn.style.cssText = `
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: #666;
-            cursor: pointer;
-            padding: 4px;
-            transition: all 0.2s ease;
-        `;
-        closeBtn.addEventListener('mouseover', () => closeBtn.style.color = '#ff4444');
-        closeBtn.addEventListener('mouseout', () => closeBtn.style.color = '#666');
-        closeBtn.addEventListener('click', () =>
-            overlay.remove(),
-            saveCurrentScrollState,
-            renderglb_view_page());
-
-        header.appendChild(title);
-        header.appendChild(closeBtn);
+        title.textContent = offerName;
+        title.style.cssText = `margin: 0; font-size: 1.2rem; font-weight: 600;
+          background: linear-gradient(45deg, #2c3e50, #4CAF50); -webkit-background-clip: text; color: transparent;`;
+        const closeBtn = createIconButton('×', () => { overlay.remove(); saveCurrentScrollState(); renderPage(); });
+        closeBtn.style.cssText += 'font-size:1.5rem; color:#666; padding:4px;';
+        header.append(title, closeBtn);
         popup.appendChild(header);
 
-        // Enroll All Button
-        if (foundOffer?.eligibleCards?.length) {
-            const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Cards';
-            enrollAllBtn.style.cssText = `
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                width: 100%;
-                padding: 12px;
-                margin: 0 0 20px 0;
-                background: linear-gradient(45deg, rgb(84, 99, 86), rgb(27, 66, 29));
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: transform 0.2s ease;
-            `;
-            // Add icon
-            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            icon.setAttribute('viewBox', '0 0 24 24');
-            icon.setAttribute('width', '18');
-            icon.setAttribute('height', '18');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
-            path.setAttribute('fill', 'currentColor');
-            icon.appendChild(path);
-            enrollAllBtn.prepend(icon);
+        if (offer) {
+            if (offer.eligibleCards?.length) {
+                const enrollAll = createIconButton('Enroll All Cards', async () => {
+                    console.log(`Calling batch enrollment for "${offerName}" (source_id: ${offer.source_id}).`);
+                    const results = await get__batchEnrollOffer(offer.source_id);
+                    results.forEach(r => {
+                        if (r.offerId !== offerId) return;
+                        const acc = glb_account.find(a => a.account_token === r.accountToken);
+                        if (!acc) return;
+                        const cardEnd = acc.display_account_number;
 
-            enrollAllBtn.addEventListener('mouseover', () => enrollAllBtn.style.transform = 'scale(1.02)');
-            enrollAllBtn.addEventListener('mouseout', () => enrollAllBtn.style.transform = 'none');
-            enrollAllBtn.addEventListener('click', async () => {
-                if (!foundOffer) return;
-                const sourceId = foundOffer.source_id;
-                console.log(`Calling get__batchEnrollOffer for offer "${foundOffer.name}" (source_id: ${sourceId}).`);
-                const results = await get__batchEnrollOffer(sourceId);
-                highlightBatchEnrollmentResults(results);
-                setTimeout(() => renderOffers_enrollCard(offerId), 3000);
-            });
-            popup.appendChild(enrollAllBtn);
-        }
-
-        // Helper: highlightCard for single enrollment
-        function highlightCard(cardElem, success) {
-            cardElem.style.backgroundColor = success ? '#c0ffc0' : '#ffc0c0';
-            setTimeout(() => {
-                cardElem.style.backgroundColor = success ? '#e8f5e9' : '#e3f2fd';
-            }, 3000);
-        }
-
-        // Card Sections
-        const createSection = (titleText, cards, isEnrolled) => {
-            const section = document.createElement('div');
-            section.style.marginBottom = '24px';
-
-            const sectionTitle = document.createElement('h4');
-            sectionTitle.textContent = titleText;
-            sectionTitle.style.cssText = `
-                margin: 0 0 12px 0;
-                color: ${isEnrolled ? '#4CAF50' : '#2196F3'};
-                font-size: 0.95rem;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            `;
-            // Section icon
-            const sectionIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            sectionIcon.setAttribute('viewBox', '0 0 24 24');
-            sectionIcon.setAttribute('width', '16');
-            sectionIcon.setAttribute('height', '16');
-            const sectionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            sectionPath.setAttribute('d', isEnrolled ? 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' : 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
-            sectionPath.setAttribute('fill', 'currentColor');
-            sectionIcon.appendChild(sectionPath);
-            sectionTitle.prepend(sectionIcon);
-
-            const grid = document.createElement('div');
-            grid.style.cssText = `
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-                gap: 8px;
-            `;
-
-            cards.forEach(cardEnd => {
-                const card = document.createElement('div');
-                card.textContent = cardEnd;
-                // Add an id attribute so that highlightBatchEnrollmentResults and highlightCard can find this element
-                card.id = `offerCard_${offerId}_${cardEnd}`;
-                card.style.cssText = `
-                    padding: 8px;
-                    background: ${isEnrolled ? '#e8f5e9' : '#e3f2fd'};
-                    border-radius: 6px;
-                    text-align: center;
-                    font-size: 0.85rem;
-                    transition: all 0.2s ease;
-                    ${!isEnrolled ? 'cursor: pointer;' : ''}
-                `;
-                if (!isEnrolled) {
-                    card.addEventListener('mouseover', () => card.style.transform = 'translateY(-2px)');
-                    card.addEventListener('mouseout', () => card.style.transform = 'none');
-                    card.style.cursor = 'pointer';
-                    card.addEventListener('click', async () => {
-                        const matchingAcc = glb_account.find(acc => acc.display_account_number === cardEnd);
-                        if (!matchingAcc) {
-                            console.log(`No matching account token for card ending ${cardEnd}`);
-                            return;
+                        if (r.result) {
+                            const idx = offer.eligibleCards.indexOf(cardEnd);
+                            if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                            if (!offer.enrolledCards.includes(cardEnd)) offer.enrolledCards.push(cardEnd);
                         }
-                        // Single enrollment
-                        const singleResult = await fetchGet_enrollOffer(matchingAcc.account_token, offerId);
-                        if (singleResult.result) {
-                            console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
-                            // Temporarily highlight green
-                            highlightCard(card, true);
-                            // Move the card from eligible to enrolled
-                            const idx = foundOffer.eligibleCards.indexOf(cardEnd);
-                            if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
-                            if (!foundOffer.enrolledCards.includes(cardEnd)) {
-                                foundOffer.enrolledCards.push(cardEnd);
-                            }
-                        } else {
-                            console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
-                            // Temporarily highlight red
-                            highlightCard(card, false);
+                        const cardElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
+                        if (cardElem) {
+                            cardElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
+                            setTimeout(() => cardElem.style.backgroundColor = r.result ? '#e8f5e9' : '#e3f2fd', 3000);
                         }
-                        // After 3 seconds, re-render the entire popup
-                        setTimeout(() => renderOffers_enrollCard(offerId), 3000);
                     });
-                }
-                grid.appendChild(card);
-            });
-
-            section.appendChild(sectionTitle);
-            section.appendChild(grid);
-            return section;
-        };
-
-        // Add sections
-        if (foundOffer) {
-            popup.appendChild(createSection('Eligible Cards', foundOffer.eligibleCards, false));
-            popup.appendChild(createSection('Enrolled Cards', foundOffer.enrolledCards, true));
-        } else {
-            const error = document.createElement('div');
-            error.style.cssText = `
-                padding: 16px;
-                background: #ffebee;
-                border-radius: 8px;
-                color: #c62828;
-                display: flex;
-                align-items: center;
-                gap: 8px;
+                    setTimeout(() => renderOffers_enrollCard(offerId), 3000);
+                }, 'plus');
+                enrollAll.style.cssText += `
+              width: 100%; margin: 0 0 20px 0; background: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
+              color: white; border-radius: 8px; font-weight: 500;
             `;
-            error.textContent = 'Offer not found';
-            popup.appendChild(error);
+                popup.appendChild(enrollAll);
+            }
+            // Card Sections
+            popup.appendChild(createSection('Eligible Cards', offer.eligibleCards, offerId, false, offer));
+            popup.appendChild(createSection('Enrolled Cards', offer.enrolledCards, offerId, true, offer));
+        } else {
+            popup.appendChild(createErrorElement('Offer not found'));
         }
-
         overlay.appendChild(popup);
         document.body.appendChild(overlay);
 
-        function highlightBatchEnrollmentResults(results) {
-            // For batch enrollments (unchanged)
-            results.forEach(r => {
-                if (r.offerId !== offerId) return;
-                const matchingAcc = glb_account.find(a => a.account_token === r.accountToken);
-                if (!matchingAcc) return;
-                const cardEnd = matchingAcc.display_account_number;
-                const spanElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
-                if (spanElem) {
-                    spanElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
-                    setTimeout(() => {
-                        spanElem.style.backgroundColor = r.result ? '#e8f5e9' : '#e3f2fd';
-                    }, 3000);
-                }
-                if (r.result) {
-                    const idx = foundOffer.eligibleCards.indexOf(cardEnd);
-                    if (idx !== -1) foundOffer.eligibleCards.splice(idx, 1);
-                    if (!foundOffer.enrolledCards.includes(cardEnd)) {
-                        foundOffer.enrolledCards.push(cardEnd);
-                    }
-                }
+        // --- Helper Functions ---
+        function createSection(label, cards, offerId, enrolled, offer) {
+            const section = document.createElement('div');
+            section.style.marginBottom = '24px';
+            const secTitle = document.createElement('h4');
+            secTitle.textContent = label;
+            secTitle.style.cssText = `margin: 0 0 12px 0; color: ${enrolled ? '#4CAF50' : '#2196F3'}; font-size: 0.95rem;`;
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px;';
+            const sortedCards = [...cards].sort((a, b) => {
+                const accA = glb_account.find(acc => acc.display_account_number === a);
+                const accB = glb_account.find(acc => acc.display_account_number === b);
+                const [aMain, aSub] = parseCardIndex(accA?.cardIndex);
+                const [bMain, bSub] = parseCardIndex(accB?.cardIndex);
+                return aMain - bMain || aSub - bSub;
             });
+            sortedCards.forEach(cardEnd => grid.appendChild(createCard(cardEnd, offerId, enrolled, offer)));
+            section.append(secTitle, grid);
+            return section;
+        }
+
+        function createCard(cardEnd, offerId, enrolled, offer) {
+            const card = document.createElement('div');
+            card.id = `offerCard_${offerId}_${cardEnd}`;
+            card.textContent = cardEnd;
+            card.style.cssText = `
+            padding: 8px; border-radius: 6px; text-align: center; font-size: 0.85rem;
+            transition: all 0.2s ease; background-color: ${enrolled ? '#e8f5e9' : '#e3f2fd'};
+            ${!enrolled ? 'cursor: pointer;' : ''}
+          `;
+            if (!enrolled) {
+                card.onclick = async () => {
+                    const acc = glb_account.find(a => a.display_account_number === cardEnd);
+                    if (!acc) { console.log(`Account not found for card: ${cardEnd}`); return; }
+                    const res = await fetchGet_enrollOffer(acc.account_token, offerId);
+                    if (res.result) {
+                        console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
+                        const idx = offer.eligibleCards.indexOf(cardEnd);
+                        if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                        if (!offer.enrolledCards.includes(cardEnd)) offer.enrolledCards.push(cardEnd);
+                    } else {
+                        console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
+                    }
+                    card.style.backgroundColor = res.result ? '#c0ffc0' : '#ffc0c0';
+                    setTimeout(() => card.style.backgroundColor = res.result ? '#e8f5e9' : '#e3f2fd', 3000);
+                    setTimeout(() => renderOffers_enrollCard(offerId), 3000);
+                };
+                card.onmouseover = () => card.style.transform = 'translateY(-2px)';
+                card.onmouseout = () => card.style.transform = 'none';
+            }
+            return card;
+        }
+
+        function createIconButton(text, handler, iconType) {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            if (iconType) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('width', '16');
+                svg.setAttribute('height', '16');
+                const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                p.setAttribute('fill', 'currentColor');
+                p.setAttribute('d', iconType === 'plus'
+                    ? 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'
+                    : 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z');
+                svg.appendChild(p);
+                btn.prepend(svg);
+            }
+            btn.onclick = handler;
+            btn.style.cssText = 'display:flex; align-items:center; gap:8px; padding:12px; border:none; cursor:pointer; transition: transform 0.2s ease;';
+            btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
+            btn.onmouseout = () => btn.style.transform = 'none';
+            return btn;
+        }
+
+        function createErrorElement(msg) {
+            const err = document.createElement('div');
+            err.textContent = msg;
+            err.style.cssText = 'padding:16px; background:#ffebee; border-radius:8px; color:#c62828; display:flex; align-items:center; gap:8px;';
+            return err;
         }
     }
+
 
 
     function renderOffers_page() {
@@ -2424,148 +2318,158 @@
 
 
     async function renderBenefits() {
-        const storage_accToken = (glb_account[0] && glb_account[0].account_token) || "";
         if (!glb_benefit || glb_benefit.length === 0) {
-            glb_benefit = await get_benefit();
-            if (storage_accToken) localStorageHandler(1, storage_accToken, ["benefit"]);
+            await get_benefit();
         }
 
-        const containerDiv = document.createElement('div');
-        containerDiv.style.padding = '20px 16px';
-        containerDiv.style.fontFamily = "'Segoe UI', system-ui, sans-serif";
-        // transparent background
-        containerDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
-        containerDiv.style.borderRadius = '12px';
+        const containerDiv = createContainer();
+        const groupedBenefits = groupBenefits(glb_benefit);
+        const sortedBenefitGroups = sortBenefitGroups(groupedBenefits);
 
-        containerDiv.style.maxWidth = '800px';
-        containerDiv.style.margin = '0 auto';
-
-        // Group trackers by benefitId
-        const grouped = {};
-        glb_benefit.forEach(trackerObj => {
-            const key = trackerObj.benefitId;
-            if (!grouped[key]) {
-                grouped[key] = [];
-            }
-            grouped[key].push(trackerObj);
-        });
-
-        // Define sorting/renaming for known benefits
-        const benefitSortMapping = {
-            "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
-            "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
-            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit" },
-            "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
-            "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
-            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)" },
-            "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
-            "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
-            "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
-            "digital entertainment": { order: 10, newName: "$20 Digital Entertainment" },
-            "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
-            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit" },
-            "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
-            "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
-            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" }
-        };
-
-        function getGroupSortData(trackerGroup) {
-            const first = trackerGroup[0];
-            const benefitIdKey = (first.benefitId || "").toLowerCase().trim();
-            const benefitNameKey = (first.benefitName || "").toLowerCase().trim();
-            let sort_memberTab = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
-            if (!sort_memberTab) {
-                return { order: Infinity, displayName: first.benefitName || "" };
-            }
-            // Fallback: if newName is missing, use benefitName from the first tracker
-            return { order: sort_memberTab.order, displayName: sort_memberTab.newName || first.benefitName || "" };
-        }
-
-        // Build and sort group array
-        const groupArray = [];
-        for (const key in grouped) {
-            const group = grouped[key];
-            const sort_memberTab = getGroupSortData(group);
-            groupArray.push({
-                key,
-                trackers: group,
-                order: sort_memberTab.order,
-                displayName: sort_memberTab.displayName
-            });
-        }
-        groupArray.sort((a, b) => {
-            if (a.order !== b.order) return a.order - b.order;
-            return (a.displayName || "").localeCompare(b.displayName || "");
-        });
-
-        // Add status legend
-        const legend = document.createElement('div');
-        legend.style.display = 'flex';
-        legend.style.gap = '15px';
-        legend.style.marginBottom = '25px';
-        legend.style.justifyContent = 'center';
-        legend.style.flexWrap = 'wrap';
-
-        const statusLegend = {
+        // Define statusLegendConfig here, making it accessible to all helper functions
+        const statusLegendConfig = {
             'ACHIEVED': { label: 'Completed', color: '#4CAF50' },
             'IN_PROGRESS': { label: 'In Progress', color: '#2196F3' }
         };
 
-        Object.entries(statusLegend).forEach(([status, { label, color }]) => {
-            const legendItem = document.createElement('div');
-            legendItem.style.display = 'flex';
-            legendItem.style.alignItems = 'center';
-            legendItem.style.gap = '6px';
-
-            const colorDot = document.createElement('div');
-            colorDot.style.width = '12px';
-            colorDot.style.height = '12px';
-            colorDot.style.borderRadius = '50%';
-
-            colorDot.style.backgroundColor = color;
-
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = label;
-            labelSpan.style.color = '#424242';
-            labelSpan.style.fontSize = '14px';
-
-            legendItem.appendChild(colorDot);
-            legendItem.appendChild(labelSpan);
-            legend.appendChild(legendItem);
-        });
-
+        const legend = createStatusLegend(statusLegendConfig); // Pass statusLegendConfig
         containerDiv.appendChild(legend);
 
-        if (groupArray.length === 0) {
+        if (sortedBenefitGroups.length === 0) {
+            const emptyState = createEmptyState();
+            containerDiv.appendChild(emptyState);
+        } else {
+            sortedBenefitGroups.forEach(groupObj => {
+                const accordionItem = createAccordionItem(groupObj, statusLegendConfig); // Pass statusLegendConfig
+                containerDiv.appendChild(accordionItem);
+            });
+        }
+
+        return containerDiv;
+
+        // --- Helper Functions ---
+
+        function createContainer() {
+            const div = document.createElement('div');
+            div.style.padding = '20px 16px';
+            div.style.fontFamily = "'Segoe UI', system-ui, sans-serif";
+            div.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+            div.style.borderRadius = '12px';
+            div.style.maxWidth = '800px';
+            div.style.margin = '0 auto';
+            div.style.color = '#333';
+            return div;
+        }
+
+        function groupBenefits(benefits) {
+            const grouped = {};
+            benefits.forEach(trackerObj => {
+                const key = trackerObj.benefitId;
+                grouped[key] = grouped[key] || [];
+                grouped[key].push(trackerObj);
+            });
+            return grouped;
+        }
+
+        function getGroupSortData(trackerGroup) {
+            const benefitSortMapping = {
+                "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
+                "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
+                "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit" },
+                "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
+                "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
+                "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)" },
+                "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
+                "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
+                "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
+                "digital entertainment": { order: 10, newName: "$20 Digital Entertainment" },
+                "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
+                "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit" },
+                "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
+                "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
+                "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" }
+            };
+
+            const firstTracker = trackerGroup[0];
+            const benefitIdKey = (firstTracker.benefitId || "").toLowerCase().trim();
+            const benefitNameKey = (firstTracker.benefitName || "").toLowerCase().trim();
+            const sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
+
+            if (!sortData) {
+                return { order: Infinity, displayName: firstTracker.benefitName || "" };
+            }
+            return { order: sortData.order, displayName: sortData.newName || firstTracker.benefitName || "" };
+        }
+
+        function sortBenefitGroups(groupedBenefits) {
+            const groupArray = Object.entries(groupedBenefits).map(([key, group]) => {
+                const sortInfo = getGroupSortData(group);
+                return { key, trackers: group, order: sortInfo.order, displayName: sortInfo.displayName };
+            });
+
+            groupArray.sort((a, b) => {
+                if (a.order !== b.order) return a.order - b.order;
+                return (a.displayName || "").localeCompare(b.displayName || "");
+            });
+            return groupArray;
+        }
+
+        // Modified to accept statusLegendConfig
+        function createStatusLegend(statusLegendConfig) {
+            const legend = document.createElement('div');
+            legend.style.display = 'flex';
+            legend.style.gap = '15px';
+            legend.style.marginBottom = '25px';
+            legend.style.justifyContent = 'center';
+            legend.style.flexWrap = 'wrap';
+
+
+            Object.entries(statusLegendConfig).forEach(([status, { label, color }]) => {
+                const legendItem = document.createElement('div');
+                legendItem.style.display = 'flex';
+                legendItem.style.alignItems = 'center';
+                legendItem.style.gap = '6px';
+
+                const colorDot = document.createElement('div');
+                colorDot.style.width = '12px';
+                colorDot.style.height = '12px';
+                colorDot.style.borderRadius = '50%';
+                colorDot.style.backgroundColor = color;
+
+                const labelSpan = document.createElement('span');
+                labelSpan.textContent = label;
+                labelSpan.style.color = '#757575';
+                labelSpan.style.fontSize = '14px';
+
+                legendItem.appendChild(colorDot);
+                legendItem.appendChild(labelSpan);
+                legend.appendChild(legendItem);
+            });
+            return legend;
+        }
+
+        function createEmptyState() {
             const emptyState = document.createElement('div');
             emptyState.style.textAlign = 'center';
             emptyState.style.padding = '40px 20px';
-            emptyState.style.color = '#616161';
+            emptyState.style.color = '#757575';
 
             const emptyText = document.createElement('p');
             emptyText.textContent = 'No benefits available to display';
             emptyText.style.fontSize = '16px';
 
             emptyState.appendChild(emptyText);
-            containerDiv.appendChild(emptyState);
-            return containerDiv;
+            return emptyState;
         }
 
-        groupArray.forEach(groupObj => {
-            const trackersGroup = groupObj.trackers;
-            // Use trackerDuration if available, otherwise empty string
-            const durationText =
-                trackersGroup[0].trackerDuration ||
-                (trackersGroup[0].tracker && trackersGroup[0].tracker.trackerDuration) ||
-                "";
-
-            // Accordion container
+        // Modified to accept statusLegendConfig
+        function createAccordionItem(groupObj, statusLegendConfig) {
             const accordionItem = document.createElement('div');
             accordionItem.style.border = '1px solid #e0e0e0';
             accordionItem.style.borderRadius = '12px';
             accordionItem.style.marginBottom = '15px';
             accordionItem.style.backgroundColor = '#ffffff';
-            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
             accordionItem.style.transition = 'box-shadow 0.2s ease, transform 0.2s ease';
 
             accordionItem.addEventListener('mouseenter', () => {
@@ -2573,36 +2477,70 @@
                 accordionItem.style.transform = 'translateY(-2px)';
             });
             accordionItem.addEventListener('mouseleave', () => {
-                accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+                accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                 accordionItem.style.transform = 'translateY(0)';
             });
 
-            // Accordion Header
+            const headerDiv = createAccordionHeader(groupObj, statusLegendConfig); // Pass statusLegendConfig
+            const bodyDiv = createAccordionBody(groupObj.trackers, statusLegendConfig); // Pass statusLegendConfig
+
+            accordionItem.appendChild(headerDiv);
+            accordionItem.appendChild(bodyDiv);
+
+            return accordionItem;
+        }
+
+        // Modified to accept statusLegendConfig
+        function createAccordionHeader(groupObj, statusLegendConfig) {
             const headerDiv = document.createElement('div');
             headerDiv.style.padding = '16px';
             headerDiv.style.cursor = 'pointer';
             headerDiv.style.transition = 'background-color 0.2s ease';
+            headerDiv.style.backgroundColor = '#f9f9f9';
 
             headerDiv.addEventListener('mouseenter', () => {
-                headerDiv.style.backgroundColor = '#f5f5f5';
+                headerDiv.style.backgroundColor = '#f0f0f0';
             });
             headerDiv.addEventListener('mouseleave', () => {
-                headerDiv.style.backgroundColor = '#ffffff';
+                headerDiv.style.backgroundColor = '#f9f9f9';
             });
 
-            // Header content
+            const titleRow = createHeaderTitleRow(groupObj);
+            const miniBarDiv = createMiniBar(groupObj.trackers, statusLegendConfig); // Pass statusLegendConfig
+
+            headerDiv.appendChild(titleRow);
+            headerDiv.appendChild(miniBarDiv);
+
+            headerDiv.addEventListener('click', () => {
+                toggleAccordionBody(headerDiv, headerDiv.nextElementSibling);
+            });
+
+            return headerDiv;
+        }
+
+
+        function createHeaderTitleRow(groupObj) {
             const titleRow = document.createElement('div');
             titleRow.style.display = 'flex';
             titleRow.style.justifyContent = 'space-between';
             titleRow.style.alignItems = 'center';
 
             const titleSpan = document.createElement('span');
-            titleSpan.style.fontSize = '16px';
-            titleSpan.style.fontWeight = 'bold';
-            titleSpan.style.color = '#2c3e50';
-            // Fallback to first tracker's benefitName if displayName is empty
-            titleSpan.textContent = (groupObj.displayName || trackersGroup[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
+            titleSpan.style.fontSize = '17px';
+            titleSpan.style.fontWeight = '500';
+            titleSpan.style.color = '#3a4e63';
+            const durationText = groupObj.trackers[0].trackerDuration || (groupObj.trackers[0].tracker && groupObj.trackers[0].tracker.trackerDuration) || "";
+            titleSpan.textContent = (groupObj.displayName || groupObj.trackers[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
 
+            const arrowIcon = createArrowIcon();
+
+            titleRow.appendChild(titleSpan);
+            titleRow.appendChild(arrowIcon);
+            return titleRow;
+        }
+
+
+        function createArrowIcon() {
             const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             arrowIcon.setAttribute('viewBox', '0 0 24 24');
             arrowIcon.setAttribute('width', '20');
@@ -2611,20 +2549,20 @@
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', 'M7 10l5 5 5-5');
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#666');
+            path.setAttribute('stroke', '#777');
             path.setAttribute('stroke-width', '2');
             arrowIcon.appendChild(path);
+            return arrowIcon;
+        }
 
-            titleRow.appendChild(titleSpan);
-            titleRow.appendChild(arrowIcon);
-            headerDiv.appendChild(titleRow);
-
-            // Mini Bar: a summary of each tracker's card ending with color coding.
+        // Modified to accept statusLegendConfig
+        function createMiniBar(trackersGroup, statusLegendConfig) {
             const miniBarDiv = document.createElement('div');
             miniBarDiv.style.display = 'flex';
             miniBarDiv.style.flexWrap = 'wrap';
             miniBarDiv.style.gap = '8px';
             miniBarDiv.style.marginTop = '12px';
+
 
             trackersGroup.forEach(trackerObj => {
                 const miniCard = document.createElement('div');
@@ -2632,172 +2570,192 @@
                 miniCard.style.alignItems = 'center';
                 miniCard.style.gap = '6px';
                 miniCard.style.padding = '6px 10px';
-                miniCard.style.borderRadius = '6px';
-                miniCard.style.fontSize = '13px';
-                miniCard.style.background = statusLegend[trackerObj.status].color + '15';
-                miniCard.style.border = `1px solid ${statusLegend[trackerObj.status].color}30`;
-                miniCard.style.color = statusLegend[trackerObj.status].color;
+                miniCard.style.borderRadius = '8px';
+                miniCard.style.fontSize = '14px';
+                miniCard.style.background = statusLegendConfig[trackerObj.status]?.color + '15' || '#ccc15'; // Use optional chaining and default color
+                miniCard.style.border = `1px solid ${statusLegendConfig[trackerObj.status]?.color}40` || `1px solid #ccc40`; // Use optional chaining and default border
+                miniCard.style.color = '#444';
 
                 const cardEnding = document.createElement('span');
                 cardEnding.textContent = trackerObj.cardEnding;
                 cardEnding.style.fontWeight = '500';
 
                 const statusDot = document.createElement('div');
-                statusDot.style.width = '8px';
-                statusDot.style.height = '8px';
+                statusDot.style.width = '10px';
+                statusDot.style.height = '10px';
                 statusDot.style.borderRadius = '50%';
-                statusDot.style.backgroundColor = statusLegend[trackerObj.status].color;
+                statusDot.style.backgroundColor = statusLegendConfig[trackerObj.status]?.color || '#ccc'; // Use optional chaining and default color
 
                 miniCard.appendChild(statusDot);
                 miniCard.appendChild(cardEnding);
                 miniBarDiv.appendChild(miniCard);
             });
+            return miniBarDiv;
+        }
 
-            headerDiv.appendChild(miniBarDiv);
-
-            // Accordion Body: Full tracker cards (detailed view)
+        // Modified to accept statusLegendConfig
+        function createAccordionBody(trackersGroup, statusLegendConfig) {
             const bodyDiv = document.createElement('div');
-            bodyDiv.style.padding = '10px';
-            bodyDiv.style.display = 'none'; // collapsed by default
+            bodyDiv.style.padding = '0 16px';
+            bodyDiv.style.overflow = 'hidden';
+            bodyDiv.style.maxHeight = '0';
+            bodyDiv.style.transition = 'max-height 0.4s ease-in-out, padding 0.4s ease-in-out';
 
-            // Render full tracker cards for this group
+
             trackersGroup.forEach(trackerObj => {
-                const t = trackerObj.tracker || trackerObj;
-                const trackerCard = document.createElement('div');
-                trackerCard.style.border = '1px solid #ddd';
-                trackerCard.style.borderRadius = '8px';
-                trackerCard.style.padding = '16px';
-                trackerCard.style.margin = '12px 0';
-                trackerCard.style.backgroundColor = '#fcfcfc';
-                trackerCard.style.transition = 'background-color 0.3s ease';
-
-                // Card header
-                const cardHeader = document.createElement('div');
-                cardHeader.style.display = 'flex';
-                cardHeader.style.justifyContent = 'space-between';
-                cardHeader.style.marginBottom = '12px';
-
-                const cardNumber = document.createElement('div');
-                cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
-                cardNumber.style.fontWeight = '500';
-                cardNumber.style.color = '#555';
-
-                // Only display formatted dates if available, otherwise fallback to a message
-                const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
-                const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
-                const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
-
-                const dateRange = document.createElement('div');
-                dateRange.textContent = dateRangeText;
-                dateRange.style.color = '#757575';
-                dateRange.style.fontSize = '14px';
-
-                cardHeader.appendChild(cardNumber);
-                cardHeader.appendChild(dateRange);
-
-                // Progress bar
-                const progressContainer = document.createElement('div');
-                progressContainer.style.marginBottom = '12px';
-
-                const progressText = document.createElement('div');
-                progressText.style.display = 'flex';
-                progressText.style.justifyContent = 'space-between';
-                progressText.style.marginBottom = '8px';
-                progressText.style.fontSize = '14px';
-
-                const progressLabel = document.createElement('span');
-                progressLabel.textContent = 'Progress:';
-                progressLabel.style.color = '#666';
-
-                const progressAmount = document.createElement('span');
-                const spent = parseFloat(t.spentAmount).toFixed(2);
-                const target = parseFloat(t.targetAmount).toFixed(2);
-                progressAmount.textContent = `${t.targetCurrencySymbol || ''}${spent} / ${t.targetCurrencySymbol || ''}${target}`;
-                progressAmount.style.fontWeight = '500';
-                progressAmount.style.color = statusLegend[trackerObj.status].color;
-
-                progressText.appendChild(progressLabel);
-                progressText.appendChild(progressAmount);
-
-                const progressBarWrapper = document.createElement('div');
-                progressBarWrapper.style.height = '12px';
-                progressBarWrapper.style.borderRadius = '6px';
-                progressBarWrapper.style.backgroundColor = '#eee';
-                progressBarWrapper.style.position = 'relative';
-                progressBarWrapper.style.overflow = 'hidden';
-                progressBarWrapper.style.border = '1px solid #ccc';
-                progressBarWrapper.style.width = '100%';
-
-                let percent = 0;
-                const targetAmountNum = parseFloat(t.targetAmount);
-                const spentAmountNum = parseFloat(t.spentAmount);
-                if (targetAmountNum > 0) {
-                    percent = (spentAmountNum / targetAmountNum) * 100;
-                    if (percent > 100) percent = 100;
-                }
-
-                const progressFill = document.createElement('div');
-                progressFill.style.height = '100%';
-                progressFill.style.width = percent + '%';
-                progressFill.style.position = 'absolute';
-                progressFill.style.top = '0';
-                progressFill.style.left = '0';
-                progressFill.style.transition = 'width 0.3s ease';
-                if (trackerObj.status === 'ACHIEVED') {
-                    progressFill.style.backgroundColor = "#90ee90";
-                } else if (trackerObj.status === 'IN_PROGRESS') {
-                    progressFill.style.backgroundColor = "#add8e6";
-                } else {
-                    progressFill.style.backgroundColor = "#ccc";
-                }
-                progressBarWrapper.appendChild(progressFill);
-
-                progressContainer.appendChild(progressText);
-                progressContainer.appendChild(progressBarWrapper);
-
-                // Message (if any)
-                if (trackerObj.progress && trackerObj.progress.message) {
-                    const message = document.createElement('div');
-                    message.style.marginTop = '12px';
-                    message.style.padding = '10px';
-                    message.style.background = '#f5f5f5';
-                    message.style.borderRadius = '6px';
-                    message.style.color = '#616161';
-                    message.style.fontSize = '14px';
-                    message.innerHTML = trackerObj.progress.message;
-                    trackerCard.appendChild(message);
-                }
-
-                trackerCard.appendChild(cardHeader);
-                trackerCard.appendChild(progressContainer);
+                const trackerCard = createTrackerCard(trackerObj, statusLegendConfig); // Pass statusLegendConfig
                 bodyDiv.appendChild(trackerCard);
             });
 
-            // Accordion toggle logic
-            headerDiv.addEventListener('click', () => {
-                const isOpen = bodyDiv.style.display === 'block';
-                arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
-                bodyDiv.style.display = isOpen ? 'none' : 'block';
-                if (!isOpen) {
-                    bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
-                    bodyDiv.style.padding = '10px';
-                } else {
-                    bodyDiv.style.maxHeight = '0';
-                    bodyDiv.style.padding = '0 16px';
-                }
-            });
+            const spacer = document.createElement('div'); // Add spacer to bottom of accordion body
+            spacer.style.height = '20px';
+            bodyDiv.appendChild(spacer);
 
-            accordionItem.appendChild(headerDiv);
-            accordionItem.appendChild(bodyDiv);
-            containerDiv.appendChild(accordionItem);
-        });
+            return bodyDiv;
+        }
 
-        return containerDiv;
+        // Modified to accept statusLegendConfig
+        function createTrackerCard(trackerObj, statusLegendConfig) {
+            const trackerCard = document.createElement('div');
+            trackerCard.style.border = '1px solid #ddd';
+            trackerCard.style.borderRadius = '10px';
+            trackerCard.style.padding = '16px';
+            trackerCard.style.margin = '12px 0';
+            trackerCard.style.backgroundColor = '#fff';
+            trackerCard.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)';
+            trackerCard.style.transition = 'background-color 0.3s ease';
+
+            const cardHeader = createCardHeader(trackerObj);
+            const progressContainer = createProgressBar(trackerObj, statusLegendConfig); // Pass statusLegendConfig
+
+            trackerCard.appendChild(cardHeader);
+            trackerCard.appendChild(progressContainer);
+
+            if (trackerObj.progress && trackerObj.progress.message) {
+                const messageDiv = createMessageDiv(trackerObj.progress.message);
+                trackerCard.appendChild(messageDiv);
+            }
+            return trackerCard;
+        }
+
+        function createCardHeader(trackerObj) {
+            const cardHeader = document.createElement('div');
+            cardHeader.style.display = 'flex';
+            cardHeader.style.justifyContent = 'space-between';
+            cardHeader.style.marginBottom = '12px';
+
+            const cardNumber = document.createElement('div');
+            cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
+            cardNumber.style.fontWeight = '500';
+            cardNumber.style.color = '#666';
+
+            const dateRange = document.createElement('div');
+            const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
+            const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
+            const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
+            dateRange.textContent = dateRangeText;
+            dateRange.style.color = '#888';
+            dateRange.style.fontSize = '14px';
+
+            cardHeader.appendChild(cardNumber);
+            cardHeader.appendChild(dateRange);
+            return cardHeader;
+        }
+
+        // Modified to accept statusLegendConfig
+        function createProgressBar(trackerObj, statusLegendConfig) {
+            const progressContainer = document.createElement('div');
+            progressContainer.style.marginBottom = '12px';
+
+            const progressText = document.createElement('div');
+            progressText.style.display = 'flex';
+            progressText.style.justifyContent = 'space-between';
+            progressText.style.marginBottom = '8px';
+            progressText.style.fontSize = '14px';
+            progressText.style.color = '#fff'; // white text for high contrast
+
+            const progressLabel = document.createElement('span');
+            progressLabel.textContent = 'Progress:';
+            progressLabel.style.color = '#777';
+
+            const progressAmount = document.createElement('span');
+            const spent = parseFloat(trackerObj.tracker.spentAmount).toFixed(2);
+            const target = parseFloat(trackerObj.tracker.targetAmount).toFixed(2);
+            progressAmount.textContent = `${trackerObj.tracker.targetCurrencySymbol || ''}${spent} / ${trackerObj.tracker.targetCurrencySymbol || ''}${target}`;
+            progressAmount.style.color = '#000';
+
+            progressText.appendChild(progressLabel);
+            progressText.appendChild(progressAmount);
+
+            const progressBarWrapper = document.createElement('div');
+            progressBarWrapper.style.height = '12px';
+            progressBarWrapper.style.borderRadius = '8px';
+            progressBarWrapper.style.backgroundColor = '#f0f0f0';
+            progressBarWrapper.style.position = 'relative';
+            progressBarWrapper.style.overflow = 'hidden';
+            progressBarWrapper.style.border = '1px solid #ddd';
+            progressBarWrapper.style.width = '100%';
+            progressBarWrapper.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
+
+            let percent = 0;
+            const targetAmountNum = parseFloat(trackerObj.tracker.targetAmount);
+            const spentAmountNum = parseFloat(trackerObj.tracker.spentAmount);
+            if (targetAmountNum > 0) {
+                percent = (spentAmountNum / targetAmountNum) * 100;
+                if (percent > 100) percent = 100;
+            }
+
+            const progressFill = document.createElement('div');
+            progressFill.style.height = '100%';
+            progressFill.style.width = percent + '%';
+            progressFill.style.position = 'absolute';
+            progressFill.style.top = '0';
+            progressFill.style.left = '0';
+            progressFill.style.transition = 'width 0.3s ease';
+            const status = trackerObj.status;
+            if (status === 'ACHIEVED') {
+                progressFill.style.backgroundColor = "#8fbc8f";
+            } else if (status === 'IN_PROGRESS') {
+                progressFill.style.backgroundColor = "#87cefa";
+            } else {
+                progressFill.style.backgroundColor = "#ccc";
+            }
+            progressBarWrapper.appendChild(progressFill);
+
+            progressContainer.appendChild(progressText);
+            progressContainer.appendChild(progressBarWrapper);
+            return progressContainer;
+        }
+
+        function createMessageDiv(messageContent) {
+            const message = document.createElement('div');
+            message.style.marginTop = '12px';
+            message.style.padding = '12px';
+            message.style.background = '#f9f9f9';
+            message.style.borderRadius = '8px';
+            message.style.color = '#222';
+            message.style.fontSize = '14px';
+            message.innerHTML = messageContent;
+            return message;
+        }
+
+        function toggleAccordionBody(header, bodyDiv) {
+            const arrowIcon = header.querySelector('svg');
+            const isOpen = bodyDiv.style.maxHeight !== '0px';
+            arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+            if (!isOpen) {
+                bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
+                bodyDiv.style.padding = '16px';
+            } else {
+                bodyDiv.style.maxHeight = '0';
+                bodyDiv.style.padding = '0 16px';
+            }
+        }
+
     }
 
 
-
-    async function renderglb_view_page() {
+    async function renderPage() {
         content.innerHTML = '';
         let viewContent;
 
@@ -2863,6 +2821,7 @@
             "lastUpdate",
             "priorityCards",
             "excludedCards",
+            "balance",
             "benefit",
             "scriptVersion"
         ];
@@ -2874,23 +2833,25 @@
             lastUpdate: lastUpdate,
             priorityCards: glb_priorityCards,
             excludedCards: glb_excludedCards,
+            balance: glb_balance,
             benefit: glb_benefit,
             scriptVersion: scriptVersion
         };
 
-        // If keys are not provided or empty, set defaults:
-        // When saving (op===1) use the keys from allData; otherwise, use the full defaultKeys.
-        if (keys === undefined || keys === null || !Array.isArray(keys) || keys.length === 0) {
-            keys = (op === 1) ? Object.keys(allData) : defaultKeys;
+        // Normalize the keys parameter.
+        // If keys is undefined, null, not an array, or empty, set defaults:
+        // When saving (op === "set"), use Object.keys(allData); otherwise, use defaultKeys.
+        if (keys === undefined || keys === null || keys.length === 0) {
+            keys = (op === "set") ? Object.keys(allData) : defaultKeys;
         } else if (!Array.isArray(keys)) {
-            // If keys is not an array but is defined (e.g. a string), convert it.
-            keys = (typeof keys === "string") ? [keys] : (op === 1 ? Object.keys(allData) : defaultKeys);
+            // If keys is a string, convert it into an array.
+            keys = (typeof keys === "string") ? [keys] : (op === "set" ? Object.keys(allData) : defaultKeys);
         }
 
         switch (op) {
-            case 0: // Load
+            case "load": {
                 const loaded = {};
-
+                // Load every key defined in defaultKeys.
                 defaultKeys.forEach(key => {
                     const storedItem = localStorage.getItem(`AMaxOffer_${key}_${storage_accToken}`);
                     if (storedItem !== null) {
@@ -2903,6 +2864,7 @@
                         console.error("Script version mismatch or missing.");
                         return 2;
                     }
+
                     lastUpdate = loaded["lastUpdate"] || "";
                     if (lastUpdate) {
                         const savedDate = new Date(lastUpdate);
@@ -2916,18 +2878,21 @@
                     glb_offer = JSON.parse(loaded["offer"]);
                     glb_priorityCards = loaded["priorityCards"] ? JSON.parse(loaded["priorityCards"]) : [];
                     glb_excludedCards = loaded["excludedCards"] ? JSON.parse(loaded["excludedCards"]) : [];
+                    glb_balance = loaded["balance"] ? JSON.parse(loaded["balance"]) : [];
                     glb_benefit = loaded["benefit"] ? JSON.parse(loaded["benefit"]) : [];
 
                     console.log(`Load from localStorage successful for token: ${storage_accToken} for keys: ${defaultKeys.join(", ")}`);
-                    renderglb_view_page();
+                    renderPage();
 
                     return 1;
                 } catch (error) {
                     console.error("Error parsing saved localStorage data:", error);
                     return 0;
                 }
+            }
 
-            case 1: // Set
+            case "set": {
+
                 keys.forEach(key => {
                     localStorage.setItem(
                         `AMaxOffer_${key}_${storage_accToken}`,
@@ -2937,25 +2902,26 @@
                 console.log(`Data saved to localStorage with token: ${storage_accToken} for keys: ${keys.join(", ")}`);
                 return 1;
 
-            case 2: // Clear data from localStorage
+            }
+
+            case "clear": {
                 try {
                     keys.forEach(key => {
                         localStorage.removeItem(`AMaxOffer_${key}_${storage_accToken}`);
                     });
-                    console.log(
-                        `Cleared localStorage for token: ${storage_accToken} for keys: ${keys.join(", ")}`
-                    );
+                    console.log(`Cleared localStorage for token: ${storage_accToken} for keys: ${keys.join(", ")}`);
                     return 1;
                 } catch (e) {
                     console.error("Error clearing localStorage data:", e);
                     return 0;
                 }
+            }
+
             default:
                 console.error("Invalid operation code provided to localStorageHandler");
                 return 0;
         }
     }
-
 
 
 
@@ -2984,30 +2950,26 @@
         const ui = buildUI();
         ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
 
-        const fetchStatus = await get_accounts();
+        const fetchStatus = await get_accounts(1);
         if (!fetchStatus || glb_account.length === 0) { alert("Unable to refresh."); return; }
 
-        const localDataStatus = localStorageHandler(0, storage_accToken);
+        const localDataStatus = localStorageHandler("load", storage_accToken);
         if (localDataStatus === 0 || localDataStatus === 2) {
-            const newOfferData = await get_offers();
+            await get_offers();
             await get_balance();
-            const newBenefitTrackers = await get_benefit();
-            if (Array.isArray(newOfferData)) {
-                glb_offer = newOfferData;
-            }
-            if (Array.isArray(newBenefitTrackers)) {
-                glb_benefit = newBenefitTrackers;
-            }
+            await get_benefit();
+
             lastUpdate = new Date().toLocaleString();
-            await renderglb_view_page();
-            localStorageHandler(1, storage_accToken, ["scriptVersion"]);
+            localStorageHandler("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
+            await renderPage();
+
         } else {
-            console.log("Using data from LocalStorage. No forced fetch.");
+            console.log("Using data from LocalStorage.");
+            await get_balance();
         }
 
-        await get_balance();
         if (glb_view_page === 'members') {
-            renderglb_view_page();
+            renderPage();
         }
     }
 
