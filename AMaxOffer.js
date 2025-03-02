@@ -1232,7 +1232,7 @@
 
             const realWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
             if (realWindow.timeout && typeof realWindow.timeout.checkVisibility === 'function') {
-                console.log("Calling timeout.checkVisibility({ hidden: true }) to extend session.");
+                console.log("Extending session....");
                 realWindow.timeout.checkVisibility({ hidden: true });
             }
         };
@@ -1246,23 +1246,12 @@
         };
     })();
 
-    // Usage:
     EventListenerManager.removeVisibilityListeners();
     EventListenerManager.startSessionExtender(60000);
 
     // =========================================================================
     // Section 4: General Helper Functions
     // =========================================================================
-
-
-    // Debounce utility for limiting rapid function calls
-    function debounce(func, wait) {
-        let timeout;
-        return function (...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-    }
 
 
     function formatDate(dateStr, roundUp = false) {
@@ -1279,7 +1268,10 @@
 
 
     function sanitizeValue(val) {
-        return (val === "N/A" || val === null || val === undefined) ? "0" : val;
+        if (val === "N/A" || val === null || val === undefined || val === "" || val === 0) {
+            return "0";
+        }
+        return val;
     }
 
 
@@ -1291,7 +1283,6 @@
         const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
         return [main, sub];
     }
-
 
 
     // Parse a numeric value from a string, cleaning common symbols
@@ -1964,6 +1955,7 @@
         });
     }
 
+
     async function fetchGet_enrollOffer(accountToken, offerIdentifier) {
         const now = new Date();
         const pad = n => n.toString().padStart(2, '0');
@@ -2006,7 +1998,6 @@
             return { offerId: offerIdentifier, accountToken, result: false };
         }
     }
-
 
 
     async function get__batchEnrollOffer(offerSourceId, accountNumber) {
@@ -2102,7 +2093,6 @@
     }
 
 
-
     async function runInBatches(tasks, limit) {
         const results = [];
         let i = 0;
@@ -2121,39 +2111,78 @@
     // =========================================================================
 
 
-    // Core table renderer with iOS styling
+    // Core table renderer with iOS styling and smaller text
     function renderTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
-        // Define the sortable keys for members table
         const tableElement = document.createElement('table');
         tableElement.className = 'ios-table';
+        tableElement.style.fontSize = '13px';
+        tableElement.style.borderCollapse = 'separate';
+        tableElement.style.borderSpacing = '0';
 
-        // Build header
+        // Build header with improved styling
         const thead = document.createElement('thead');
         thead.className = 'ios-table-head';
+        thead.style.background = 'var(--ios-header-bg)';
+        thead.style.borderBottom = '1px solid rgba(60, 60, 67, 0.2)';
+        thead.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.05)';
+        thead.style.position = 'sticky';
+        thead.style.top = '0';
+        thead.style.zIndex = '10';
+
         const headerRow = document.createElement('tr');
 
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
+            th.style.fontSize = '13px';
+            th.style.padding = '12px 14px';
+            th.style.fontWeight = '600';
+            th.style.color = 'var(--ios-text-primary)';
+            th.style.letterSpacing = '-0.01em';
+            th.style.textAlign = 'center';
+            th.style.borderBottom = '1px solid rgba(60, 60, 67, 0.12)';
+            th.style.verticalAlign = 'middle';
 
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
             }
 
-            // Add sort functionality
+            // Add sort functionality with improved styling
             if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
                 th.className = 'sortable';
                 th.setAttribute('data-sort-key', headerItem.key);
+                th.style.paddingRight = '22px';
+                th.style.position = 'relative';
+                th.style.cursor = 'pointer';
+                th.style.transition = 'background-color 0.2s ease';
+
+                // Add hover effect to sortable headers
+                th.addEventListener('mouseenter', () => {
+                    th.style.backgroundColor = 'rgba(0, 0, 0, 0.02)';
+                });
+                th.addEventListener('mouseleave', () => {
+                    th.style.backgroundColor = 'transparent';
+                });
 
                 // Create sort button
                 const sortButton = document.createElement('div');
                 sortButton.className = 'ios-sort-button';
+                sortButton.style.position = 'absolute';
+                sortButton.style.right = '4px';
+                sortButton.style.top = '50%';
+                sortButton.style.transform = 'translateY(-50%)';
+                sortButton.style.width = '18px';
+                sortButton.style.height = '18px';
+                sortButton.style.borderRadius = '9px';
+                sortButton.style.display = 'flex';
+                sortButton.style.alignItems = 'center';
+                sortButton.style.justifyContent = 'center';
 
                 // Sort icon
                 const sortIcon = document.createElement('span');
                 sortIcon.textContent = '•';
-                sortIcon.style.color = '#007AFF';
-                sortIcon.style.fontSize = '14px';
+                sortIcon.style.color = 'var(--ios-blue)';
+                sortIcon.style.fontSize = '12px';
 
                 sortButton.appendChild(sortIcon);
                 th.appendChild(sortButton);
@@ -2279,6 +2308,8 @@
 
                 headers.forEach((headerItem) => {
                     const td = document.createElement('td');
+                    td.style.fontSize = '13px'; // Smaller cell text
+                    td.style.padding = '10px 14px'; // Reduced padding (from 16px 14px)
 
                     if (colWidths[headerItem.key]) {
                         td.style.width = colWidths[headerItem.key];
@@ -2300,6 +2331,10 @@
                             content.style.margin = '0 auto';
                             content.style.display = 'block';
                         }
+                        // Apply smaller font size to buttons and inputs
+                        if (content.tagName === 'BUTTON' || content.tagName === 'INPUT') {
+                            content.style.fontSize = '12px'; // Smaller button/input text
+                        }
                         td.appendChild(content);
                     } else if (typeof content === 'string') {
                         // Format currency
@@ -2307,6 +2342,7 @@
                             const span = document.createElement('span');
                             span.className = 'ios-currency';
                             span.textContent = content;
+                            span.style.fontSize = '13px'; // Smaller currency text
                             td.appendChild(span);
                         }
                         // Handle status-like text
@@ -2314,11 +2350,12 @@
                             const statusSpan = document.createElement('span');
                             statusSpan.className = `ios-status ${content.toLowerCase()}`;
                             statusSpan.textContent = content;
+                            statusSpan.style.fontSize = '12px'; // Smaller status text
                             td.appendChild(statusSpan);
                         }
                         // Regular text content
                         else {
-                            td.textContent = content;
+                            td.textContent = content || '';
                         }
                     } else {
                         td.textContent = content || '';
@@ -2335,18 +2372,58 @@
         return tableElement;
     }
 
-    // iOS-styled search input
+    // iOS-styled search input component with updated styling
     function createSearchInput(placeholder, value, callback) {
-        // Create container with class
         const container = document.createElement('div');
-        container.className = 'ios-search-container';
+        container.style.position = 'relative';
+        container.style.width = '100%';
+        container.style.minWidth = '180px';
+        container.style.maxWidth = '250px';
+        container.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.03)';
+        container.style.borderRadius = '10px';
 
-        // Create input with class
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'ios-search-input';
         input.placeholder = placeholder;
-        input.value = value;
+        input.value = value || '';
+        input.style.width = '100%';
+        input.style.padding = '10px 32px 10px 12px';
+        input.style.borderRadius = '10px';
+        input.style.border = '1px solid var(--ios-border)';
+        input.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
+        input.style.fontSize = '13px';
+        input.style.fontFamily = 'var(--ios-font)';
+        input.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+        input.style.transition = 'all 0.2s ease';
+
+        input.addEventListener('focus', () => {
+            input.style.outline = 'none';
+            input.style.borderColor = 'var(--ios-blue)';
+            input.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
+        });
+
+        input.addEventListener('blur', () => {
+            input.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+            input.style.borderColor = 'var(--ios-border)';
+        });
+
+        // Search icon
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('width', '16');
+        icon.setAttribute('height', '16');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.style.position = 'absolute';
+        icon.style.right = '12px';
+        icon.style.top = '50%';
+        icon.style.transform = 'translateY(-50%)';
+        icon.style.color = 'var(--ios-blue)';
+        icon.style.opacity = '0.6';
+        icon.style.pointerEvents = 'none';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        icon.appendChild(path);
 
         // Define debounce function
         function debounce(func, wait) {
@@ -2357,26 +2434,11 @@
             };
         }
 
-        // Add event listener
+        // Add event listener with debounce
         input.addEventListener('input', debounce(() => {
             callback(input.value.trim());
-            renderPage();
-            setTimeout(() => input.focus(), 0);
-        }, 500));
+        }, 300));
 
-        // Search icon with SVG (using createElementNS for SVG)
-        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        icon.setAttribute('viewBox', '0 0 24 24');
-        icon.setAttribute('width', '18');
-        icon.setAttribute('height', '18');
-        icon.setAttribute('class', 'ios-search-icon');
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z');
-        path.setAttribute('fill', 'currentColor');
-        icon.appendChild(path);
-
-        // Build component
         container.appendChild(input);
         container.appendChild(icon);
 
@@ -2612,22 +2674,57 @@
         return summaryDiv;
     }
 
-    // Members filter bar
+    // Improved Members filter bar with iOS styling
     function renderMembers_filterBar() {
         const filtersCard = document.createElement('div');
-        filtersCard.className = 'filter-card';
+        filtersCard.style.background = 'var(--ios-background)';
+        filtersCard.style.backdropFilter = 'blur(8px)';
+        filtersCard.style.WebkitBackdropFilter = 'blur(8px)';
+        filtersCard.style.borderRadius = '14px';
+        filtersCard.style.padding = '16px 20px';
+        filtersCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        filtersCard.style.display = 'flex';
+        filtersCard.style.gap = '16px';
+        filtersCard.style.flexWrap = 'wrap';
+        filtersCard.style.width = '100%';
+        filtersCard.style.boxSizing = 'border-box';
+        filtersCard.style.border = '1px solid var(--ios-border)';
+        filtersCard.style.marginBottom = '16px';
+        filtersCard.style.alignItems = 'center';
 
-        // Status Filter: label and select side-by-side
+        // Status Filter Container
         const statusFilterDiv = document.createElement('div');
-        statusFilterDiv.className = 'filter-group';
+        statusFilterDiv.style.display = 'flex';
+        statusFilterDiv.style.alignItems = 'center';
+        statusFilterDiv.style.gap = '8px';
+        statusFilterDiv.style.padding = '6px 12px';
+        statusFilterDiv.style.backgroundColor = 'rgba(250, 250, 250, 0.5)';
+        statusFilterDiv.style.borderRadius = '10px';
+        statusFilterDiv.style.border = '1px solid var(--ios-border)';
 
         const statusFilterLabel = document.createElement('label');
         statusFilterLabel.textContent = 'Status:';
-        statusFilterLabel.className = 'filter-label';
+        statusFilterLabel.style.fontSize = '13px';
+        statusFilterLabel.style.fontWeight = '500';
+        statusFilterLabel.style.color = 'var(--ios-text-secondary)';
+        statusFilterLabel.style.fontFamily = 'var(--ios-font)';
 
         const statusFilterSelect = document.createElement('select');
         statusFilterSelect.id = 'status-filter';
-        statusFilterSelect.className = 'filter-select';
+        statusFilterSelect.style.border = 'none';
+        statusFilterSelect.style.backgroundColor = 'transparent';
+        statusFilterSelect.style.fontSize = '13px';
+        statusFilterSelect.style.fontFamily = 'var(--ios-font)';
+        statusFilterSelect.style.color = 'var(--ios-text-primary)';
+        statusFilterSelect.style.padding = '2px 4px';
+        statusFilterSelect.style.borderRadius = '6px';
+        statusFilterSelect.style.appearance = 'none';
+        statusFilterSelect.style.backgroundImage = 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5%22%20stroke%3D%22%23777%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")';
+        statusFilterSelect.style.backgroundRepeat = 'no-repeat';
+        statusFilterSelect.style.backgroundPosition = 'right 4px center';
+        statusFilterSelect.style.backgroundSize = '14px';
+        statusFilterSelect.style.paddingRight = '20px';
+        statusFilterSelect.style.cursor = 'pointer';
 
         const optionAll = document.createElement('option');
         optionAll.value = 'all';
@@ -2643,6 +2740,7 @@
         statusFilterSelect.appendChild(optionActive);
         statusFilterSelect.appendChild(optionCanceled);
         statusFilterSelect.value = glb_filters.memberStatus;
+
         statusFilterSelect.addEventListener('change', () => {
             glb_filters.memberStatus = statusFilterSelect.value;
             renderPage();
@@ -2650,19 +2748,40 @@
 
         statusFilterDiv.appendChild(statusFilterLabel);
         statusFilterDiv.appendChild(statusFilterSelect);
-        filtersCard.appendChild(statusFilterDiv);
 
-        // Type Filter: label and select side-by-side
+        // Type Filter Container
         const typeFilterDiv = document.createElement('div');
-        typeFilterDiv.className = 'filter-group';
+        typeFilterDiv.style.display = 'flex';
+        typeFilterDiv.style.alignItems = 'center';
+        typeFilterDiv.style.gap = '8px';
+        typeFilterDiv.style.padding = '6px 12px';
+        typeFilterDiv.style.backgroundColor = 'rgba(250, 250, 250, 0.5)';
+        typeFilterDiv.style.borderRadius = '10px';
+        typeFilterDiv.style.border = '1px solid var(--ios-border)';
 
         const typeFilterLabel = document.createElement('label');
         typeFilterLabel.textContent = 'Type:';
-        typeFilterLabel.className = 'filter-label';
+        typeFilterLabel.style.fontSize = '13px';
+        typeFilterLabel.style.fontWeight = '500';
+        typeFilterLabel.style.color = 'var(--ios-text-secondary)';
+        typeFilterLabel.style.fontFamily = 'var(--ios-font)';
 
         const typeFilterSelect = document.createElement('select');
         typeFilterSelect.id = 'type-filter';
-        typeFilterSelect.className = 'filter-select';
+        typeFilterSelect.style.border = 'none';
+        typeFilterSelect.style.backgroundColor = 'transparent';
+        typeFilterSelect.style.fontSize = '13px';
+        typeFilterSelect.style.fontFamily = 'var(--ios-font)';
+        typeFilterSelect.style.color = 'var(--ios-text-primary)';
+        typeFilterSelect.style.padding = '2px 4px';
+        typeFilterSelect.style.borderRadius = '6px';
+        typeFilterSelect.style.appearance = 'none';
+        typeFilterSelect.style.backgroundImage = 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5%22%20stroke%3D%22%23777%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")';
+        typeFilterSelect.style.backgroundRepeat = 'no-repeat';
+        typeFilterSelect.style.backgroundPosition = 'right 4px center';
+        typeFilterSelect.style.backgroundSize = '14px';
+        typeFilterSelect.style.paddingRight = '20px';
+        typeFilterSelect.style.cursor = 'pointer';
 
         const typeOptionAll = document.createElement('option');
         typeOptionAll.value = 'all';
@@ -2678,6 +2797,7 @@
         typeFilterSelect.appendChild(typeOptionBasic);
         typeFilterSelect.appendChild(typeOptionSupp);
         typeFilterSelect.value = glb_filters.memberCardtype;
+
         typeFilterSelect.addEventListener('change', () => {
             glb_filters.memberCardtype = typeFilterSelect.value;
             renderPage();
@@ -2685,28 +2805,75 @@
 
         typeFilterDiv.appendChild(typeFilterLabel);
         typeFilterDiv.appendChild(typeFilterSelect);
-        filtersCard.appendChild(typeFilterDiv);
 
-        // Offer Search Filter: label and search input on the same line
+        // Offer Search
         const offerSearchContainer = document.createElement('div');
-        offerSearchContainer.className = 'filter-group';
+        offerSearchContainer.style.display = 'flex';
+        offerSearchContainer.style.alignItems = 'center';
+        offerSearchContainer.style.gap = '8px';
+        offerSearchContainer.style.flex = '1';
+        offerSearchContainer.style.minWidth = '200px';
+        offerSearchContainer.style.maxWidth = '450px';
 
         const offerSearchLabel = document.createElement('label');
-        offerSearchLabel.textContent = 'Search Offer:';
-        offerSearchLabel.className = 'filter-label';
+        offerSearchLabel.textContent = 'Search:';
+        offerSearchLabel.style.fontSize = '13px';
+        offerSearchLabel.style.fontWeight = '500';
+        offerSearchLabel.style.color = 'var(--ios-text-secondary)';
+        offerSearchLabel.style.fontFamily = 'var(--ios-font)';
 
-        // Reuse createSearchInput here
-        const offerSearchInputContainer = createSearchInput(
-            'Enter keyword',
+        // Use the updated createSearchInput
+        const searchInputContainer = createSearchInput(
+            'Search offers...',
             glb_filters.memberMerchantSearch,
             val => {
                 glb_filters.memberMerchantSearch = val.toLowerCase();
                 renderPage();
             }
         );
+        searchInputContainer.style.flex = '1';
+
+        // Reset button next to search bar
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset';
+        resetButton.style.padding = '8px 16px';
+        resetButton.style.borderRadius = '10px';
+        resetButton.style.border = 'none';
+        resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        resetButton.style.color = 'var(--ios-text-secondary)';
+        resetButton.style.fontSize = '13px';
+        resetButton.style.fontWeight = '500';
+        resetButton.style.cursor = 'pointer';
+        resetButton.style.transition = 'all 0.2s ease';
+        resetButton.style.fontFamily = 'var(--ios-font)';
+        resetButton.style.marginLeft = '8px';
+
+        resetButton.addEventListener('mouseenter', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+        });
+
+        resetButton.addEventListener('mouseleave', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        });
+
+        resetButton.addEventListener('click', () => {
+            statusFilterSelect.value = 'Active';
+            typeFilterSelect.value = 'all';
+            searchInputContainer.querySelector('input').value = '';
+            glb_filters.memberStatus = 'Active';
+            glb_filters.memberCardtype = 'all';
+            glb_filters.memberMerchantSearch = '';
+            renderPage();
+        });
 
         offerSearchContainer.appendChild(offerSearchLabel);
-        offerSearchContainer.appendChild(offerSearchInputContainer);
+        offerSearchContainer.appendChild(searchInputContainer);
+        offerSearchContainer.appendChild(resetButton);
+
+        // No standalone reset button here anymore as it's next to search
+
+        filtersCard.appendChild(statusFilterDiv);
+        filtersCard.appendChild(typeFilterDiv);
         filtersCard.appendChild(offerSearchContainer);
 
         return filtersCard;
@@ -2722,30 +2889,30 @@
             { label: "Type", key: "relationship" },
             { label: "Opening", key: "account_setup_date" },
             { label: "Status", key: "account_status" },
-            { label: "Bal", key: "StatementBalance" },
+            { label: "Balance", key: "StatementBalance" },
             { label: "Pending", key: "pending" },
             { label: "RemStBl", key: "remainingStaBal" },
-            { label: "Elig", key: "eligibleOffers" },
-            { label: "Enrled", key: "enrolledOffers" },
-            { label: "Prior", key: "priority" },
-            { label: "Excld", key: "exclude" }
+            { label: "Eligible", key: "eligibleOffers" },
+            { label: "Enrolled", key: "enrolledOffers" },
+            { label: "Priority", key: "priority" },
+            { label: "Exclude", key: "exclude" }
         ];
 
         const colWidths = {
-            cardIndex: "45px",
+            cardIndex: "50px",
             small_card_art: "60px",
-            display_account_number: "60px",
+            display_account_number: "70px",
             embossed_name: "180px",
             relationship: "80px",
-            account_setup_date: "120px",
+            account_setup_date: "100px",
             account_status: "80px",
-            StatementBalance: "85px",
-            pending: "85px",
-            remainingStaBal: "85px",
-            eligibleOffers: "60px",
-            enrolledOffers: "60px",
-            priority: "60px",
-            exclude: "60px"
+            StatementBalance: "90px",
+            pending: "90px",
+            remainingStaBal: "90px",
+            eligibleOffers: "80px",
+            enrolledOffers: "80px",
+            priority: "70px",
+            exclude: "70px"
         };
 
         // Filter accounts by status and type
@@ -2771,23 +2938,78 @@
                 }
                 return sanitizeValue('N/A');
             } else if (key === 'eligibleOffers' || key === 'enrolledOffers') {
-                const count = item[key];
-                const btn = document.createElement('button');
-                btn.textContent = sanitizeValue(count);
-                btn.style.cursor = 'pointer';
-                btn.style.border = '1px solid #ccc';
-                btn.style.borderRadius = '4px';
-                btn.style.padding = '2px 6px';
-                btn.style.fontSize = '12px';
-                btn.style.backgroundColor = '#fafafa';
+                const count = parseInt(item[key] || 0);
 
-                btn.addEventListener('mouseover', () => btn.style.backgroundColor = '#f0f0f0');
-                btn.addEventListener('mouseout', () => btn.style.backgroundColor = '#fafafa');
-                btn.addEventListener('click', () => {
-                    renderMembers_offerOnCard(item.display_account_number,
-                        (key === 'eligibleOffers') ? 'eligible' : 'enrolled');
-                });
-                return btn;
+                // Create container for consistent height
+                const container = document.createElement('div');
+                container.style.height = '28px';  // Fixed height for all badges
+                container.style.display = 'flex';
+                container.style.alignItems = 'center';
+                container.style.justifyContent = 'center';
+
+                if (count > 0) {
+                    const btn = document.createElement('button');
+                    btn.textContent = count;
+                    btn.className = 'ios-counter-badge';
+
+                    // iOS-style badging
+                    btn.style.borderRadius = '14px';
+                    btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                    btn.style.color = key === 'eligibleOffers' ? 'var(--ios-blue)' : 'var(--ios-green)';
+                    btn.style.border = `1px solid ${key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)'}`;
+                    btn.style.padding = '4px 10px';
+                    btn.style.fontWeight = '500';
+                    btn.style.fontSize = '13px';
+                    btn.style.fontFamily = 'var(--ios-font)';
+                    btn.style.cursor = 'pointer';
+                    btn.style.transition = 'all 0.2s ease';
+                    btn.style.height = '28px';  // Match container height
+                    btn.style.boxSizing = 'border-box';
+                    // FIX: Add vertical alignment styles
+                    btn.style.display = 'flex';
+                    btn.style.alignItems = 'center';
+                    btn.style.justifyContent = 'center';
+                    btn.style.lineHeight = '1';
+
+                    btn.addEventListener('mouseover', () => {
+                        btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
+                        btn.style.transform = 'translateY(-1px)';
+                    });
+
+                    btn.addEventListener('mouseout', () => {
+                        btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                        btn.style.transform = 'translateY(0)';
+                    });
+
+                    btn.addEventListener('click', () => {
+                        renderMembers_offerOnCard(item.display_account_number,
+                            (key === 'eligibleOffers') ? 'eligible' : 'enrolled');
+                    });
+                    container.appendChild(btn);
+                } else {
+                    // For zero count, return a disabled-looking badge with same height
+                    const span = document.createElement('span');
+                    span.textContent = '0';
+                    span.className = 'ios-counter-badge-disabled';
+                    span.style.borderRadius = '14px';
+                    span.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+                    span.style.color = 'var(--ios-gray)';
+                    span.style.border = '1px solid rgba(142, 142, 147, 0.2)';
+                    span.style.padding = '4px 10px';
+                    span.style.fontWeight = '500';
+                    span.style.fontSize = '13px';
+                    span.style.fontFamily = 'var(--ios-font)';
+                    span.style.height = '28px';  // Match container height
+                    span.style.boxSizing = 'border-box';
+                    // FIX: Change from inline-flex to flex and add vertical alignment
+                    span.style.display = 'flex';
+                    span.style.alignItems = 'center';
+                    span.style.justifyContent = 'center';
+                    span.style.lineHeight = '1';
+                    container.appendChild(span);
+                }
+
+                return container;
             } else if (key === 'pending' || key === 'remainingStaBal' || key === 'StatementBalance') {
                 if (item.relationship === "BASIC") {
                     if (item.financialData) {
@@ -2801,42 +3023,46 @@
                     }
                     return "Loading...";
                 }
-                return "0";
-            } else if (key === 'relationship') {
+                return ""; // Return empty string for non-BASIC cards
+            }
+            else if (key === 'relationship') {
                 if (item.relationship === "SUPP") {
                     return getBasicAccountEndingForSuppAccount(item);
                 }
                 return sanitizeValue(item[key]);
-            } else if (key === 'priority') {
-                const chk = document.createElement('input');
-                chk.type = 'checkbox';
-                chk.checked = glb_priorityCards.includes(item.display_account_number);
-                chk.addEventListener('change', () => {
-                    if (chk.checked) {
-                        if (!glb_priorityCards.includes(item.display_account_number)) {
-                            glb_priorityCards.push(item.display_account_number);
+            }
+            else if (key === 'priority') {
+                const toggle = createIOSToggle(
+                    glb_priorityCards.includes(item.display_account_number),
+                    (checked) => {
+                        if (checked) {
+                            if (!glb_priorityCards.includes(item.display_account_number)) {
+                                glb_priorityCards.push(item.display_account_number);
+                            }
+                        } else {
+                            glb_priorityCards = glb_priorityCards.filter(num => num !== item.display_account_number);
                         }
-                    } else {
-                        glb_priorityCards = glb_priorityCards.filter(num => num !== item.display_account_number);
-                    }
-                    localStorageHandler("set", storage_accToken, ["priorityCards"]);
-                });
-                return chk;
+                        localStorageHandler("set", storage_accToken, ["priorityCards"]);
+                    },
+                    'priority'
+                );
+                return toggle;
             } else if (key === 'exclude') {
-                const chk = document.createElement('input');
-                chk.type = 'checkbox';
-                chk.checked = glb_excludedCards.includes(item.display_account_number);
-                chk.addEventListener('change', () => {
-                    if (chk.checked) {
-                        if (!glb_excludedCards.includes(item.display_account_number)) {
-                            glb_excludedCards.push(item.display_account_number);
+                const toggle = createIOSToggle(
+                    glb_excludedCards.includes(item.display_account_number),
+                    (checked) => {
+                        if (checked) {
+                            if (!glb_excludedCards.includes(item.display_account_number)) {
+                                glb_excludedCards.push(item.display_account_number);
+                            }
+                        } else {
+                            glb_excludedCards = glb_excludedCards.filter(num => num !== item.display_account_number);
                         }
-                    } else {
-                        glb_excludedCards = glb_excludedCards.filter(num => num !== item.display_account_number);
-                    }
-                    localStorageHandler("set", storage_accToken, ["excludedCards"]);
-                });
-                return chk;
+                        localStorageHandler("set", storage_accToken, ["excludedCards"]);
+                    },
+                    'exclude'
+                );
+                return toggle;
             } else if (key === 'account_status') {
                 return item[key]; // Will be styled by renderTable's status handling
             }
@@ -2854,6 +3080,59 @@
         const containerDiv = document.createElement('div');
         containerDiv.appendChild(tableElement);
         return containerDiv;
+
+        function createIOSToggle(isChecked, onChange, type = 'priority') {
+            // Create container
+            const container = document.createElement('div');
+            container.style.display = 'inline-block';
+            container.style.position = 'relative';
+            container.style.width = '36px';
+            container.style.height = '22px';
+            container.style.borderRadius = '11px';
+            container.style.cursor = 'pointer';
+            container.style.transition = 'background-color 0.3s ease';
+
+            // Set correct colors based on type and state
+            const backgroundColor = isChecked
+                ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
+                : '#e9e9ea';
+            container.style.backgroundColor = backgroundColor;
+
+            // Create toggle knob
+            const knob = document.createElement('div');
+            knob.style.position = 'absolute';
+            knob.style.width = '18px';
+            knob.style.height = '18px';
+            knob.style.borderRadius = '9px';
+            knob.style.backgroundColor = '#ffffff';
+            knob.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.15)';
+            knob.style.top = '2px';
+            knob.style.left = isChecked ? '16px' : '2px';
+            knob.style.transition = 'left 0.3s ease';
+
+            // Function to update visual state
+            const updateVisualState = (checked) => {
+                knob.style.left = checked ? '16px' : '2px';
+                container.style.backgroundColor = checked
+                    ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
+                    : '#e9e9ea';
+            };
+
+            // Add click event
+            container.addEventListener('click', () => {
+                isChecked = !isChecked;
+                updateVisualState(isChecked);
+                if (onChange) onChange(isChecked);
+            });
+
+            // Assemble the toggle
+            container.appendChild(knob);
+
+            // Add tooltip
+            container.title = type === 'priority' ? 'Priority Card' : 'Exclude Card';
+
+            return container;
+        }
     }
 
     // Members offer on card popup
@@ -2992,48 +3271,240 @@
         return containerDiv;
     }
 
-    // Offers search bar
+
     function renderOffers_searchBar() {
         const filterCard = document.createElement('div');
-        filterCard.style.background = '#ffffff';
-        filterCard.style.borderRadius = '12px';
-        filterCard.style.padding = '16px';
-        filterCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        filterCard.style.background = 'var(--ios-background)';
+        filterCard.style.backdropFilter = 'blur(8px)';
+        filterCard.style.WebkitBackdropFilter = 'blur(8px)';
+        filterCard.style.borderRadius = '14px';
+        filterCard.style.padding = '16px 20px';
+        filterCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
         filterCard.style.display = 'flex';
-        filterCard.style.gap = '20px';
+        filterCard.style.gap = '16px';
         filterCard.style.flexWrap = 'wrap';
         filterCard.style.width = '100%';
         filterCard.style.boxSizing = 'border-box';
+        filterCard.style.border = '1px solid var(--ios-border)';
+        filterCard.style.marginBottom = '16px';
+        filterCard.style.alignItems = 'center';
 
-        // Favorites Toggle
+        // Favorites Toggle with iOS styling
+        const favContainer = document.createElement('div');
+        favContainer.style.display = 'flex';
+        favContainer.style.alignItems = 'center';
+        favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
+        favContainer.style.padding = '6px 12px';
+        favContainer.style.borderRadius = '10px';
+        favContainer.style.border = '1px solid rgba(0, 122, 255, 0.15)';
+        favContainer.style.transition = 'all 0.2s ease';
+
         const favCheckbox = document.createElement('input');
         favCheckbox.type = 'checkbox';
         favCheckbox.checked = glb_filters.offerFav;
         favCheckbox.style.cursor = 'pointer';
+        favCheckbox.style.accentColor = 'var(--ios-blue)';
+        favCheckbox.style.marginRight = '8px';
+        favCheckbox.style.height = '16px';
+        favCheckbox.style.width = '16px';
+
         favCheckbox.addEventListener('change', () => {
             glb_filters.offerFav = favCheckbox.checked;
+            if (favCheckbox.checked) {
+                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+            } else {
+                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
+            }
             renderPage();
         });
+
         const favLabel = document.createElement('label');
         favLabel.textContent = "Show Favorites Only";
-        favLabel.style.fontSize = '14px';
+        favLabel.style.fontSize = '13px';
         favLabel.style.cursor = 'pointer';
-        favLabel.style.marginLeft = '4px';
-        const favContainer = document.createElement('div');
-        favContainer.style.display = 'flex';
-        favContainer.style.alignItems = 'center';
+        favLabel.style.fontWeight = '500';
+        favLabel.style.color = 'var(--ios-text-secondary)';
+        favLabel.style.fontFamily = 'var(--ios-font)';
+
         favContainer.appendChild(favCheckbox);
         favContainer.appendChild(favLabel);
 
-        // Search inputs
-        const merchantSearch = createSearchInput('Search merchants...', glb_filters.offerMerchantSearch,
-            val => glb_filters.offerMerchantSearch = val.toLowerCase());
-        const cardSearch = createSearchInput('Card ending...', glb_filters.offerCardEnding,
-            val => glb_filters.offerCardEnding = val);
+        favContainer.addEventListener('mouseenter', () => {
+            if (!favCheckbox.checked) {
+                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.12)';
+            }
+        });
+
+        favContainer.addEventListener('mouseleave', () => {
+            if (!favCheckbox.checked) {
+                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
+            }
+        });
+
+        // Custom search input for merchants
+        const merchantSearchContainer = document.createElement('div');
+        merchantSearchContainer.style.position = 'relative';
+        merchantSearchContainer.style.flex = '1';
+        merchantSearchContainer.style.minWidth = '200px';
+        merchantSearchContainer.style.maxWidth = '300px';
+
+        const merchantSearchInput = document.createElement('input');
+        merchantSearchInput.type = 'text';
+        merchantSearchInput.placeholder = 'Search merchants...';
+        merchantSearchInput.value = glb_filters.offerMerchantSearch || '';
+        merchantSearchInput.style.width = '100%';
+        merchantSearchInput.style.padding = '10px 32px 10px 12px';
+        merchantSearchInput.style.borderRadius = '10px';
+        merchantSearchInput.style.border = '1px solid var(--ios-border)';
+        merchantSearchInput.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
+        merchantSearchInput.style.fontSize = '13px';
+        merchantSearchInput.style.fontFamily = 'var(--ios-font)';
+        merchantSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+        merchantSearchInput.style.transition = 'all 0.2s ease';
+
+        merchantSearchInput.addEventListener('focus', () => {
+            merchantSearchInput.style.outline = 'none';
+            merchantSearchInput.style.borderColor = 'var(--ios-blue)';
+            merchantSearchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
+        });
+
+        merchantSearchInput.addEventListener('blur', () => {
+            merchantSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+            merchantSearchInput.style.borderColor = 'var(--ios-border)';
+        });
+
+        // Search icon
+        const merchantSearchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        merchantSearchIcon.setAttribute('width', '16');
+        merchantSearchIcon.setAttribute('height', '16');
+        merchantSearchIcon.setAttribute('viewBox', '0 0 24 24');
+        merchantSearchIcon.style.position = 'absolute';
+        merchantSearchIcon.style.right = '12px';
+        merchantSearchIcon.style.top = '50%';
+        merchantSearchIcon.style.transform = 'translateY(-50%)';
+        merchantSearchIcon.style.color = 'var(--ios-blue)';
+        merchantSearchIcon.style.opacity = '0.6';
+        merchantSearchIcon.style.pointerEvents = 'none';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        merchantSearchIcon.appendChild(path);
+
+        merchantSearchContainer.appendChild(merchantSearchInput);
+        merchantSearchContainer.appendChild(merchantSearchIcon);
+
+        // Debounce function for search input
+        const debounce = (func, wait) => {
+            let timeout;
+            return function (...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        };
+
+        // Add event listener with debounce
+        merchantSearchInput.addEventListener('input', debounce(() => {
+            glb_filters.offerMerchantSearch = merchantSearchInput.value.toLowerCase();
+            renderPage();
+        }, 300));
+
+        // Card ending search input
+        const cardSearchContainer = document.createElement('div');
+        cardSearchContainer.style.position = 'relative';
+        cardSearchContainer.style.flex = '1';
+        cardSearchContainer.style.minWidth = '150px';
+        cardSearchContainer.style.maxWidth = '200px';
+
+        const cardSearchInput = document.createElement('input');
+        cardSearchInput.type = 'text';
+        cardSearchInput.placeholder = 'Card ending...';
+        cardSearchInput.value = glb_filters.offerCardEnding || '';
+        cardSearchInput.style.width = '100%';
+        cardSearchInput.style.padding = '10px 32px 10px 12px';
+        cardSearchInput.style.borderRadius = '10px';
+        cardSearchInput.style.border = '1px solid var(--ios-border)';
+        cardSearchInput.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
+        cardSearchInput.style.fontSize = '13px';
+        cardSearchInput.style.fontFamily = 'var(--ios-font)';
+        cardSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+        cardSearchInput.style.transition = 'all 0.2s ease';
+
+        cardSearchInput.addEventListener('focus', () => {
+            cardSearchInput.style.outline = 'none';
+            cardSearchInput.style.borderColor = 'var(--ios-blue)';
+            cardSearchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
+        });
+
+        cardSearchInput.addEventListener('blur', () => {
+            cardSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
+            cardSearchInput.style.borderColor = 'var(--ios-border)';
+        });
+
+        // Card icon
+        const cardIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        cardIcon.setAttribute('width', '16');
+        cardIcon.setAttribute('height', '16');
+        cardIcon.setAttribute('viewBox', '0 0 24 24');
+        cardIcon.style.position = 'absolute';
+        cardIcon.style.right = '12px';
+        cardIcon.style.top = '50%';
+        cardIcon.style.transform = 'translateY(-50%)';
+        cardIcon.style.color = 'var(--ios-blue)';
+        cardIcon.style.opacity = '0.6';
+        cardIcon.style.pointerEvents = 'none';
+
+        const cardPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        cardPath.setAttribute('d', 'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z');
+        cardPath.setAttribute('fill', 'currentColor');
+        cardIcon.appendChild(cardPath);
+
+        cardSearchContainer.appendChild(cardSearchInput);
+        cardSearchContainer.appendChild(cardIcon);
+
+        // Add event listener with debounce
+        cardSearchInput.addEventListener('input', debounce(() => {
+            glb_filters.offerCardEnding = cardSearchInput.value;
+            renderPage();
+        }, 300));
+
+        // Reset button
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset';
+        resetButton.style.padding = '8px 16px';
+        resetButton.style.borderRadius = '10px';
+        resetButton.style.border = 'none';
+        resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        resetButton.style.color = 'var(--ios-text-secondary)';
+        resetButton.style.fontSize = '13px';
+        resetButton.style.fontWeight = '500';
+        resetButton.style.cursor = 'pointer';
+        resetButton.style.transition = 'all 0.2s ease';
+        resetButton.style.fontFamily = 'var(--ios-font)';
+
+        resetButton.addEventListener('mouseenter', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+        });
+
+        resetButton.addEventListener('mouseleave', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        });
+
+        resetButton.addEventListener('click', () => {
+            merchantSearchInput.value = '';
+            cardSearchInput.value = '';
+            favCheckbox.checked = false;
+            glb_filters.offerMerchantSearch = '';
+            glb_filters.offerCardEnding = '';
+            glb_filters.offerFav = false;
+            favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
+            renderPage();
+        });
 
         filterCard.appendChild(favContainer);
-        filterCard.appendChild(merchantSearch);
-        filterCard.appendChild(cardSearch);
+        filterCard.appendChild(merchantSearchContainer);
+        filterCard.appendChild(cardSearchContainer);
+        filterCard.appendChild(resetButton);
 
         return filterCard;
     }
@@ -3058,31 +3529,32 @@
             { label: "Offer", key: "name" },
             { label: "Type", key: "achievement_type" },
             { label: "Cat", key: "category" },
-            { label: "Exp", key: "expiry_date" },
-            { label: "Usg", key: "redemption_types" },
+            { label: "Expiry", key: "expiry_date" },
+            { label: "Usage", key: "redemption_types" },
             { label: "Description", key: "short_description" },
-            { label: "Thres", key: "threshold" },
-            { label: "Rwd", key: "reward" },
-            { label: "Pct", key: "percentage" },
-            { label: "Elig", key: "eligibleCards" },
-            { label: "Enrl", key: "enrolledCards" }
+            { label: "Threshold", key: "threshold" },
+            { label: "Reward", key: "reward" },
+            { label: "Percent", key: "percentage" },
+            { label: "Eligible", key: "eligibleCards" },
+            { label: "Enrolled", key: "enrolledCards" }
         ];
 
         const colWidths = {
-            favorite: "35px",
+            favorite: "40px",
             logo: "70px",
-            name: "200px",
-            achievement_type: "60px",
+            name: "180px",
+            achievement_type: "70px",
             category: "40px",
-            expiry_date: "90px",
-            redemption_types: "75px",
-            short_description: "260px",
-            threshold: "95px",
-            reward: "95px",
-            percentage: "75px",
-            eligibleCards: "40px",
-            enrolledCards: "40px"
+            expiry_date: "120px",
+            redemption_types: "80px",
+            short_description: "230px",
+            threshold: "90px",
+            reward: "90px",
+            percentage: "80px",
+            eligibleCards: "80px",
+            enrolledCards: "80px"
         };
+
 
         // Define cell rendering logic for offers table
         const cellRenderer = (item, headerItem) => {
@@ -3158,19 +3630,79 @@
             } else if (key === 'eligibleCards' || key === 'enrolledCards') {
                 const cards = Array.isArray(item[key]) ? item[key] : [];
                 const count = cards.length;
-                const span = document.createElement('span');
-                span.textContent = count;
-                span.style.cursor = count > 0 ? 'pointer' : 'default';
-                span.style.color = count > 0 ? '#007bff' : '#999';
-                span.style.textDecoration = count > 0 ? 'underline' : 'none';
-                span.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (count > 0) {
+
+                // Create container for consistent height across all counts
+                const container = document.createElement('div');
+                container.style.height = '28px';  // Fixed height for all badges
+                container.style.display = 'flex';
+                container.style.alignItems = 'center';
+                container.style.justifyContent = 'center';
+
+                if (count > 0) {
+                    const btn = document.createElement('button');
+                    btn.textContent = count;
+                    btn.className = 'ios-counter-badge';
+
+                    // iOS-style badging
+                    btn.style.borderRadius = '14px';
+                    btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                    btn.style.color = key === 'eligibleCards' ? 'var(--ios-blue)' : 'var(--ios-green)';
+                    btn.style.border = `1px solid ${key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)'}`;
+                    btn.style.padding = '4px 10px';
+                    btn.style.fontWeight = '500';
+                    btn.style.fontSize = '13px';
+                    btn.style.fontFamily = 'var(--ios-font)';
+                    btn.style.cursor = 'pointer';
+                    btn.style.transition = 'all 0.2s ease';
+                    btn.style.height = '28px';  // Match container height
+                    btn.style.boxSizing = 'border-box';
+                    // FIX: Add vertical alignment styles
+                    btn.style.display = 'flex';
+                    btn.style.alignItems = 'center';
+                    btn.style.justifyContent = 'center';
+                    btn.style.lineHeight = '1';
+
+                    btn.addEventListener('mouseover', () => {
+                        btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
+                        btn.style.transform = 'translateY(-1px)';
+                    });
+
+                    btn.addEventListener('mouseout', () => {
+                        btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                        btn.style.transform = 'translateY(0)';
+                    });
+
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         renderOffers_enrollCard(item.offerId);
-                    }
-                });
-                return span;
+                    });
+                    container.appendChild(btn);
+                } else {
+                    // For zero count, return a disabled-looking badge with same height
+                    const span = document.createElement('span');
+                    span.textContent = '0';
+                    span.className = 'ios-counter-badge-disabled';
+                    span.style.borderRadius = '14px';
+                    span.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+                    span.style.color = 'var(--ios-gray)';
+                    span.style.border = '1px solid rgba(142, 142, 147, 0.2)';
+                    span.style.padding = '4px 10px';
+                    span.style.fontWeight = '500';
+                    span.style.fontSize = '13px';
+                    span.style.fontFamily = 'var(--ios-font)';
+                    span.style.height = '28px';  // Match container height
+                    span.style.boxSizing = 'border-box';
+                    // FIX: Change from inline-flex to flex and add vertical alignment
+                    span.style.display = 'flex';
+                    span.style.alignItems = 'center';
+                    span.style.justifyContent = 'center';
+                    span.style.lineHeight = '1';
+                    container.appendChild(span);
+                }
+
+                return container;
             }
+
             return item[key];
         };
 
@@ -3366,14 +3898,15 @@
             await get_benefit();
         }
 
-        const containerDiv = createContainer();
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'benefits-container';
         const groupedBenefits = groupBenefits(glb_benefit);
         const sortedBenefitGroups = sortBenefitGroups(groupedBenefits);
 
         // Define statusLegendConfig here, making it accessible to all helper functions
         const statusLegendConfig = {
-            'ACHIEVED': { label: 'Completed', color: '#4CAF50' },
-            'IN_PROGRESS': { label: 'In Progress', color: '#2196F3' }
+            'ACHIEVED': { label: 'Completed', color: 'var(--ios-green)' },
+            'IN_PROGRESS': { label: 'In Progress', color: 'var(--ios-blue)' }
         };
 
         const legend = createStatusLegend(statusLegendConfig); // Pass statusLegendConfig
@@ -3392,18 +3925,6 @@
         return containerDiv;
 
         // --- Helper Functions ---
-
-        function createContainer() {
-            const div = document.createElement('div');
-            div.style.padding = '20px 16px';
-            div.style.fontFamily = "'Segoe UI', system-ui, sans-serif";
-            div.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
-            div.style.borderRadius = '12px';
-            div.style.maxWidth = '800px';
-            div.style.margin = '0 auto';
-            div.style.color = '#333';
-            return div;
-        }
 
         function groupBenefits(benefits) {
             const grouped = {};
@@ -3458,32 +3979,21 @@
             return groupArray;
         }
 
-        // Modified to accept statusLegendConfig
         function createStatusLegend(statusLegendConfig) {
             const legend = document.createElement('div');
-            legend.style.display = 'flex';
-            legend.style.gap = '15px';
-            legend.style.marginBottom = '25px';
-            legend.style.justifyContent = 'center';
-            legend.style.flexWrap = 'wrap';
-
+            legend.className = 'status-legend';
 
             Object.entries(statusLegendConfig).forEach(([status, { label, color }]) => {
                 const legendItem = document.createElement('div');
-                legendItem.style.display = 'flex';
-                legendItem.style.alignItems = 'center';
-                legendItem.style.gap = '6px';
+                legendItem.className = 'legend-item';
 
                 const colorDot = document.createElement('div');
-                colorDot.style.width = '12px';
-                colorDot.style.height = '12px';
-                colorDot.style.borderRadius = '50%';
+                colorDot.className = 'legend-dot';
                 colorDot.style.backgroundColor = color;
 
                 const labelSpan = document.createElement('span');
+                labelSpan.className = 'legend-label';
                 labelSpan.textContent = label;
-                labelSpan.style.color = '#757575';
-                labelSpan.style.fontSize = '14px';
 
                 legendItem.appendChild(colorDot);
                 legendItem.appendChild(labelSpan);
@@ -3494,39 +4004,41 @@
 
         function createEmptyState() {
             const emptyState = document.createElement('div');
-            emptyState.style.textAlign = 'center';
-            emptyState.style.padding = '40px 20px';
-            emptyState.style.color = '#757575';
+            emptyState.className = 'ios-empty-state';
 
-            const emptyText = document.createElement('p');
-            emptyText.textContent = 'No benefits available to display';
-            emptyText.style.fontSize = '16px';
+            const emptyStateContainer = document.createElement('div');
+            emptyStateContainer.className = 'ios-empty-state-container';
 
-            emptyState.appendChild(emptyText);
+            const emptyStateIcon = document.createElement('div');
+            emptyStateIcon.className = 'ios-empty-state-icon';
+            emptyStateIcon.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>`;
+
+            const emptyStateTitle = document.createElement('div');
+            emptyStateTitle.className = 'ios-empty-state-title';
+            emptyStateTitle.textContent = 'No Benefits Found';
+
+            const emptyStateMessage = document.createElement('div');
+            emptyStateMessage.className = 'ios-empty-state-message';
+            emptyStateMessage.textContent = 'No benefits are available to display at this time.';
+
+            emptyStateContainer.appendChild(emptyStateIcon);
+            emptyStateContainer.appendChild(emptyStateTitle);
+            emptyStateContainer.appendChild(emptyStateMessage);
+            emptyState.appendChild(emptyStateContainer);
+
             return emptyState;
         }
 
-        // Modified to accept statusLegendConfig
         function createAccordionItem(groupObj, statusLegendConfig) {
             const accordionItem = document.createElement('div');
-            accordionItem.style.border = '1px solid #e0e0e0';
-            accordionItem.style.borderRadius = '12px';
-            accordionItem.style.marginBottom = '15px';
-            accordionItem.style.backgroundColor = '#ffffff';
-            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-            accordionItem.style.transition = 'box-shadow 0.2s ease, transform 0.2s ease';
+            accordionItem.className = 'accordion-item';
 
-            accordionItem.addEventListener('mouseenter', () => {
-                accordionItem.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                accordionItem.style.transform = 'translateY(-2px)';
-            });
-            accordionItem.addEventListener('mouseleave', () => {
-                accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                accordionItem.style.transform = 'translateY(0)';
-            });
-
-            const headerDiv = createAccordionHeader(groupObj, statusLegendConfig); // Pass statusLegendConfig
-            const bodyDiv = createAccordionBody(groupObj.trackers, statusLegendConfig); // Pass statusLegendConfig
+            const headerDiv = createAccordionHeader(groupObj, statusLegendConfig);
+            const bodyDiv = createAccordionBody(groupObj.trackers, statusLegendConfig);
 
             accordionItem.appendChild(headerDiv);
             accordionItem.appendChild(bodyDiv);
@@ -3534,23 +4046,12 @@
             return accordionItem;
         }
 
-        // Modified to accept statusLegendConfig
         function createAccordionHeader(groupObj, statusLegendConfig) {
             const headerDiv = document.createElement('div');
-            headerDiv.style.padding = '16px';
-            headerDiv.style.cursor = 'pointer';
-            headerDiv.style.transition = 'background-color 0.2s ease';
-            headerDiv.style.backgroundColor = '#f9f9f9';
-
-            headerDiv.addEventListener('mouseenter', () => {
-                headerDiv.style.backgroundColor = '#f0f0f0';
-            });
-            headerDiv.addEventListener('mouseleave', () => {
-                headerDiv.style.backgroundColor = '#f9f9f9';
-            });
+            headerDiv.className = 'accordion-header';
 
             const titleRow = createHeaderTitleRow(groupObj);
-            const miniBarDiv = createMiniBar(groupObj.trackers, statusLegendConfig); // Pass statusLegendConfig
+            const miniBarDiv = createMiniBar(groupObj.trackers, statusLegendConfig);
 
             headerDiv.appendChild(titleRow);
             headerDiv.appendChild(miniBarDiv);
@@ -3562,17 +4063,12 @@
             return headerDiv;
         }
 
-
         function createHeaderTitleRow(groupObj) {
             const titleRow = document.createElement('div');
-            titleRow.style.display = 'flex';
-            titleRow.style.justifyContent = 'space-between';
-            titleRow.style.alignItems = 'center';
+            titleRow.className = 'title-row';
 
             const titleSpan = document.createElement('span');
-            titleSpan.style.fontSize = '17px';
-            titleSpan.style.fontWeight = '500';
-            titleSpan.style.color = '#3a4e63';
+            titleSpan.className = 'accordion-title';
             const durationText = groupObj.trackers[0].trackerDuration || (groupObj.trackers[0].tracker && groupObj.trackers[0].tracker.trackerDuration) || "";
             titleSpan.textContent = (groupObj.displayName || groupObj.trackers[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
 
@@ -3583,7 +4079,6 @@
             return titleRow;
         }
 
-
         function createArrowIcon() {
             const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             arrowIcon.setAttribute('viewBox', '0 0 24 24');
@@ -3593,42 +4088,32 @@
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', 'M7 10l5 5 5-5');
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#777');
+            path.setAttribute('stroke', 'var(--ios-gray)');
             path.setAttribute('stroke-width', '2');
             arrowIcon.appendChild(path);
             return arrowIcon;
         }
 
-        // Modified to accept statusLegendConfig
         function createMiniBar(trackersGroup, statusLegendConfig) {
             const miniBarDiv = document.createElement('div');
-            miniBarDiv.style.display = 'flex';
-            miniBarDiv.style.flexWrap = 'wrap';
-            miniBarDiv.style.gap = '8px';
-            miniBarDiv.style.marginTop = '12px';
-
+            miniBarDiv.className = 'mini-bar';
 
             trackersGroup.forEach(trackerObj => {
                 const miniCard = document.createElement('div');
-                miniCard.style.display = 'flex';
-                miniCard.style.alignItems = 'center';
-                miniCard.style.gap = '6px';
-                miniCard.style.padding = '6px 10px';
-                miniCard.style.borderRadius = '8px';
-                miniCard.style.fontSize = '14px';
-                miniCard.style.background = statusLegendConfig[trackerObj.status]?.color + '15' || '#ccc15'; // Use optional chaining and default color
-                miniCard.style.border = `1px solid ${statusLegendConfig[trackerObj.status]?.color}40` || `1px solid #ccc40`; // Use optional chaining and default border
-                miniCard.style.color = '#444';
+                miniCard.className = 'mini-card';
 
-                const cardEnding = document.createElement('span');
-                cardEnding.textContent = trackerObj.cardEnding;
-                cardEnding.style.fontWeight = '500';
+                // Apply iOS styling to mini card background
+                const statusColor = statusLegendConfig[trackerObj.status]?.color || 'var(--ios-gray)';
+                miniCard.style.backgroundColor = `${statusColor}15`;
+                miniCard.style.border = `1px solid ${statusColor}40`;
 
                 const statusDot = document.createElement('div');
-                statusDot.style.width = '10px';
-                statusDot.style.height = '10px';
-                statusDot.style.borderRadius = '50%';
-                statusDot.style.backgroundColor = statusLegendConfig[trackerObj.status]?.color || '#ccc'; // Use optional chaining and default color
+                statusDot.className = 'status-dot';
+                statusDot.style.backgroundColor = statusColor;
+
+                const cardEnding = document.createElement('span');
+                cardEnding.className = 'card-ending';
+                cardEnding.textContent = trackerObj.cardEnding;
 
                 miniCard.appendChild(statusDot);
                 miniCard.appendChild(cardEnding);
@@ -3637,40 +4122,24 @@
             return miniBarDiv;
         }
 
-        // Modified to accept statusLegendConfig
         function createAccordionBody(trackersGroup, statusLegendConfig) {
             const bodyDiv = document.createElement('div');
-            bodyDiv.style.padding = '0 16px';
-            bodyDiv.style.overflow = 'hidden';
-            bodyDiv.style.maxHeight = '0';
-            bodyDiv.style.transition = 'max-height 0.4s ease-in-out, padding 0.4s ease-in-out';
-
+            bodyDiv.className = 'accordion-body';
 
             trackersGroup.forEach(trackerObj => {
-                const trackerCard = createTrackerCard(trackerObj, statusLegendConfig); // Pass statusLegendConfig
+                const trackerCard = createTrackerCard(trackerObj, statusLegendConfig);
                 bodyDiv.appendChild(trackerCard);
             });
-
-            const spacer = document.createElement('div'); // Add spacer to bottom of accordion body
-            spacer.style.height = '20px';
-            bodyDiv.appendChild(spacer);
 
             return bodyDiv;
         }
 
-        // Modified to accept statusLegendConfig
         function createTrackerCard(trackerObj, statusLegendConfig) {
             const trackerCard = document.createElement('div');
-            trackerCard.style.border = '1px solid #ddd';
-            trackerCard.style.borderRadius = '10px';
-            trackerCard.style.padding = '16px';
-            trackerCard.style.margin = '12px 0';
-            trackerCard.style.backgroundColor = '#fff';
-            trackerCard.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)';
-            trackerCard.style.transition = 'background-color 0.3s ease';
+            trackerCard.className = 'tracker-card';
 
             const cardHeader = createCardHeader(trackerObj);
-            const progressContainer = createProgressBar(trackerObj, statusLegendConfig); // Pass statusLegendConfig
+            const progressContainer = createProgressBar(trackerObj, statusLegendConfig);
 
             trackerCard.appendChild(cardHeader);
             trackerCard.appendChild(progressContainer);
@@ -3684,62 +4153,46 @@
 
         function createCardHeader(trackerObj) {
             const cardHeader = document.createElement('div');
-            cardHeader.style.display = 'flex';
-            cardHeader.style.justifyContent = 'space-between';
-            cardHeader.style.marginBottom = '12px';
+            cardHeader.className = 'card-header';
 
             const cardNumber = document.createElement('div');
+            cardNumber.className = 'card-number';
             cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
-            cardNumber.style.fontWeight = '500';
-            cardNumber.style.color = '#666';
 
             const dateRange = document.createElement('div');
+            dateRange.className = 'date-range';
             const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
             const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
             const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
             dateRange.textContent = dateRangeText;
-            dateRange.style.color = '#888';
-            dateRange.style.fontSize = '14px';
 
             cardHeader.appendChild(cardNumber);
             cardHeader.appendChild(dateRange);
             return cardHeader;
         }
 
-        // Modified to accept statusLegendConfig
         function createProgressBar(trackerObj, statusLegendConfig) {
             const progressContainer = document.createElement('div');
-            progressContainer.style.marginBottom = '12px';
+            progressContainer.className = 'progress-container';
 
             const progressText = document.createElement('div');
-            progressText.style.display = 'flex';
-            progressText.style.justifyContent = 'space-between';
-            progressText.style.marginBottom = '8px';
-            progressText.style.fontSize = '14px';
-            progressText.style.color = '#fff'; // white text for high contrast
+            progressText.className = 'progress-text';
 
             const progressLabel = document.createElement('span');
+            progressLabel.className = 'progress-label';
             progressLabel.textContent = 'Progress:';
-            progressLabel.style.color = '#777';
 
             const progressAmount = document.createElement('span');
+            progressAmount.className = 'progress-amount';
             const spent = parseFloat(trackerObj.tracker.spentAmount).toFixed(2);
             const target = parseFloat(trackerObj.tracker.targetAmount).toFixed(2);
             progressAmount.textContent = `${trackerObj.tracker.targetCurrencySymbol || ''}${spent} / ${trackerObj.tracker.targetCurrencySymbol || ''}${target}`;
-            progressAmount.style.color = '#000';
 
             progressText.appendChild(progressLabel);
             progressText.appendChild(progressAmount);
 
             const progressBarWrapper = document.createElement('div');
-            progressBarWrapper.style.height = '12px';
-            progressBarWrapper.style.borderRadius = '8px';
-            progressBarWrapper.style.backgroundColor = '#f0f0f0';
-            progressBarWrapper.style.position = 'relative';
-            progressBarWrapper.style.overflow = 'hidden';
-            progressBarWrapper.style.border = '1px solid #ddd';
-            progressBarWrapper.style.width = '100%';
-            progressBarWrapper.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
+            progressBarWrapper.className = 'progress-bar-wrapper';
 
             let percent = 0;
             const targetAmountNum = parseFloat(trackerObj.tracker.targetAmount);
@@ -3750,20 +4203,9 @@
             }
 
             const progressFill = document.createElement('div');
-            progressFill.style.height = '100%';
+            progressFill.className = `progress-fill ${trackerObj.status.toLowerCase() === 'achieved' ? 'achieved' : 'in-progress'}`;
             progressFill.style.width = percent + '%';
-            progressFill.style.position = 'absolute';
-            progressFill.style.top = '0';
-            progressFill.style.left = '0';
-            progressFill.style.transition = 'width 0.3s ease';
-            const status = trackerObj.status;
-            if (status === 'ACHIEVED') {
-                progressFill.style.backgroundColor = "#8fbc8f";
-            } else if (status === 'IN_PROGRESS') {
-                progressFill.style.backgroundColor = "#87cefa";
-            } else {
-                progressFill.style.backgroundColor = "#ccc";
-            }
+
             progressBarWrapper.appendChild(progressFill);
 
             progressContainer.appendChild(progressText);
@@ -3773,23 +4215,20 @@
 
         function createMessageDiv(messageContent) {
             const message = document.createElement('div');
-            message.style.marginTop = '12px';
-            message.style.padding = '12px';
-            message.style.background = '#f9f9f9';
-            message.style.borderRadius = '8px';
-            message.style.color = '#222';
-            message.style.fontSize = '14px';
+            message.className = 'message-div';
             message.innerHTML = messageContent;
             return message;
         }
 
         function toggleAccordionBody(header, bodyDiv) {
             const arrowIcon = header.querySelector('svg');
-            const isOpen = bodyDiv.style.maxHeight !== '0px';
+            const isOpen = bodyDiv.style.maxHeight !== '0px' && bodyDiv.style.maxHeight !== '';
+
             arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+
             if (!isOpen) {
                 bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
-                bodyDiv.style.padding = '16px';
+                bodyDiv.style.padding = '0 16px 16px 16px';
             } else {
                 bodyDiv.style.maxHeight = '0';
                 bodyDiv.style.padding = '0 16px';
@@ -3965,7 +4404,6 @@
                 return 0;
         }
     }
-
 
 
     // =========================================================================
