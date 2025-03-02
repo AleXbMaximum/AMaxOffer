@@ -28,6 +28,932 @@
     const scriptVersion = "3.0";
 
     // =========================================================================
+    // Section 1: Global Styles
+    // =========================================================================
+    const addGlobalStyle = () => {
+        const style = document.createElement('style');
+        style.id = 'amaxoffer-global-styles';
+        style.textContent = `
+        @font-face {
+            font-family: 'AmexFont';
+            src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.31.2/package/dist/iconfont/dls-icons.woff?v=2.31.2") format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        :root {
+            /* Color Variables */
+            --ios-blue: #007AFF;
+            --ios-dark-blue: #0062CC;
+            --ios-background: rgba(255, 255, 255, 0.8);
+            --ios-secondary-bg: rgba(249, 249, 251, 0.6);
+            --ios-border: rgba(230, 230, 230, 0.7);
+            --ios-text-primary: #1c1c1e;
+            --ios-text-secondary: #2c2c2e;
+            --ios-radius: 18px;
+            --ios-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+            --ios-font: 'AmexFont', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --ios-header-bg: linear-gradient(to right, rgba(245, 245, 247, 0.9), rgba(235, 235, 242, 0.85));
+            
+            --ios-green: rgb(32, 169, 69);
+            --ios-orange: rgb(215, 129, 0);
+            --ios-red: rgb(215, 49, 38);
+            --ios-gray: rgb(142, 142, 147);
+            --ios-light-gray: rgba(142, 142, 147, 0.1);
+            --ios-title-gradient: linear-gradient(45deg, #4CAF50, #2196F3);
+            --ios-button-gradient: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
+        }
+        
+        /* Main Container */
+        .amaxoffer-container {
+            position: fixed;
+            top: 5%;
+            left: 5%;
+            background: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.28.0/package/dist/img/brand/worldservice-tile-gray.svg") repeat, #fefefe;
+            border-radius: 12px;
+            z-index: 10000;
+            font-family: var(--ios-font);
+            box-shadow: var(--ios-shadow);
+            max-height: 90vh;
+            overflow: hidden;
+            width: 90%;
+            max-width: 1400px;
+            border: 1px solid rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+        }
+        
+        .amaxoffer-minimized {
+            width: 200px !important;
+            height: 75px !important;
+            transform: scale(0.98);
+            box-shadow: 0 12px 18px rgba(0,0,0,0.20);
+        }
+        
+        .amaxoffer-expanded {
+            width: 90% !important;
+            height: auto !important;
+            transform: none;
+            box-shadow: var(--ios-shadow);
+        }
+        
+        /* Header Styles */
+        .amaxoffer-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            user-select: none;
+        }
+        
+        .amaxoffer-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            background: var(--ios-title-gradient);
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .amaxoffer-nav {
+            display: flex;
+            gap: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .amaxoffer-nav-button {
+            cursor: pointer;
+            font-size: 18px;
+            padding: 8px 20px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        
+        .amaxoffer-nav-button:hover {
+            transform: scale(1.05);
+            background-color: #f0f0f0;
+        }
+        
+        .amaxoffer-nav-button.active {
+            background-color: #4CAF50;
+            color: black;
+            font-weight: 800;
+        }
+        
+        .amaxoffer-toggle-btn {
+            font-size: 1.2rem;
+            border: 1px dashed #ccc;
+            border-radius: 6px;
+            width: 50px;
+            height: 50px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .amaxoffer-toggle-btn:hover {
+            background-color: #f0f0f0;
+        }
+        
+        /* Content Area */
+        .amaxoffer-content {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(80vh - 64px);
+        }
+        
+        /* Table Styles */
+        .ios-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 15px;
+            font-family: var(--ios-font);
+            margin: 16px 0;
+            border-radius: var(--ios-radius);
+            overflow: hidden;
+            background-color: var(--ios-background);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: var(--ios-shadow);
+            border: 1px solid var(--ios-border);
+        }
+        
+        /* Header styles */
+        .ios-table-head {
+            background: var(--ios-header-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            width: 100%;
+        }
+        
+        .ios-table th {
+            padding: 16px 14px;
+            text-align: center;
+            font-weight: 600;
+            color: var(--ios-text-primary);
+            border-bottom: 1px solid rgba(60, 60, 67, 0.12);
+            letter-spacing: -0.01em;
+            vertical-align: middle;
+        }
+        
+        .ios-table th.sortable {
+            cursor: pointer;
+            position: relative;
+            padding-right: 32px;
+        }
+        
+        .ios-table th.sortable:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        
+        /* Sort button styles */
+        .ios-sort-button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Row and cell styles */
+        .ios-table tr {
+            position: relative;
+        }
+        
+        .ios-table tr:nth-child(even) {
+            background-color: var(--ios-secondary-bg);
+        }
+        
+        .ios-table tr:hover {
+            background-color: rgba(242, 242, 247, 0.85);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            z-index: 5;
+        }
+        
+        .ios-table td {
+            padding: 16px 14px;
+            text-align: center;
+            color: var(--ios-text-secondary);
+            border-bottom: 1px solid rgba(60, 60, 67, 0.04);
+            vertical-align: middle;
+            display: table-cell;
+            height: 100%;
+        }
+        
+        .ios-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        /* Currency formatting */
+        .ios-currency {
+            font-variant-numeric: tabular-nums;
+            font-weight: normal;
+            letter-spacing: -0.01em;
+            text-align: center;
+            display: block;
+        }
+        
+        /* Status pills */
+        .ios-status {
+            padding: 5px 10px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-block;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin: 0 auto;
+        }
+        
+        .ios-status.active, .ios-status.success {
+            background-color: rgba(52, 199, 89, 0.15);
+            color: var(--ios-green);
+            border: 1px solid rgba(52, 199, 89, 0.25);
+        }
+        
+        .ios-status.pending {
+            background-color: rgba(255, 149, 0, 0.15);
+            color: var(--ios-orange);
+            border: 1px solid rgba(255, 149, 0, 0.25);
+        }
+        
+        .ios-status.inactive, .ios-status.failed, .ios-status.canceled {
+            background-color: rgba(255, 59, 48, 0.15);
+            color: var(--ios-red);
+            border: 1px solid rgba(255, 59, 48, 0.25);
+        }
+        
+        /* Highlight for search results */
+        .ios-highlight-row {
+            background-color: rgba(255, 204, 0, 0.1) !important;
+            border-left: 4px solid rgba(255, 204, 0, 0.8);
+        }
+        
+        /* Empty state */
+        .ios-empty-state {
+            padding: 60px 20px;
+            text-align: center;
+        }
+        
+        .ios-empty-state-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .ios-empty-state-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 32px;
+            background-color: var(--ios-light-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .ios-empty-state-title {
+            color: #3a3a3c;
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .ios-empty-state-message {
+            color: var(--ios-gray);
+            opacity: 0.9;
+            font-size: 15px;
+            max-width: 260px;
+            line-height: 1.4;
+        }
+        
+        .ios-empty-button {
+            margin-top: 20px;
+            background-color: var(--ios-blue);
+            color: white;
+            border: none;
+            border-radius: 18px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+        }
+        
+        /* iOS Search Component */
+        .ios-search-container {
+            position: relative;
+            box-sizing: border-box;
+            width: 200px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+            border-radius: 10px;
+        }
+        
+        .ios-search-input {
+            width: 100%;
+            padding: 10px 32px 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+            background-color: rgba(250, 250, 250, 0.8);
+            font-size: 14px;
+            font-family: var(--ios-font);
+        }
+        
+        .ios-search-input:focus {
+            outline: none;
+            border-color: var(--ios-blue);
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.08);
+        }
+        
+        .ios-search-icon {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0.6;
+            color: var(--ios-blue);
+            pointer-events: none;
+        }
+        
+        .ios-search-input:focus + .ios-search-icon {
+            opacity: 0.8;
+        }
+        
+        /* Filter Card */
+        .filter-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .filter-label {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .filter-select {
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        
+        /* iOS Action Buttons */
+        .ios-button {
+            padding: 10px 24px;
+            height: 42px;
+            max-height: 42px;
+            border: none;
+            border-radius: 12px;
+            background: var(--ios-blue);
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+        }
+        
+        .ios-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+            opacity: 0.95;
+        }
+        
+        .ios-button:active {
+            transform: scale(0.98);
+        }
+        
+        .ios-button.green {
+            background: var(--ios-green);
+        }
+        
+        /* Summary Page Styles */
+        .summary-container {
+            padding: 24px;
+            background: rgba(250, 250, 250, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+            font-family: var(--ios-font);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(209, 213, 219, 0.3);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        
+        .summary-title {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            color: #1c1c1e;
+            letter-spacing: -0.5px;
+        }
+        
+        .update-badge {
+            background: rgba(0, 122, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #007AFF;
+            font-weight: 500;
+            min-width: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(0, 122, 255, 0.2);
+        }
+        
+        .refresh-status {
+            font-size: 14px;
+            color: #8e8e93;
+            font-weight: 500;
+            margin-right: 16px;
+            min-width: 150px;
+            max-height: 42px;
+            line-height: 42px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: right;
+        }
+        
+        .stats-container {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .stats-row {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 1200px) {
+            .stats-row {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .stats-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            text-align: center;
+            flex: 1;
+            min-width: 160px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .stat-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+        }
+        
+        .stat-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .icon-container {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #8e8e93;
+            font-weight: 500;
+        }
+        
+        /* Button container */
+        .button-container {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-height: 60px;
+            overflow: visible;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+            max-height: 50px;
+            height: 50px;
+        }
+        
+        /* Offer Modal Styles */
+        .offer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .offer-popup {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        
+        .offer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .offer-title {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(45deg, #2c3e50, #4CAF50);
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+        
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        .close-button:hover {
+            color: #ff4444;
+        }
+        
+        .enroll-all-button {
+            width: 100%;
+            margin: 0 0 20px 0;
+            background: var(--ios-button-gradient);
+            color: white;
+            border-radius: 8px;
+            font-weight: 500;
+            border: none;
+            padding: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+        
+        .card-section {
+            margin-bottom: 24px;
+        }
+        
+        .section-title {
+            margin: 0 0 12px 0;
+            font-size: 0.95rem;
+        }
+        
+        .section-title.enrolled {
+            color: #4CAF50;
+        }
+        
+        .section-title.eligible {
+            color: #2196F3;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+        }
+        
+        .card-item {
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+        
+        .card-item.enrolled {
+            background-color: #e8f5e9;
+        }
+        
+        .card-item.eligible {
+            background-color: #e3f2fd;
+            cursor: pointer;
+        }
+        
+        .card-item.eligible:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* Benefits Section Styles */
+        .benefits-container {
+            padding: 20px 16px;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            max-width: 800px;
+            margin: 0 auto;
+            color: #333;
+        }
+        
+        .status-legend {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .legend-label {
+            color: #757575;
+            font-size: 14px;
+        }
+        
+        .accordion-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        
+        .accordion-item:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .accordion-header {
+            padding: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            background-color: #f9f9f9;
+        }
+        
+        .accordion-header:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .accordion-title {
+            font-size: 17px;
+            font-weight: 500;
+            color: #3a4e63;
+        }
+        
+        .mini-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .mini-card {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #444;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .card-ending {
+            font-weight: 500;
+        }
+        
+        .accordion-body {
+            padding: 0 16px;
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+        }
+        
+        .tracker-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+            margin: 12px 0;
+            background-color: #fff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            transition: background-color 0.3s ease;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        
+        .card-number {
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .date-range {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .progress-container {
+            margin-bottom: 12px;
+        }
+        
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .progress-label {
+            color: #777;
+        }
+        
+        .progress-amount {
+            color: #000;
+        }
+        
+        .progress-bar-wrapper {
+            height: 12px;
+            border-radius: 8px;
+            background-color: #f0f0f0;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            width: 100%;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+        }
+        
+        .progress-fill {
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-fill.achieved {
+            background-color: #8fbc8f;
+        }
+        
+        .progress-fill.in-progress {
+            background-color: #87cefa;
+        }
+        
+        .message-div {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            color: #222;
+            font-size: 14px;
+        }
+        
+        /* Media queries for responsive design */
+        @media (max-width: 768px) {
+            .amaxoffer-container {
+                width: 95%;
+                left: 2.5%;
+            }
+            
+            .summary-header,
+            .button-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .update-badge {
+                margin-top: 10px;
+            }
+        }
+        `;
+        document.head.appendChild(style);
+    };
+
+    // Call this function to add the global styles at the beginning
+    addGlobalStyle();
+
+    // =========================================================================
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
 
@@ -98,155 +1024,65 @@
     };
 
     // Helper to create a button with default styling and hover effects.
-    const createButton = (label, onClick, { styles = {} } = {}) => {
-        const defaultStyles = {
-            cursor: 'pointer',
-            fontSize: '18px',
-            padding: '8px 20px',
-            border: 'none',
-            background: 'transparent',
-            borderRadius: '8px',
-            transition: 'all 0.2s ease',
-            color: '#2c3e50',
-            fontWeight: '500'
-        };
+    const createButton = (label, onClick, { className = '', styles = {} } = {}) => {
         const btn = createEl('button', {
             text: label,
-            styles: { ...defaultStyles, ...styles }
+            className: className || 'amaxoffer-nav-button',
+            styles
         });
         btn.addEventListener('click', onClick);
-        btn.addEventListener('mouseover', () => {
-            btn.style.transform = 'scale(1.05)';
-            btn.style.backgroundColor = '#f0f0f0';
-        });
-        btn.addEventListener('mouseout', () => {
-            btn.style.transform = 'none';
-            btn.style.backgroundColor = 'transparent';
-        });
         return btn;
     };
 
     // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
     const buildUI = () => {
-        // Insert a style element to load the custom font and apply it to the overlay.
-        const fontStyle = createEl('style', {
-            text: `
-        @font-face {
-            font-family: 'AmexFont';
-            src: url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.31.2/package/dist/iconfont/dls-icons.woff?v=2.31.2") format('woff');
-            font-weight: normal;
-            font-style: normal;
-        }
-        #card-utility-overlay {
-            font-family: 'AmexFont', 'Segoe UI', system-ui, sans-serif;
-        }
-      `
-        });
-        document.head.appendChild(fontStyle);
-
-        // Create the main container with background, border, and transition properties.
+        // Create the main container
         const container = createEl('div', {
             props: { id: 'card-utility-overlay' },
-            styles: {
-                position: 'fixed',
-                top: '5%',
-                left: '5%',
-                background: 'url("https://www.aexp-static.com/cdaas/one/statics/@americanexpress/static-assets/2.28.0/package/dist/img/brand/worldservice-tile-gray.svg") repeat, #fefefe',
-                borderRadius: '12px',
-                zIndex: '10000',
-                fontFamily: "'AmexFont', 'Segoe UI', system-ui, sans-serif",
-                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.42)',
-                maxHeight: '90vh',
-                overflow: 'hidden',
-                width: '90%',
-                maxWidth: '1400px',
-                border: '1px solid rgba(0,0,0,0.15)',
-                transition: 'all 0.3s ease'
-            }
+            className: 'amaxoffer-container amaxoffer-minimized'
         });
 
         // Title element.
         const title = createEl('span', {
             text: 'AMaxOffer',
-            styles: {
-                fontSize: '1.4rem',
-                fontWeight: '600',
-                background: 'linear-gradient(45deg, #4CAF50, #2196F3)',
-                WebkitBackgroundClip: 'text',
-                color: 'transparent',
-                letterSpacing: '-0.5px'
-            }
+            className: 'amaxoffer-title'
         });
 
         // Navigation buttons for different views.
         const btnSummary = createButton('Summary', () => switchView('summary', btnSummary));
         const btnMembers = createButton('Members', () => switchView('members', btnMembers));
         const btnOffers = createButton('Offers', () => switchView('offers', btnOffers));
+
         const btnBenefits = createButton('Benefits', () => switchView('benefits', btnBenefits));
 
         const viewBtns = createEl('div', {
-            styles: {
-                display: 'flex',
-                gap: '12px',
-                background: '#f8f9fa',
-                borderRadius: '8px',
-                padding: '4px'
-            },
+            className: 'amaxoffer-nav',
             children: [btnSummary, btnMembers, btnOffers, btnBenefits]
         });
+        viewBtns.style.display = 'none';
 
         // Toggle button for minimizing/expanding the container.
         const toggleBtn = createButton('➕', toggleMinimize, {
-            styles: {
-                fontSize: '1.2rem',
-                border: '1px dashed #ccc',
-                borderRadius: '6px',
-                width: '50px',
-                height: '50px',
-                display: 'inline-flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            }
+            className: 'amaxoffer-toggle-btn'
         });
-        toggleBtn.addEventListener('mouseover', () => toggleBtn.style.backgroundColor = '#f0f0f0');
-        toggleBtn.addEventListener('mouseout', () => toggleBtn.style.backgroundColor = 'transparent');
 
         // Header containing the title, navigation buttons, and toggle button.
         const header = createEl('div', {
             props: { id: 'card-utility-header' },
-            styles: {
-                backgroundColor: '#f8f9fa',
-                borderBottom: '1px solid rgba(0,0,0,0.08)',
-                padding: '12px 20px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'grab',
-                userSelect: 'none'
-            },
+            className: 'amaxoffer-header',
             children: [title, viewBtns, toggleBtn]
         });
 
         // Main content area.
         const content = createEl('div', {
             props: { id: 'card-utility-content' },
-            styles: {
-                padding: '20px',
-                overflowY: 'auto',
-                maxHeight: 'calc(80vh - 64px)'
-            },
+            className: 'amaxoffer-content',
             text: 'Loading...'
         });
+        content.style.display = 'none';
 
         container.append(header, content);
         document.body.appendChild(container);
-
-        // Set initial UI state: minimized container with hidden content and buttons.
-        content.style.display = 'none';
-        viewBtns.style.display = 'none';
-        container.style.width = '200px';
-        container.style.height = '75px';
-        toggleBtn.textContent = '➕';
 
         // Make the header draggable.
         makeDraggable(header, container);
@@ -301,12 +1137,14 @@
         content.style.display = glb_view_mini ? 'none' : 'block';
         viewBtns.style.display = glb_view_mini ? 'none' : 'flex';
         toggleBtn.textContent = glb_view_mini ? '➕' : '➖';
-        container.style.width = glb_view_mini ? '200px' : '90%';
-        container.style.height = glb_view_mini ? '75px' : 'auto';
-        container.style.transform = glb_view_mini ? 'scale(0.98)' : 'none';
-        container.style.boxShadow = glb_view_mini
-            ? '0 12px 18px rgba(0,0,0,0.20)'
-            : '0 12px 32px rgba(0,0,0,0.30)';
+
+        if (glb_view_mini) {
+            container.classList.add('amaxoffer-minimized');
+            container.classList.remove('amaxoffer-expanded');
+        } else {
+            container.classList.remove('amaxoffer-minimized');
+            container.classList.add('amaxoffer-expanded');
+        }
 
         if (!glb_view_mini) {
             container.addEventListener('transitionend', function onTransitionEnd(e) {
@@ -323,10 +1161,9 @@
         saveCurrentScrollState();
         glb_view_page = view;
         [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
-            btn.style.backgroundColor = (btn === activeBtn) ? '#4CAF50' : 'transparent';
-            btn.style.color = (btn === activeBtn) ? 'black' : '#2c3e50';
-            btn.style.fontWeight = (btn === activeBtn) ? '800' : '500';
+            btn.classList.remove('active');
         });
+        activeBtn.classList.add('active');
         renderPage();
     };
 
@@ -418,6 +1255,16 @@
     // =========================================================================
 
 
+    // Debounce utility for limiting rapid function calls
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+
     function formatDate(dateStr, roundUp = false) {
         let d = new Date(dateStr);
         if (roundUp && !isNaN(d)) {
@@ -461,7 +1308,7 @@
         let i = 0;
         while (i < tasks.length) {
             const chunk = tasks.slice(i, i + limit);
-            // Each “task” returns a single object: { offerId, accountToken, result: boolean }
+            // Each "task" returns a single object: { offerId, accountToken, result: boolean }
             const chunkResults = await Promise.all(chunk.map(fn => fn()));
             results.push(...chunkResults);
             i += limit;
@@ -1274,231 +2121,11 @@
     // =========================================================================
 
 
+    // Core table renderer with iOS styling
     function renderTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
-        // Add CSS if not already added
-        if (!document.getElementById('ios-table-styles')) {
-            const style = document.createElement('style');
-            style.id = 'ios-table-styles';
-            style.textContent = `
-            :root {
-                --ios-blue: #007AFF;
-                --ios-background: rgba(255, 255, 255, 0.8);
-                --ios-secondary-bg: rgba(249, 249, 251, 0.6);
-                --ios-border: rgba(230, 230, 230, 0.7);
-                --ios-text-primary: #1c1c1e;
-                --ios-text-secondary: #2c2c2e;
-                --ios-radius: 18px;
-                --ios-shadow: 0 10px 32px rgba(0, 0, 0, 0.15);
-                --ios-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                --ios-header-bg: linear-gradient(to right, rgba(245, 245, 247, 0.9), rgba(235, 235, 242, 0.85));
-                
-                --ios-green: rgb(32, 169, 69);
-                --ios-orange: rgb(215, 129, 0);
-                --ios-red: rgb(215, 49, 38);
-                --ios-gray: rgb(142, 142, 147);
-            }
-            
-            .ios-table {
-                width: 100%;
-                border-collapse: separate;
-                border-spacing: 0;
-                font-size: 15px;
-                font-family: var(--ios-font);
-                margin: 16px 0;
-                border-radius: var(--ios-radius);
-                overflow: hidden;
-                background-color: var(--ios-background);
-                backdrop-filter: blur(12px);
-                -webkit-backdrop-filter: blur(12px);
-                box-shadow: var(--ios-shadow);
-                border: 1px solid var(--ios-border);
-            }
-            
-             /* Header styles */
-            .ios-table-head {
-                background: var(--ios-header-bg);
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
-                position: sticky;
-                top: 0;
-                z-index: 10;
-                width: 100%; /* Ensure full width */
-            }
-            
-            .ios-table th {
-                padding: 16px 14px;
-                text-align: center; /* Center the header text */
-                font-weight: 600;
-                color: var(--ios-text-primary);
-                border-bottom: 1px solid rgba(60, 60, 67, 0.12);
-                letter-spacing: -0.01em;
-                vertical-align: middle;
-            }
-            
-            .ios-table th.sortable {
-                cursor: pointer;
-                position: relative;
-                padding-right: 32px;
-            }
-            
-            .ios-table th.sortable:hover {
-                background-color: rgba(0, 0, 0, 0.02);
-            }
-            
-            /* Sort button styles */
-            .ios-sort-button {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .ios-sort-button.asc,
-            .ios-sort-button.desc {
-                background: transparent;
-            }
-            
-            /* Row and cell styles */
-            .ios-table tr {
-                position: relative;
-            }
-            
-            .ios-table tr:nth-child(even) {
-                background-color: var(--ios-secondary-bg);
-            }
-            
-            .ios-table tr:hover {
-                background-color: rgba(242, 242, 247, 0.85);
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-                z-index: 5;
-            }
-            
-            .ios-table td {
-                padding: 16px 14px;
-                text-align: left;
-                color: var(--ios-text-secondary);
-                border-bottom: 1px solid rgba(60, 60, 67, 0.04);
-                vertical-align: middle; /* Added vertical alignment */
-                display: table-cell; /* Ensure proper display */
-                height: 100%; /* Help with vertical centering */
-            }
-            
-            .ios-table tr:last-child td {
-                border-bottom: none;
-            }
-            
-            /* Currency formatting */
-            .ios-currency {
-                font-variant-numeric: tabular-nums;
-                font-weight: normal;
-                letter-spacing: -0.01em;
-            }
-            
-            .ios-currency.large {
-                color: var(--ios-blue);
-                font-weight: 600;
-            }
-            
-            /* Status pills */
-            .ios-status {
-                padding: 5px 10px;
-                border-radius: 16px;
-                font-size: 13px;
-                font-weight: 500;
-                display: inline-block;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            }
-            
-            .ios-status.active, .ios-status.success {
-                background-color: rgba(52, 199, 89, 0.15);
-                color: var(--ios-green);
-                border: 1px solid rgba(52, 199, 89, 0.25);
-            }
-            
-            .ios-status.pending {
-                background-color: rgba(255, 149, 0, 0.15);
-                color: var(--ios-orange);
-                border: 1px solid rgba(255, 149, 0, 0.25);
-            }
-            
-            .ios-status.inactive, .ios-status.failed, .ios-status.canceled {
-                background-color: rgba(255, 59, 48, 0.15);
-                color: var(--ios-red);
-                border: 1px solid rgba(255, 59, 48, 0.25);
-            }
-            
-            /* Highlight for search results */
-            .ios-highlight-row {
-                background-color: rgba(255, 204, 0, 0.1) !important;
-                border-left: 4px solid rgba(255, 204, 0, 0.8);
-            }
-            
-            /* Empty state */
-            .ios-empty-state {
-                padding: 60px 20px;
-                text-align: center;
-            }
-            
-            .ios-empty-state-container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .ios-empty-state-icon {
-                width: 64px;
-                height: 64px;
-                border-radius: 32px;
-                background-color: rgba(142, 142, 147, 0.1);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 16px;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            }
-            
-            .ios-empty-state-title {
-                color: #3a3a3c;
-                font-size: 17px;
-                font-weight: 600;
-                margin-bottom: 8px;
-            }
-            
-            .ios-empty-state-message {
-                color: var(--ios-gray);
-                opacity: 0.9;
-                font-size: 15px;
-                max-width: 260px;
-                line-height: 1.4;
-            }
-            
-            .ios-empty-button {
-                margin-top: 20px;
-                background-color: var(--ios-blue);
-                color: white;
-                border: none;
-                border-radius: 18px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: 500;
-                cursor: pointer;
-                box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-            }
-        `;
-            document.head.appendChild(style);
-        }
-
-        // The rest of the function remains unchanged
-        const table = document.createElement('table');
-        table.className = 'ios-table';
+        // Define the sortable keys for members table
+        const tableElement = document.createElement('table');
+        tableElement.className = 'ios-table';
 
         // Build header
         const thead = document.createElement('thead');
@@ -1508,7 +2135,6 @@
         headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
-            th.style.textAlign = 'center'; // Explicitly center align
 
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
@@ -1563,9 +2189,8 @@
             headerRow.appendChild(th);
         });
 
-        table.style.width = '100%';
         thead.appendChild(headerRow);
-        table.appendChild(thead);
+        tableElement.appendChild(thead);
 
         // Helper: determine whether to highlight the account row
         function shouldHighlightAccount(acc) {
@@ -1593,19 +2218,19 @@
             emptyCell.className = 'ios-empty-state';
 
             emptyCell.innerHTML = `
-            <div class="ios-empty-state-container">
-                <div class="ios-empty-state-icon">
-                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                </div>
-                <div class="ios-empty-state-title">No Items Found</div>
-                <div class="ios-empty-state-message">Try adjusting your search or filters</div>
-                <button class="ios-empty-button">Reset Filters</button>
+        <div class="ios-empty-state-container">
+            <div class="ios-empty-state-icon">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
             </div>
-        `;
+            <div class="ios-empty-state-title">No Items Found</div>
+            <div class="ios-empty-state-message">Try adjusting your search or filters</div>
+            <button class="ios-empty-button">Reset Filters</button>
+        </div>
+    `;
 
             // Add reset filters functionality
             const resetButton = emptyCell.querySelector('.ios-empty-button');
@@ -1662,10 +2287,6 @@
                         td.style.wordWrap = 'break-word';
                     }
 
-                    // Center alignment both vertically and horizontally
-                    td.style.verticalAlign = 'middle';
-                    td.style.textAlign = 'center';
-
                     // Use the provided cellRenderer
                     const content = cellRenderer(item, headerItem);
 
@@ -1686,8 +2307,6 @@
                             const span = document.createElement('span');
                             span.className = 'ios-currency';
                             span.textContent = content;
-                            span.style.textAlign = 'center';
-                            span.style.display = 'block';
                             td.appendChild(span);
                         }
                         // Handle status-like text
@@ -1695,7 +2314,6 @@
                             const statusSpan = document.createElement('span');
                             statusSpan.className = `ios-status ${content.toLowerCase()}`;
                             statusSpan.textContent = content;
-                            statusSpan.style.margin = '0 auto';
                             td.appendChild(statusSpan);
                         }
                         // Regular text content
@@ -1709,81 +2327,16 @@
                     row.appendChild(td);
                 });
 
-                // Also update the header cells to be centered
-                headers.forEach(headerItem => {
-                    const th = document.createElement('th');
-                    th.textContent = headerItem.label;
-                    th.style.textAlign = 'center'; // Center header text
-
-                    // Rest of header creation code...
-                });
-
                 tbody.appendChild(row);
             });
         }
 
-        table.appendChild(tbody);
-        return table;
+        tableElement.appendChild(tbody);
+        return tableElement;
     }
 
-
+    // iOS-styled search input
     function createSearchInput(placeholder, value, callback) {
-        // Add CSS Variables and class-based styles if not already added
-        if (!document.getElementById('ios-search-styles')) {
-            const style = document.createElement('style');
-            style.id = 'ios-search-styles';
-            style.textContent = `
-            :root {
-                --ios-blue: #007AFF;
-                --ios-background: rgba(250, 250, 250, 0.8);
-                --ios-border: #e0e0e0;
-                --ios-shadow: 0 1px 3px rgba(0, 0, 0, 0.03); /* Reduced shadow */
-                --ios-focus-shadow: 0 0 0 2px rgba(0, 122, 255, 0.08); /* Reduced focus shadow */
-                --ios-border-radius: 10px;
-                --ios-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            }
-            
-            .ios-search-container {
-                position: relative;
-                box-sizing: border-box;
-                width: 200px;
-                box-shadow: var(--ios-shadow);
-                border-radius: var(--ios-border-radius);
-            }
-            
-            .ios-search-input {
-                width: 100%;
-                padding: 10px 32px 10px 12px;
-                border-radius: var(--ios-border-radius);
-                border: 1px solid var(--ios-border);
-                background-color: var(--ios-background);
-                font-size: 14px;
-                font-family: var(--ios-font);
-            }
-            
-            .ios-search-input:focus {
-                outline: none;
-                border-color: var(--ios-blue);
-                box-shadow: var(--ios-focus-shadow);
-            }
-            
-            .ios-search-icon {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                opacity: 0.6;
-                color: var(--ios-blue);
-                pointer-events: none;
-            }
-            
-            .ios-search-input:focus + .ios-search-icon {
-                opacity: 0.8;
-            }
-        `;
-            document.head.appendChild(style);
-        }
-
         // Create container with class
         const container = document.createElement('div');
         container.className = 'ios-search-container';
@@ -1830,6 +2383,7 @@
         return container;
     }
 
+    // Summary page renderer
     async function renderSummary_page() {
         // Compute offer statistics using reduce
         const {
@@ -1864,191 +2418,37 @@
         const numAccounts = glb_account.length;
         const updateTime = lastUpdate || "Never";
 
-        // Helper function to create elements with styles
-        const createElement = (tag, styles = {}, attrs = {}) => {
-            const element = document.createElement(tag);
-            Object.assign(element.style, styles);
-            Object.entries(attrs).forEach(([key, value]) => {
-                if (key === 'text') {
-                    element.textContent = value;
-                } else {
-                    element[key] = value;
-                }
-            });
-            return element;
-        };
-
-        // Create main container with iOS-style background and rounded corners
-        const summaryDiv = createElement('div', {
-            padding: '24px',
-            background: 'rgba(250, 250, 250, 0.95)',
-            borderRadius: '20px',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.06)',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)', // Safari support
-            border: '1px solid rgba(209, 213, 219, 0.3)',
-            maxWidth: '1000px',
-            margin: '0 auto'
-        });
+        // Create main container with iOS-style
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'summary-container';
 
         // Header: Title with iOS-style typography and Last Updated badge
-        const header = createElement('div', {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '28px',
-            paddingBottom: '20px',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.06)'
-        });
+        const header = document.createElement('div');
+        header.className = 'summary-header';
 
-        const title = createElement('h2', {
-            margin: '0',
-            fontSize: '24px',
-            fontWeight: '600',
-            color: '#1c1c1e',
-            letterSpacing: '-0.5px'
-        }, { text: 'Account Overview' });
+        const title = document.createElement('h2');
+        title.className = 'summary-title';
+        title.textContent = 'Account Overview';
 
-        const updateBadge = createElement('div', {
-            background: 'rgba(0, 122, 255, 0.1)',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            fontSize: '14px',
-            color: '#007AFF', // iOS blue
-            fontWeight: '500',
-            minWidth: '250px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid rgba(0, 122, 255, 0.2)'
-        });
-
-        // Add a small clock icon
+        const updateBadge = document.createElement('div');
+        updateBadge.className = 'update-badge';
         updateBadge.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: #007AFF;">
-                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-13v5l4.4 2.6.6-1-3.6-2.1V7H11z"/>
-            </svg>
-            Last Updated: ${updateTime}
-        `;
+        <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: #007AFF;">
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-13v5l4.4 2.6.6-1-3.6-2.1V7H11z"/>
+        </svg>
+        Last Updated: ${updateTime}
+    `;
 
         header.appendChild(title);
         header.appendChild(updateBadge);
         summaryDiv.appendChild(header);
 
         // Status element for refresh operations
-        const refreshStatusEl = createElement('div', {
-            fontSize: '14px',
-            color: '#8e8e93',
-            fontWeight: '500',
-            marginRight: '16px',
-            minWidth: '150px',
-            maxHeight: '42px', // Match button height
-            lineHeight: '42px', // Vertically center text
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            textAlign: 'right'
-        }, { id: 'refresh-status' });
+        const refreshStatusEl = document.createElement('div');
+        refreshStatusEl.className = 'refresh-status';
+        refreshStatusEl.id = 'refresh-status';
 
-        // Helper function to create iOS-style stat cards with dynamic sizing
-        const statItem = (label, value, color, icon) => {
-            const container = createElement('div', {
-                background: 'rgba(255, 255, 255, 0.8)',
-                padding: '20px',
-                borderRadius: '16px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
-                textAlign: 'center',
-                flex: '1',
-                minWidth: '160px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                border: '1px solid rgba(0, 0, 0, 0.05)',
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-            });
-
-            container.addEventListener('mouseover', () => {
-                container.style.transform = 'translateY(-4px)';
-                container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.06)';
-            });
-
-            container.addEventListener('mouseout', () => {
-                container.style.transform = 'translateY(0)';
-                container.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.03)';
-            });
-
-            // Changed layout to put icon beside number
-            const statContainer = createElement('div', {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                marginBottom: '8px'
-            });
-
-            // Icon container
-            const iconContainer = createElement('div', {
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                background: `rgba(${color}, 0.1)`,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-            });
-
-            iconContainer.innerHTML = icon;
-
-            const statValue = createElement('div', {
-                fontSize: '28px',
-                fontWeight: '700',
-                color: `rgb(${color})`
-            }, { text: value });
-
-            statContainer.append(iconContainer, statValue);
-
-            const statLabel = createElement('div', {
-                fontSize: '14px',
-                color: '#8e8e93',
-                fontWeight: '500'
-            }, { text: label });
-
-            container.append(statContainer, statLabel);
-            return container;
-        };
-
-        // Helper to create a row of stat cards with fixed column layout
-        const createStatRow = items => {
-            const row = createElement('div', {
-                display: 'grid',
-                gap: '16px',
-                gridTemplateColumns: '1fr 1fr 1fr 1fr', // Always 4 columns
-                marginBottom: '20px'
-            });
-            items.forEach(item => row.appendChild(item));
-
-            // Add media queries for responsive behavior
-            const style = document.createElement('style');
-            style.textContent = `
-                @media (max-width: 1200px) {
-                    #statsContainer > div {
-                        grid-template-columns: 1fr 1fr;
-                    }
-                }
-                @media (max-width: 600px) {
-                    #statsContainer > div {
-                        grid-template-columns: 1fr;
-                    }
-                }
-            `;
-            document.head.appendChild(style);
-
-            return row;
-        };
-
-        // Icons for stat cards (iOS-style SF Symbols inspired)
+        // Create icons for stat cards
         const iconColors = {
             card: '52, 199, 89', // iOS green
             balance: '255, 149, 0', // iOS orange
@@ -2062,143 +2462,118 @@
 
         // Icons in iOS style
         const cardIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.card});">
-            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-        </svg>`;
+        <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+    </svg>`;
 
         const balanceIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.balance});">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-        </svg>`;
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+    </svg>`;
 
         const pendingIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.pending});">
-            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-14v7l5.2 3.2.8-1.3-4.5-2.7V6H11z"/>
-        </svg>`;
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-14v7l5.2 3.2.8-1.3-4.5-2.7V6H11z"/>
+    </svg>`;
 
         const remainIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.remain});">
-            <path d="M16 6v8h3v4h2V6c0-1.1-.9-2-2-2H7L7 6h9zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8z"/>
-        </svg>`;
+        <path d="M16 6v8h3v4h2V6c0-1.1-.9-2-2-2H7L7 6h9zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8z"/>
+    </svg>`;
 
         const enrolledIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.enrolled});">
-            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-        </svg>`;
+        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+    </svg>`;
 
         const pendingEnrollIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.pending_enroll});">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm1-10c-2.76 0-5 2.24-5 5h2c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.65-1.35 3-3 3v2c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
-        </svg>`;
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm1-10c-2.76 0-5 2.24-5 5h2c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.65-1.35 3-3 3v2c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+    </svg>`;
 
         const eligibleIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.eligible});">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-5h4c.55 0 1-.45 1-1v-3c0-.55-.45-1-1-1v-1c0-1.11-.9-2-2-2s-2 .89-2 2v1c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1zm1.5-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v1h-3v-1z"/>
-        </svg>`;
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-5h4c.55 0 1-.45 1-1v-3c0-.55-.45-1-1-1v-1c0-1.11-.9-2-2-2s-2 .89-2 2v1c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1zm1.5-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v1h-3v-1z"/>
+    </svg>`;
 
         const totalIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.total});">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zM3 7h18v2H3V7zm4 6H5v-2h2v2zm4 0H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/>
-        </svg>`;
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zM3 7h18v2H3V7zm4 6H5v-2h2v2zm4 0H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/>
+    </svg>`;
 
-        const statsContainer = createElement('div', {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '24px',
-            marginBottom: '32px'
-        }, { id: 'statsContainer' });
+        // Create a helper function to create stat items
+        function createStatItem(label, value, color, icon) {
+            const statItem = document.createElement('div');
+            statItem.className = 'stat-item';
 
-        // Create a single row with all 8 stat items
-        const statsRow = createStatRow([
-            statItem('Card Amount on Login', `${numAccounts}`, iconColors.card, cardIcon),
-            statItem('Total Balance', `$${Math.round(totalBalance)}`, iconColors.balance, balanceIcon),
-            statItem('Total Pending Charge', `$${Math.round(totalPending)}`, iconColors.pending, pendingIcon),
-            statItem('Remain Statement', `$${Math.round(totalRemaining)}`, iconColors.remain, remainIcon),
-            statItem('Offers Fully Enrolled', distinctFullyEnrolled, iconColors.enrolled, enrolledIcon),
-            statItem('Offers Pending Enrollment', distinctNotFullyEnrolled, iconColors.pending_enroll, pendingEnrollIcon),
-            statItem('Total Eligible Offers', totalEligible, iconColors.eligible, eligibleIcon),
-            statItem('Total Enrolled Offers', totalEnrolled, iconColors.total, totalIcon)
-        ]);
+            const statContainer = document.createElement('div');
+            statContainer.className = 'stat-container';
 
-        statsContainer.append(statsRow);
+            const iconContainer = document.createElement('div');
+            iconContainer.className = 'icon-container';
+            iconContainer.style.backgroundColor = `rgba(${color}, 0.1)`;
+            iconContainer.innerHTML = icon;
+
+            const statValue = document.createElement('div');
+            statValue.className = 'stat-value';
+            statValue.style.color = `rgb(${color})`;
+            statValue.textContent = value;
+
+            statContainer.appendChild(iconContainer);
+            statContainer.appendChild(statValue);
+
+            const statLabel = document.createElement('div');
+            statLabel.className = 'stat-label';
+            statLabel.textContent = label;
+
+            statItem.appendChild(statContainer);
+            statItem.appendChild(statLabel);
+
+            return statItem;
+        }
+
+        const statsContainer = document.createElement('div');
+        statsContainer.className = 'stats-container';
+        statsContainer.id = 'statsContainer';
+
+        // Create stats row
+        const statsRow = document.createElement('div');
+        statsRow.className = 'stats-row';
+
+        // Add all stat items to the row
+        statsRow.appendChild(createStatItem('Card Amount on Login', `${numAccounts}`, iconColors.card, cardIcon));
+        statsRow.appendChild(createStatItem('Total Balance', `${Math.round(totalBalance)}`, iconColors.balance, balanceIcon));
+        statsRow.appendChild(createStatItem('Total Pending Charge', `${Math.round(totalPending)}`, iconColors.pending, pendingIcon));
+        statsRow.appendChild(createStatItem('Remain Statement', `${Math.round(totalRemaining)}`, iconColors.remain, remainIcon));
+        statsRow.appendChild(createStatItem('Offers Fully Enrolled', distinctFullyEnrolled, iconColors.enrolled, enrolledIcon));
+        statsRow.appendChild(createStatItem('Offers Pending Enrollment', distinctNotFullyEnrolled, iconColors.pending_enroll, pendingEnrollIcon));
+        statsRow.appendChild(createStatItem('Total Eligible Offers', totalEligible, iconColors.eligible, eligibleIcon));
+        statsRow.appendChild(createStatItem('Total Enrolled Offers', totalEnrolled, iconColors.total, totalIcon));
+
+        statsContainer.appendChild(statsRow);
         summaryDiv.appendChild(statsContainer);
 
         // Button container with status text and buttons
-        const buttonContainer = createElement('div', {
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            marginTop: '16px',
-            flexWrap: 'wrap',
-            gap: '10px',
-            maxHeight: '60px', // Constrain max height with some extra space
-            overflow: 'visible' // Allow overflow for animations
-        });
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'button-container';
 
-        // Helper to create iOS-style buttons with icons
-        const createButton = (text, color, icon, onClick) => {
-            // Fixed buttons to be solid instead of transparent
-            const btn = createElement('button', {
-                padding: '10px 24px',
-                height: '42px',
-                maxHeight: '42px',
-                border: 'none',
-                borderRadius: '12px',
-                background: color,
-                color: 'white',
-                fontWeight: '600',
-                fontSize: '16px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
-                overflow: 'hidden'
-            });
+        // Create action buttons container
+        const actionButtonsContainer = document.createElement('div');
+        actionButtonsContainer.className = 'action-buttons';
 
+        // Helper to create iOS-style buttons
+        function createActionButton(text, icon, onClick, color = 'var(--ios-blue)') {
+            const btn = document.createElement('button');
+            btn.className = 'ios-button';
+            btn.style.backgroundColor = color;
             btn.innerHTML = `${icon} ${text}`;
-
-            btn.addEventListener('mouseover', () => {
-                btn.style.transform = 'translateY(-2px)';
-                btn.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.18)';
-                btn.style.opacity = '0.95';
-                // Don't change height during animation
-                btn.style.height = '42px';
-                btn.style.maxHeight = '42px';
-            });
-
-            btn.addEventListener('mouseout', () => {
-                btn.style.transform = 'translateY(0)';
-                btn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.12)';
-                btn.style.opacity = '1';
-            });
-
-            btn.addEventListener('mousedown', () => {
-                btn.style.transform = 'scale(0.98)';
-            });
-
-            btn.addEventListener('mouseup', () => {
-                btn.style.transform = 'translateY(-2px)';
-            });
-
             btn.addEventListener('click', onClick);
             return btn;
-        };
+        }
 
         // iOS-style icon for refresh button
         const refreshIcon = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-            <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-        </svg>`;
+        <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+    </svg>`;
 
         // iOS-style icon for enroll button
         const enrollIcon = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-        </svg>`;
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+    </svg>`;
 
-        // Create action buttons container that will hold status text and both buttons
-        const actionButtonsContainer = createElement('div', {
-            display: 'flex',
-            gap: '16px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            maxHeight: '50px', // Constrain max height
-            height: '50px'
-        });
-
-        const refreshBtn = createButton('Refresh Data', '#007AFF', refreshIcon, async () => {
+        const refreshBtn = createActionButton('Refresh Data', refreshIcon, async () => {
             try {
                 refreshStatusEl.textContent = "Refreshing accounts...";
                 await get_accounts();
@@ -2218,14 +2593,14 @@
             }
         });
 
-        const enrollBtn = createButton('Enroll All', '#34C759', enrollIcon, async () => {
+        const enrollBtn = createActionButton('Enroll All', enrollIcon, async () => {
             try {
                 await get__batchEnrollOffer();
                 renderPage();
             } catch (e) {
                 console.error('Error enrolling all:', e);
             }
-        });
+        }, 'var(--ios-green)');
 
         // Add status text and both buttons to action buttons container
         actionButtonsContainer.append(refreshStatusEl, refreshBtn, enrollBtn);
@@ -2237,36 +2612,22 @@
         return summaryDiv;
     }
 
+    // Members filter bar
     function renderMembers_filterBar() {
         const filtersCard = document.createElement('div');
-        filtersCard.style.background = '#ffffff';
-        filtersCard.style.borderRadius = '12px';
-        filtersCard.style.padding = '16px';
-        filtersCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-        filtersCard.style.display = 'flex';
-        filtersCard.style.gap = '20px';
-        filtersCard.style.flexWrap = 'wrap';
-        filtersCard.style.width = '100%';
-        filtersCard.style.boxSizing = 'border-box';
+        filtersCard.className = 'filter-card';
 
         // Status Filter: label and select side-by-side
         const statusFilterDiv = document.createElement('div');
-        statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
-        statusFilterDiv.style.gap = '8px';
+        statusFilterDiv.className = 'filter-group';
 
         const statusFilterLabel = document.createElement('label');
         statusFilterLabel.textContent = 'Status:';
-        statusFilterLabel.style.fontWeight = '600';
-        statusFilterLabel.style.fontSize = '0.9rem';
+        statusFilterLabel.className = 'filter-label';
 
         const statusFilterSelect = document.createElement('select');
         statusFilterSelect.id = 'status-filter';
-        statusFilterSelect.style.padding = '8px';
-        statusFilterSelect.style.borderRadius = '8px';
-        statusFilterSelect.style.border = '1px solid #e0e0e0';
-        statusFilterSelect.style.fontSize = '0.9rem';
-        statusFilterSelect.style.cursor = 'pointer';
+        statusFilterSelect.className = 'filter-select';
 
         const optionAll = document.createElement('option');
         optionAll.value = 'all';
@@ -2293,22 +2654,15 @@
 
         // Type Filter: label and select side-by-side
         const typeFilterDiv = document.createElement('div');
-        typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
-        typeFilterDiv.style.gap = '8px';
+        typeFilterDiv.className = 'filter-group';
 
         const typeFilterLabel = document.createElement('label');
         typeFilterLabel.textContent = 'Type:';
-        typeFilterLabel.style.fontWeight = '600';
-        typeFilterLabel.style.fontSize = '0.9rem';
+        typeFilterLabel.className = 'filter-label';
 
         const typeFilterSelect = document.createElement('select');
         typeFilterSelect.id = 'type-filter';
-        typeFilterSelect.style.padding = '8px';
-        typeFilterSelect.style.borderRadius = '8px';
-        typeFilterSelect.style.border = '1px solid #e0e0e0';
-        typeFilterSelect.style.fontSize = '0.9rem';
-        typeFilterSelect.style.cursor = 'pointer';
+        typeFilterSelect.className = 'filter-select';
 
         const typeOptionAll = document.createElement('option');
         typeOptionAll.value = 'all';
@@ -2335,16 +2689,13 @@
 
         // Offer Search Filter: label and search input on the same line
         const offerSearchContainer = document.createElement('div');
-        offerSearchContainer.style.display = 'flex';
-        offerSearchContainer.style.alignItems = 'center';
-        offerSearchContainer.style.gap = '8px';
+        offerSearchContainer.className = 'filter-group';
 
         const offerSearchLabel = document.createElement('label');
         offerSearchLabel.textContent = 'Search Offer:';
-        offerSearchLabel.style.fontWeight = '600';
-        offerSearchLabel.style.fontSize = '0.9rem';
+        offerSearchLabel.className = 'filter-label';
 
-        // Reuse createSearchInput here. This function should return a container with the search input.
+        // Reuse createSearchInput here
         const offerSearchInputContainer = createSearchInput(
             'Enter keyword',
             glb_filters.memberMerchantSearch,
@@ -2361,7 +2712,7 @@
         return filtersCard;
     }
 
-
+    // Members table
     function renderMembers_table() {
         const headers = [
             { label: "Index", key: "cardIndex" },
@@ -2397,7 +2748,7 @@
             exclude: "60px"
         };
 
-        // Filter accounts by status and type (do not filter by search term)
+        // Filter accounts by status and type
         const filteredAccounts = glb_account.filter(acc => {
             const statusMatch = glb_filters.memberStatus === 'all' ||
                 acc.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
@@ -2405,7 +2756,6 @@
                 acc.relationship === glb_filters.memberCardtype;
             return statusMatch && typeMatch;
         });
-
 
         // Define cell rendering logic for members table
         const cellRenderer = (item, headerItem) => {
@@ -2430,6 +2780,7 @@
                 btn.style.padding = '2px 6px';
                 btn.style.fontSize = '12px';
                 btn.style.backgroundColor = '#fafafa';
+
                 btn.addEventListener('mouseover', () => btn.style.backgroundColor = '#f0f0f0');
                 btn.addEventListener('mouseout', () => btn.style.backgroundColor = '#fafafa');
                 btn.addEventListener('click', () => {
@@ -2486,6 +2837,8 @@
                     localStorageHandler("set", storage_accToken, ["excludedCards"]);
                 });
                 return chk;
+            } else if (key === 'account_status') {
+                return item[key]; // Will be styled by renderTable's status handling
             }
             return sanitizeValue(item[key]);
         };
@@ -2503,74 +2856,74 @@
         return containerDiv;
     }
 
-
+    // Members offer on card popup
     function renderMembers_offerOnCard(accountNumber, offerType) {
         // Create the overlay with backdrop blur
         const overlay = document.createElement('div');
         overlay.id = 'offer-details-overlay';
         overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(4px);
-            z-index: 10000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        `;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(4px);
+        z-index: 10000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
 
         // Modern popup container
         const popup = document.createElement('div');
         popup.style.cssText = `
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 24px;
-            width: 90%;
-            max-width: 400px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            position: relative;
-        `;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 24px;
+        width: 90%;
+        max-width: 400px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        position: relative;
+    `;
 
         overlay.appendChild(popup);
 
         // ───────── Top row: Title and Close Button ─────────
         const topRow = document.createElement('div');
         topRow.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #eee;
-        `;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #eee;
+    `;
 
         const leftTitle = document.createElement('h3');
         leftTitle.textContent = `Offers ${offerType} for card ending ${accountNumber}`;
         leftTitle.style.cssText = `
-            margin: 0;
-            font-size: 1.2rem;
-            font-weight: 600;
-            background: linear-gradient(45deg, #2c3e50, #4CAF50);
-            -webkit-background-clip: text;
-            color: transparent;
-        `;
+        margin: 0;
+        font-size: 1.2rem;
+        font-weight: 600;
+        background: linear-gradient(45deg, #2c3e50, #4CAF50);
+        -webkit-background-clip: text;
+        color: transparent;
+    `;
 
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '&times;';
         closeBtn.style.cssText = `
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: #666;
-            cursor: pointer;
-            padding: 4px;
-            transition: all 0.2s ease;
-        `;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #666;
+        cursor: pointer;
+        padding: 4px;
+        transition: all 0.2s ease;
+    `;
         closeBtn.addEventListener('mouseover', () => {
             closeBtn.style.color = '#ff4444';
         });
@@ -2588,9 +2941,9 @@
         // ───────── Content Area ─────────
         const contentDiv = document.createElement('div');
         contentDiv.style.cssText = `
-            font-size: 14px;
-            line-height: 1.4;
-        `;
+        font-size: 14px;
+        line-height: 1.4;
+    `;
         popup.appendChild(contentDiv);
 
         // Determine relevant offers based on offerType
@@ -2613,10 +2966,10 @@
             relevantOffers.forEach(offer => {
                 const offerPara = document.createElement('p');
                 offerPara.style.cssText = `
-                    margin: 6px 0;
-                    font-size: 14px;
-                    color: #333;
-                `;
+                margin: 6px 0;
+                font-size: 14px;
+                color: #333;
+            `;
                 offerPara.textContent = offer.name;
                 contentDiv.appendChild(offerPara);
             });
@@ -2625,7 +2978,7 @@
         document.body.appendChild(overlay);
     }
 
-
+    // Members page container
     function renderMembers_page() {
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
@@ -2639,7 +2992,7 @@
         return containerDiv;
     }
 
-
+    // Offers search bar
     function renderOffers_searchBar() {
         const filterCard = document.createElement('div');
         filterCard.style.background = '#ffffff';
@@ -2685,7 +3038,7 @@
         return filterCard;
     }
 
-
+    // Offers table
     function renderOffers_table() {
         // Filter offers based on search criteria.
         const filteredOffers = glb_offer.filter(o => {
@@ -2834,7 +3187,7 @@
         return containerDiv;
     }
 
-
+    // Offers enrollment card modal
     async function renderOffers_enrollCard(offerId) {
         // Remove existing overlay
         const overlayId = 'offer-details-overlay';
@@ -2849,23 +3202,23 @@
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = `
-          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-          background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10000;
-          display: flex; justify-content: center; align-items: center;
-        `;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10000;
+      display: flex; justify-content: center; align-items: center;
+    `;
         const popup = document.createElement('div');
         popup.style.cssText = `
-          background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 440px;
-          max-height: 90vh; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15); position: relative;
-        `;
+      background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 440px;
+      max-height: 90vh; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15); position: relative;
+    `;
         // Header
         const header = document.createElement('div');
         header.style.cssText = `display: flex; justify-content: space-between; align-items: center;
-          margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #eee;`;
+      margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #eee;`;
         const title = document.createElement('h3');
         title.textContent = offerName;
         title.style.cssText = `margin: 0; font-size: 1.2rem; font-weight: 600;
-          background: linear-gradient(45deg, #2c3e50, #4CAF50); -webkit-background-clip: text; color: transparent;`;
+      background: linear-gradient(45deg, #2c3e50, #4CAF50); -webkit-background-clip: text; color: transparent;`;
         const closeBtn = createIconButton('×', () => { overlay.remove(); saveCurrentScrollState(); renderPage(); });
         closeBtn.style.cssText += 'font-size:1.5rem; color:#666; padding:4px;';
         header.append(title, closeBtn);
@@ -2896,9 +3249,9 @@
                     setTimeout(() => renderOffers_enrollCard(offerId), 3000);
                 }, 'plus');
                 enrollAll.style.cssText += `
-              width: 100%; margin: 0 0 20px 0; background: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
-              color: white; border-radius: 8px; font-weight: 500;
-            `;
+          width: 100%; margin: 0 0 20px 0; background: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
+          color: white; border-radius: 8px; font-weight: 500;
+        `;
                 popup.appendChild(enrollAll);
             }
             // Card Sections
@@ -2936,10 +3289,10 @@
             card.id = `offerCard_${offerId}_${cardEnd}`;
             card.textContent = cardEnd;
             card.style.cssText = `
-            padding: 8px; border-radius: 6px; text-align: center; font-size: 0.85rem;
-            transition: all 0.2s ease; background-color: ${enrolled ? '#e8f5e9' : '#e3f2fd'};
-            ${!enrolled ? 'cursor: pointer;' : ''}
-          `;
+        padding: 8px; border-radius: 6px; text-align: center; font-size: 0.85rem;
+        transition: all 0.2s ease; background-color: ${enrolled ? '#e8f5e9' : '#e3f2fd'};
+        ${!enrolled ? 'cursor: pointer;' : ''}
+      `;
             if (!enrolled) {
                 card.onclick = async () => {
                     const acc = glb_account.find(a => a.display_account_number === cardEnd);
@@ -2994,8 +3347,7 @@
         }
     }
 
-
-
+    // Offers page container
     function renderOffers_page() {
         const containerDiv = document.createElement('div');
         containerDiv.style.display = 'flex';
@@ -3005,11 +3357,10 @@
         containerDiv.style.maxWidth = '1300px';
         containerDiv.style.margin = '0 auto';
         containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
-
         return containerDiv;
     }
 
-
+    // Benefits page renderer
     async function renderBenefits() {
         if (!glb_benefit || glb_benefit.length === 0) {
             await get_benefit();
@@ -3444,10 +3795,9 @@
                 bodyDiv.style.padding = '0 16px';
             }
         }
-
     }
 
-
+    // Main page renderer
     async function renderPage() {
         content.innerHTML = '';
         let viewContent;
