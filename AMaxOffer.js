@@ -305,10 +305,12 @@
         
         /* Highlight for search results */
         .ios-highlight-row {
-            background-color: rgba(255, 204, 0, 0.1) !important;
-            border-left: 4px solid rgba(255, 204, 0, 0.8);
+            background-color: rgba(255, 204, 0, 0.2) !important;
+            border-left: 4px solid rgba(255, 204, 0, 0.8) !important;
         }
-        
+        .ios-highlight-row:hover {
+            background-color: rgba(255, 204, 0, 0.25) !important;
+        }
         /* Empty state */
         .ios-empty-state {
             padding: 60px 20px;
@@ -973,16 +975,17 @@
     //  1) PRIMARY DATA & TRACKERS
     let glb_account = [];
     let glb_offer = [];
+    let glb_offer_expired = [];
+    let glb_offer_redeemed = [];
     let glb_benefit = [];
     let glb_balance = {};
     let glb_priorityCards = [];
     let glb_excludedCards = [];
 
     //  2) VIEW / UI STATES
-    let glb_view_page = "summary";  // Possible: "summary", "members", "offers", "benefits"
+    let glb_view_page = "members";  // Possible: "summary", "members", "offers", "benefits"
     let glb_view_mini = true;       // Whether the main container is collapsed
     const glb_view_scroll = {
-        summary: { scrollTop: 0 },
         members: { scrollTop: 0 },
         offers: { scrollTop: 0 },
         benefits: { scrollTop: 0 },
@@ -1004,16 +1007,16 @@
     let lastUpdate = "";        // Last time data was fetched
     let runInBatchesLimit = 100; // Concurrency limit when enrolling in batches
     let storage_accToken = "";       // Suffix for the token to avoid conflicts
+    let btnRefresh, refreshStatusEl;
 
-
-    let content, viewBtns, toggleBtn, container, btnSummary, btnMembers, btnOffers, btnBenefits;
+    let content, viewBtns, toggleBtn, container, btnMembers, btnOffers, btnBenefits;
 
     // =========================================================================
     // Section 3: UI Elements Creation
     // =========================================================================
 
     // Utility to create an element with optional properties.
-    const createEl = (tag, { text = '', className = '', styles = {}, props = {}, children = [] } = {}) => {
+    const ui_createElement = (tag, { text = '', className = '', styles = {}, props = {}, children = [] } = {}) => {
         const el = document.createElement(tag);
         if (text) el.textContent = text;
         if (className) el.className = className;
@@ -1024,8 +1027,8 @@
     };
 
     // Helper to create a button with default styling and hover effects.
-    const createButton = (label, onClick, { className = '', styles = {} } = {}) => {
-        const btn = createEl('button', {
+    const ui_createBtn_v1 = (label, onClick, { className = '', styles = {} } = {}) => {
+        const btn = ui_createElement('button', {
             text: label,
             className: className || 'amaxoffer-nav-button',
             styles
@@ -1035,46 +1038,120 @@
     };
 
     // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
-    const buildUI = () => {
+    function ui_createMain() {
         // Create the main container
-        const container = createEl('div', {
+        const container = ui_createElement('div', {
             props: { id: 'card-utility-overlay' },
             className: 'amaxoffer-container amaxoffer-minimized'
         });
 
-        // Title element.
-        const title = createEl('span', {
+        // Title element
+        const title = ui_createElement('span', {
             text: 'AMaxOffer',
             className: 'amaxoffer-title'
         });
 
-        // Navigation buttons for different views.
-        const btnSummary = createButton('Summary', () => switchView('summary', btnSummary));
-        const btnMembers = createButton('Members', () => switchView('members', btnMembers));
-        const btnOffers = createButton('Offers', () => switchView('offers', btnOffers));
+        // Navigation buttons for different views (without Summary)
+        const btnMembers = ui_createBtn_v1('Members', () => ui_changeTab('members', btnMembers));
+        const btnOffers = ui_createBtn_v1('Offers', () => ui_changeTab('offers', btnOffers));
+        const btnBenefits = ui_createBtn_v1('Benefits', () => ui_changeTab('benefits', btnBenefits));
 
-        const btnBenefits = createButton('Benefits', () => switchView('benefits', btnBenefits));
-
-        const viewBtns = createEl('div', {
+        // Navigation container with centered positioning
+        const viewBtns = ui_createElement('div', {
             className: 'amaxoffer-nav',
-            children: [btnSummary, btnMembers, btnOffers, btnBenefits]
+            children: [btnMembers, btnOffers, btnBenefits]
         });
         viewBtns.style.display = 'none';
+        viewBtns.style.position = 'absolute';
+        viewBtns.style.left = '50%';
+        viewBtns.style.transform = 'translateX(-50%)';
+        viewBtns.style.zIndex = '1';
 
-        // Toggle button for minimizing/expanding the container.
-        const toggleBtn = createButton('➕', toggleMinimize, {
+        // Create refresh button
+        const refreshIcon = `<svg style="width:16px;height:16px;fill:white;margin-right:4px" viewBox="0 0 24 24">
+            <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>`;
+
+        btnRefresh = ui_createBtn_v1('', async () => {
+            try {
+                refreshStatusEl.textContent = "Refreshing accounts...";
+                await api_fetchAccounts();
+
+                refreshStatusEl.textContent = "Refreshing offers...";
+                const offerStats = await api_refreshOffersList();
+
+                refreshStatusEl.textContent = "Refreshing balances...";
+                await api_fetchAllBalances();
+
+                refreshStatusEl.textContent = "Refreshing benefits...";
+                await api_fetchAllBenefits();
+
+                lastUpdate = new Date().toLocaleString();
+                storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
+
+                // Show offer change stats if there were any changes
+                if (offerStats.newCount > 0 || offerStats.expiredCount > 0 || offerStats.redeemedCount > 0) {
+                    refreshStatusEl.textContent = `Refresh complete: ${offerStats.newCount} new, ${offerStats.expiredCount} expired, ${offerStats.redeemedCount} redeemed offers`;
+                } else {
+                    refreshStatusEl.textContent = "Refresh complete.";
+                }
+
+                await ui_renderCurrentView();
+            } catch (e) {
+                console.error('Error refreshing data:', e);
+                refreshStatusEl.textContent = "Error refreshing data.";
+            }
+        }, {
+            className: 'refresh-button',
+            styles: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'var(--ios-blue)',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                marginRight: '10px'
+            }
+        });
+        btnRefresh.innerHTML = refreshIcon + 'Refresh';
+        btnRefresh.style.display = 'none';
+
+        // Create status element for refresh operations
+        refreshStatusEl = document.createElement('div');
+        refreshStatusEl.className = 'refresh-status';
+        refreshStatusEl.id = 'refresh-status';
+        refreshStatusEl.style.fontSize = '12px';
+        refreshStatusEl.style.color = '#8e8e93';
+        refreshStatusEl.style.marginRight = '8px';
+        refreshStatusEl.style.display = 'none';
+
+        // Toggle button for minimizing/expanding
+        const toggleBtn = ui_createBtn_v1('➕', ui_toggleMinimize, {
             className: 'amaxoffer-toggle-btn'
         });
 
-        // Header containing the title, navigation buttons, and toggle button.
-        const header = createEl('div', {
-            props: { id: 'card-utility-header' },
-            className: 'amaxoffer-header',
-            children: [title, viewBtns, toggleBtn]
+        // Right-side controls
+        const rightControls = ui_createElement('div', {
+            styles: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                marginLeft: 'auto'
+            },
+            children: [refreshStatusEl, btnRefresh, toggleBtn]
         });
 
-        // Main content area.
-        const content = createEl('div', {
+        // Header with position relative for absolute positioning of navButtons
+        const header = ui_createElement('div', {
+            props: { id: 'card-utility-header' },
+            className: 'amaxoffer-header',
+            styles: { position: 'relative' },
+            children: [title, viewBtns, rightControls]
+        });
+
+        // Main content area
+        const content = ui_createElement('div', {
             props: { id: 'card-utility-content' },
             className: 'amaxoffer-content',
             text: 'Loading...'
@@ -1084,14 +1161,14 @@
         container.append(header, content);
         document.body.appendChild(container);
 
-        // Make the header draggable.
-        makeDraggable(header, container);
+        // Make the header draggable
+        ui_makeDraggable(header, container);
 
-        return { container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits };
-    };
+        return { container, content, viewBtns, toggleBtn, btnMembers, btnOffers, btnBenefits };
+    }
 
     // Make an element draggable by tracking mouse movement.
-    const makeDraggable = (handle, container) => {
+    const ui_makeDraggable = (handle, container) => {
         let shiftX = 0,
             shiftY = 0;
         let latestX = 0,
@@ -1132,10 +1209,12 @@
     };
 
     // Toggle the minimized/expanded state of the UI container.
-    const toggleMinimize = () => {
+    const ui_toggleMinimize = () => {
         glb_view_mini = !glb_view_mini;
         content.style.display = glb_view_mini ? 'none' : 'block';
         viewBtns.style.display = glb_view_mini ? 'none' : 'flex';
+        btnRefresh.style.display = glb_view_mini ? 'none' : 'flex'; // Show/hide with other nav elements
+        refreshStatusEl.style.display = glb_view_mini ? 'none' : 'block';
         toggleBtn.textContent = glb_view_mini ? '➕' : '➖';
 
         if (glb_view_mini) {
@@ -1149,7 +1228,7 @@
         if (!glb_view_mini) {
             container.addEventListener('transitionend', function onTransitionEnd(e) {
                 if (e.propertyName === 'height') {
-                    renderPage();
+                    ui_renderCurrentView();
                     container.removeEventListener('transitionend', onTransitionEnd);
                 }
             });
@@ -1157,18 +1236,18 @@
     };
 
     // Switch between views, update button styles, and trigger re-rendering.
-    const switchView = (view, activeBtn) => {
-        saveCurrentScrollState();
+    const ui_changeTab = (view, activeBtn) => {
+        ui_saveScrollPos();
         glb_view_page = view;
-        [btnSummary, btnMembers, btnOffers, btnBenefits].forEach(btn => {
+        [btnMembers, btnOffers, btnBenefits].forEach(btn => {
             btn.classList.remove('active');
         });
         activeBtn.classList.add('active');
-        renderPage();
+        ui_renderCurrentView();
     };
 
     // Save the current scroll position for the active view.
-    const saveCurrentScrollState = () => {
+    const ui_saveScrollPos = () => {
         if (content) {
             glb_view_scroll[glb_view_page].scrollTop = content.scrollTop;
         }
@@ -1176,11 +1255,38 @@
 
 
     // =========================================================================
-    // Section 3.5: Anti Idle & Session Extender
+    // Section 4: General Helper Functions
     // =========================================================================
 
+    const util_antiKickOff = (() => {
+        // Instead of overriding prototype methods, create a wrapper for the element
+        const managedElements = new Map();
 
-    const EventListenerManager = (() => {
+        const manage = (element) => {
+            if (managedElements.has(element)) return managedElements.get(element);
+
+            const listeners = [];
+            const originalAdd = element.addEventListener.bind(element);
+            const originalRemove = element.removeEventListener.bind(element);
+
+            const wrapper = {
+                addListener: (type, listener, options) => {
+                    listeners.push({ type, listener, options });
+                    return originalAdd(type, listener, options);
+                },
+                removeListener: (type, listener, options) => {
+                    const index = listeners.findIndex(l =>
+                        l.type === type && l.listener === listener && l.options === options);
+                    if (index !== -1) listeners.splice(index, 1);
+                    return originalRemove(type, listener, options);
+                },
+                getListeners: (typeFilter) => typeFilter ?
+                    listeners.filter(l => l.type === typeFilter) : [...listeners]
+            };
+
+            managedElements.set(element, wrapper);
+            return wrapper;
+        };
         // Private registry to track event listeners.
         const registry = new WeakMap();
 
@@ -1246,15 +1352,11 @@
         };
     })();
 
-    EventListenerManager.removeVisibilityListeners();
-    EventListenerManager.startSessionExtender(60000);
-
-    // =========================================================================
-    // Section 4: General Helper Functions
-    // =========================================================================
+    util_antiKickOff.removeVisibilityListeners();
+    util_antiKickOff.startSessionExtender(60000);
 
 
-    function formatDate(dateStr, roundUp = false) {
+    function util_formatDate(dateStr, roundUp = false) {
         let d = new Date(dateStr);
         if (roundUp && !isNaN(d)) {
             d.setDate(d.getDate() + 1);
@@ -1267,7 +1369,7 @@
     }
 
 
-    function sanitizeValue(val) {
+    function util_cleanValue(val) {
         if (val === "N/A" || val === null || val === undefined || val === "" || val === 0) {
             return "0";
         }
@@ -1276,7 +1378,7 @@
 
 
     // Parse card index into main and sub-index components
-    function parseCardIndex(indexStr) {
+    function util_parseCardIndex(indexStr) {
         if (!indexStr) return [0, 0];
         const parts = indexStr.split('-');
         const main = parseInt(parts[0], 10) || 0;
@@ -1286,7 +1388,7 @@
 
 
     // Parse a numeric value from a string, cleaning common symbols
-    function parseNumericValue(str) {
+    function util_parseNumber(str) {
         if (!str) return NaN;
         const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
         return parseFloat(cleaned) || NaN;
@@ -1294,7 +1396,7 @@
 
 
     // Run tasks in batches to control concurrency
-    async function runInBatches(tasks, limit) {
+    async function util_runTasksInBatches(tasks, limit) {
         const results = [];
         let i = 0;
         while (i < tasks.length) {
@@ -1309,7 +1411,7 @@
 
 
     // Utility to get the basic account ending for a supplementary account
-    function getBasicAccountEndingForSuppAccount(suppAccount) {
+    function members_getParentCardNumber(suppAccount) {
         const parts = suppAccount.cardIndex.split('-');
         if (parts.length > 1) {
             const mainIndex = parts[0];
@@ -1324,7 +1426,7 @@
 
 
     // Utility to sort the account data based on a key
-    function sort_memberTab(key) {
+    function members_sortTable(key) {
         if (glb_memberSortState.key === key) {
             glb_memberSortState.direction *= -1;
         } else {
@@ -1333,8 +1435,8 @@
         }
         if (key === 'cardIndex') {
             glb_account.sort((a, b) => {
-                const [aMain, aSub] = parseCardIndex(a.cardIndex);
-                const [bMain, bSub] = parseCardIndex(b.cardIndex);
+                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
                 if (aMain === bMain) {
                     return glb_memberSortState.direction * (aSub - bSub);
                 }
@@ -1347,36 +1449,38 @@
                 return glb_memberSortState.direction * valA.toString().localeCompare(valB.toString());
             });
         }
-        saveCurrentScrollState();
+        ui_saveScrollPos();
         const container = document.getElementById('members-table-container');
         if (container) {
             container.innerHTML = "";
-            container.appendChild(renderMembers_table());
+            container.appendChild(members_renderTable());
         }
     }
 
 
     // Utility to sort the offer data based on a key
-    function sort_offerTab(key) {
+    function offers_sortTable(key) {
         if (glb_offerSortState.key === key) {
             glb_offerSortState.direction *= -1;
         } else {
             glb_offerSortState.key = key;
             glb_offerSortState.direction = (key === "favorite") ? -1 : 1;
         }
+
         glb_offer.sort((a, b) => {
             if (key === "favorite") {
                 if (a.favorite === b.favorite) return 0;
-                return a.favorite ? -1 : 1;
+                return a.favorite ? -1 * glb_offerSortState.direction : 1 * glb_offerSortState.direction;
             }
+
             const numericColumns = ["reward", "threshold", "percentage"];
-            const valA = a[key] || "";
-            const valB = b[key] || "";
+
             if (numericColumns.includes(key)) {
-                const numA = parseNumericValue(valA);
-                const numB = parseNumericValue(valB);
+                const numA = util_parseNumber(a[key] || "");
+                const numB = util_parseNumber(b[key] || "");
+
                 if (isNaN(numA) && isNaN(numB)) {
-                    return glb_offerSortState.direction * valA.localeCompare(valB);
+                    return glb_offerSortState.direction * String(a[key] || "").localeCompare(String(b[key] || ""));
                 } else if (isNaN(numA)) {
                     return 1 * glb_offerSortState.direction;
                 } else if (isNaN(numB)) {
@@ -1384,25 +1488,37 @@
                 }
                 return glb_offerSortState.direction * (numA - numB);
             } else if (key === "eligibleCards" || key === "enrolledCards") {
-                const lenA = Array.isArray(valA) ? valA.length : 0;
-                const lenB = Array.isArray(valB) ? valB.length : 0;
+                const lenA = Array.isArray(a[key]) ? a[key].length : 0;
+                const lenB = Array.isArray(b[key]) ? b[key].length : 0;
                 return glb_offerSortState.direction * (lenA - lenB);
             } else {
-                return glb_offerSortState.direction * valA.toString().localeCompare(valB.toString());
+                return glb_offerSortState.direction * String(a[key] || "").localeCompare(String(b[key] || ""));
             }
         });
-        saveCurrentScrollState();
+
+        ui_saveScrollPos();
 
         const container = document.getElementById('offers-table-container');
         if (container) {
             container.innerHTML = "";
-            container.appendChild(renderOffers_table());
+            container.appendChild(offers_renderTableView());
+        } else {
+            // If we're in grid view, update the display container
+            const displayContainer = document.getElementById('offers-display-container');
+            if (displayContainer) {
+                displayContainer.innerHTML = "";
+                const displayMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
+                if (displayMode === 'grid') {
+                    displayContainer.appendChild(offers_renderGridView());
+                } else {
+                    displayContainer.appendChild(offers_renderTableView());
+                }
+            }
         }
     }
 
-
     // Utility to parse offer details from the description
-    function parseOfferDetails(description = "") {
+    function offers_parseDescription(description = "") {
         const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
         const toMoneyString = (num) => {
             if (num == null || isNaN(num)) return null;
@@ -1506,29 +1622,11 @@
     }
 
 
-    // Merge the old favorites with the new offer data
-    function mergeFavorites(newOfferMap) {
-        const oldFavorites = {};
-        if (glb_offer && Array.isArray(glb_offer)) {
-            glb_offer.forEach(o => {
-                if (o.source_id) {
-                    oldFavorites[o.source_id] = o.favorite === true;
-                }
-            });
-        }
-        for (const sid in newOfferMap) {
-            if (oldFavorites.hasOwnProperty(sid)) {
-                newOfferMap[sid].favorite = oldFavorites[sid];
-            }
-        }
-    }
-
-
     // =========================================================================
     // Section 5: Data Fetching Functions
     // =========================================================================
 
-    async function get_accounts(readonly = false) {
+    async function api_fetchAccounts(readonly = false) {
         try {
             const res = await fetch(API_member, {
                 method: 'GET',
@@ -1594,14 +1692,15 @@
         if (Array.isArray(glb_account) && glb_account.length > 0) {
             storage_accToken = glb_account[0].account_token;
             if (!readonly) {
-                localStorageHandler("set", storage_accToken, ["account"]);
+                storage_manageData("set", storage_accToken, ["account"]);
             }
             return true;
         }
+        return false;
     }
 
 
-    async function fetchRequest_offer(accountToken) {
+    async function api_fetchOfferList(accountToken) {
         const payload = {
             accountNumberProxy: accountToken,
             locale: "en-US",
@@ -1631,12 +1730,69 @@
         }
     }
 
+    async function api_fetchOfferDetails(accountToken, offerId) {
 
-    async function get_offers() {
+        // Generate timestamp in required format with offset
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        const offsetTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const requestDateTimeWithOffset = `${offsetTime.getUTCFullYear()}-${pad(offsetTime.getUTCMonth() + 1)}_${pad(offsetTime.getUTCDate())}T${pad(offsetTime.getUTCHours())}:${pad(offsetTime.getUTCMinutes())}:${pad(offsetTime.getUTCSeconds())}-06:00`;
+
+        const payload = {
+            accountNumberProxy: accountToken,
+            identifier: offerId,
+            identifierType: "OFFER",
+            locale: "en-US",
+            offerRequestType: "DETAILS",
+            requestDateTimeWithOffset: requestDateTimeWithOffset,
+            source: "STANDARD",
+            userOffset: "-06:00"
+        };
+
+        try {
+            const res = await fetch(API_offer, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Origin': 'https://global.americanexpress.com'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                throw new Error(`Failed to fetch offer details: ${res.status}`);
+            }
+
+            const data = await res.json();
+            return {
+                terms: data.terms || null,
+                long_description: data.long_description || null,
+                name: data.name,
+                logo_url: data.logo_url,
+                expiry_date: data.expiry_date,
+                achievement_type: data.achievement_type,
+                category: data.category,
+                redemption_types: data.redemption_types,
+                location: data.location,
+                cta: data.cta
+            };
+        } catch (error) {
+            console.error("Error fetching offer details:", error);
+            return null;
+        }
+    }
+
+    async function api_refreshOffersList() {
+        // Store current offers for comparison
+        const oldOffers = Array.isArray(glb_offer) ? [...glb_offer] : [];
         const offerInfoTable = {};
+
         const activeAccounts = glb_account.filter(acc =>
             acc.account_status && acc.account_status.trim().toLowerCase() === "active"
         );
+
         const skipPatterns = [
             "Your FICO&#174",
             "The Hotel Collection",
@@ -1648,8 +1804,9 @@
             "Send Money to Friends",
             "Considering a Big Purchase"
         ];
+
         await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await fetchRequest_offer(acc.account_token);
+            const offers = await api_fetchOfferList(acc.account_token);
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
@@ -1657,8 +1814,9 @@
                 if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
                     return;
                 }
+
                 if (!offerInfoTable[sourceId]) {
-                    const details = parseOfferDetails(offer.short_description || "");
+                    const details = offers_parseDescription(offer.short_description || "");
                     offerInfoTable[sourceId] = {
                         source_id: sourceId,
                         offerId: offer.id || "N/A",
@@ -1677,46 +1835,179 @@
                         favorite: false
                     };
                 }
+
                 if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.display_account_number);
+                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.account_token)) {
+                        offerInfoTable[sourceId].eligibleCards.push(acc.account_token);
                     }
                 } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.display_account_number)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.display_account_number);
+                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.account_token)) {
+                        offerInfoTable[sourceId].enrolledCards.push(acc.account_token);
                     }
                 }
             });
         }));
-        mergeFavorites(offerInfoTable);
+
+
+        // Convert to array for processing
+        const newOffers = Object.values(offerInfoTable);
+
+        // Process changes and update global state
+        const changeStats = await offers_processChanges(oldOffers, newOffers);
+
+        // glb_offer is now updated inside offers_processChanges
+
+        // Update card offer counts
         glb_account.forEach(acc => {
             acc.eligibleOffers = 0;
             acc.enrolledOffers = 0;
         });
-        Object.values(offerInfoTable).forEach(offer => {
+
+        glb_offer.forEach(offer => {
             if (Array.isArray(offer.eligibleCards)) {
-                offer.eligibleCards.forEach(card => {
-                    const acc = glb_account.find(a => a.display_account_number === card);
+                offer.eligibleCards.forEach(cardToken => {
+                    const acc = glb_account.find(a => a.account_token === cardToken);
                     if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
                 });
             }
             if (Array.isArray(offer.enrolledCards)) {
-                offer.enrolledCards.forEach(card => {
-                    const acc = glb_account.find(a => a.display_account_number === card);
+                offer.enrolledCards.forEach(cardToken => {
+                    const acc = glb_account.find(a => a.account_token === cardToken);
                     if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
                 });
             }
         });
 
-        // Refresh the offer data and re-render the UI.
-        if (offerInfoTable && typeof offerInfoTable === 'object') {
-            glb_offer = Object.values(offerInfoTable);
-            localStorageHandler("set", storage_accToken, ["offer"]);
-        }
+        storage_manageData("set", storage_accToken, ["account", "offer", "offer_expired", "offer_redeemed"]);
+
+        return changeStats;
     }
 
 
-    async function fetchRequest_balance(accountToken) {
+    async function offers_processChanges(oldOffers, newOffers) {
+        const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
+
+        // Create maps for easier lookup
+        const prevOfferMap = new Map();
+        oldOffers.forEach(offer => {
+            if (offer.source_id) prevOfferMap.set(offer.source_id, offer);
+        });
+
+        // Initialize tracking arrays
+        window.glb_offer_expired = glb_offer_expired || [];
+        window.glb_offer_redeemed = glb_offer_redeemed || [];
+
+        // 1. Process favorites and preserve detailed fields
+        for (const newOffer of newOffers) {
+            const prevOffer = prevOfferMap.get(newOffer.source_id);
+            if (prevOffer) {
+                // Preserve favorite status
+                if (prevOffer.favorite) newOffer.favorite = true;
+
+                // Preserve detailed fields
+                if (prevOffer.terms) newOffer.terms = prevOffer.terms;
+                if (prevOffer.long_description) newOffer.long_description = prevOffer.long_description;
+                if (prevOffer.location) newOffer.location = prevOffer.location;
+                if (prevOffer.cta) newOffer.cta = prevOffer.cta;
+            }
+
+            // Track new offers
+            if (!prevOfferMap.has(newOffer.source_id)) {
+                stats.newCount++;
+            }
+        }
+
+        // 2. Fetch missing details for non-DEFAULT offers
+        const detailPromises = [];
+
+        for (const newOffer of newOffers) {
+            if (newOffer.category === "DEFAULT") continue;
+
+            if (!newOffer.terms || !newOffer.long_description) {
+                const account = glb_account.find(acc =>
+                    acc.account_status?.trim().toLowerCase() === "active" &&
+                    (newOffer.eligibleCards?.includes(acc.display_account_number) ||
+                        newOffer.enrolledCards?.includes(acc.display_account_number))
+                );
+
+                if (account) {
+                    detailPromises.push((async () => {
+                        const details = await api_fetchOfferDetails(account.account_token, newOffer.offerId);
+                        if (details) {
+                            newOffer.terms = details.terms || null;
+                            newOffer.long_description = details.long_description || null;
+                            if (details.location) newOffer.location = details.location;
+                            if (details.cta) newOffer.cta = details.cta;
+                        }
+                        return details;
+                    })());
+                }
+            }
+        }
+
+        // Wait for all detail fetches to complete
+        if (detailPromises.length > 0) {
+            const results = await Promise.all(detailPromises);
+            console.log(`Completed ${results.filter(Boolean).length}/${detailPromises.length} detail fetches`);
+        }
+
+        // 3. Identify expired offers
+        for (const [sourceId, prevOffer] of prevOfferMap.entries()) {
+            if (!newOffers.some(o => o.source_id === sourceId)) {
+                stats.expiredCount++;
+
+                const expiredOffer = { ...prevOffer };
+                expiredOffer.expiredDate = new Date().toISOString();
+                window.glb_offer_expired.push(expiredOffer);
+            }
+        }
+
+        // 4. Identify redeemed offers
+        for (const [sourceId, prevOffer] of prevOfferMap.entries()) {
+            const newOffer = newOffers.find(o => o.source_id === sourceId);
+            if (newOffer) {
+                const prevEnrolled = new Set(prevOffer.enrolledCards || []);
+                const newEnrolled = new Set(newOffer.enrolledCards || []);
+
+                const redeemedCards = [];
+
+                prevEnrolled.forEach(card => {
+                    if (!newEnrolled.has(card)) {
+                        const cardAccount = glb_account.find(acc =>
+                            acc.display_account_number === card &&
+                            acc.account_status?.trim().toLowerCase() === "active"
+                        );
+
+                        if (cardAccount) redeemedCards.push(card);
+                    }
+                });
+
+                if (redeemedCards.length > 0) {
+                    stats.redeemedCount += redeemedCards.length;
+
+                    window.glb_offer_redeemed.push({
+                        source_id: sourceId,
+                        offerId: newOffer.offerId,
+                        name: newOffer.name,
+                        redeemedCards: redeemedCards,
+                        redeemedDate: new Date().toISOString()
+                    });
+                }
+            }
+        }
+
+        // Update global offers array with the new data
+        window.glb_offer = newOffers;
+
+        glb_offer = window.glb_offer;
+        glb_offer_expired = window.glb_offer_expired;
+        glb_offer_redeemed = window.glb_offer_redeemed;
+
+        return stats;
+    }
+
+
+    async function api_fetchAccountBalance(accountToken) {
         if (!accountToken) {
             console.error("Account token is required");
             return null;
@@ -1775,16 +2066,16 @@
     }
 
 
-    async function get_balance() {
+    async function api_fetchAllBalances() {
         const basicAccounts = glb_account.filter(acc => acc.relationship === "BASIC");
         try {
             await Promise.all(basicAccounts.map(async (acc) => {
                 if (!acc.financialData) {
-                    acc.financialData = await fetchRequest_balance(acc.account_token);
+                    acc.financialData = await api_fetchAccountBalance(acc.account_token);
                 }
             }));
 
-            localStorageHandler("set", storage_accToken, ["account"]);
+            storage_manageData("set", storage_accToken, ["account"]);
         } catch (error) {
             return;
         }
@@ -1792,7 +2083,7 @@
     }
 
 
-    async function fetchRequest_benefit(accountToken, locale = "en-US", limit = "ALL") {
+    async function api_fetchAccountBenefits(accountToken, locale = "en-US", limit = "ALL") {
         const url = API_benefit;
         const payload = [{ accountToken, locale, limit }];
 
@@ -1877,11 +2168,11 @@
     }
 
 
-    async function get_benefit() {
+    async function api_fetchAllBenefits() {
         const basicAccounts = glb_account.filter(acc => acc.relationship === "BASIC");
         let newTrackers = [];
         await Promise.all(basicAccounts.map(async (acc) => {
-            const trackers = await fetchRequest_benefit(acc.account_token);
+            const trackers = await api_fetchAccountBenefits(acc.account_token);
             if (Array.isArray(trackers)) {
                 trackers.forEach(tracker => {
                     // Attach the BASIC card's display number so we know which card the tracker is for
@@ -1896,14 +2187,14 @@
 
         if (Array.isArray(newTrackers)) {
             glb_benefit = newTrackers;
-            localStorageHandler("set", storage_accToken, "benefit");
+            storage_manageData("set", storage_accToken, "benefit");
         }
 
     }
 
 
 
-    async function get_trustLevel() {
+    async function api_verifyTrustLevel() {
         return new Promise((resolve) => {
             GM.xmlHttpRequest({
                 method: "GET",
@@ -1956,7 +2247,7 @@
     }
 
 
-    async function fetchGet_enrollOffer(accountToken, offerIdentifier) {
+    async function api_enrollInOffer(accountToken, offerIdentifier) {
         const now = new Date();
         const pad = n => n.toString().padStart(2, '0');
         const offsetTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
@@ -2000,7 +2291,7 @@
     }
 
 
-    async function get__batchEnrollOffer(offerSourceId, accountNumber) {
+    async function api_batchEnrollOffers(offerSourceId, accountToken) {
         // Helper to delay execution
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -2021,43 +2312,55 @@
 
         // Helper to update the enrollment status in the offer object.
         const updateOfferEnrollment = (offer, account) => {
-            const cardNumber = account.display_account_number;
-            offer.eligibleCards = offer.eligibleCards.filter(c => c !== cardNumber);
-            if (!offer.enrolledCards.includes(cardNumber)) {
-                offer.enrolledCards.push(cardNumber);
+            const displayNumber = account.display_account_number;
+            const token = account.account_token;
+
+            // Remove from eligible using token
+            offer.eligibleCards = offer.eligibleCards.filter(c =>
+                !glb_account.find(acc => acc.account_token === c && acc.display_account_number === displayNumber)
+            );
+
+            // Add to enrolled if not there already
+            if (!offer.enrolledCards.some(c =>
+                glb_account.find(acc => acc.account_token === c && acc.display_account_number === displayNumber)
+            )) {
+                offer.enrolledCards.push(token);
             }
         };
 
         // Build tasks: for each offer, for each eligible card, find active matching accounts.
         eligibleOffers.forEach(offer => {
-            offer.eligibleCards.forEach(card => {
+            offer.eligibleCards.forEach(cardToken => {
                 const matchingAccounts = glb_account.filter(acc =>
-                    acc.display_account_number === card &&
+                    acc.account_token === cardToken &&
                     acc.account_status?.trim().toLowerCase() === "active" &&
-                    (!accountNumber || acc.display_account_number === accountNumber)
+                    (!accountToken || acc.account_token === accountToken)
                 );
+
                 matchingAccounts.forEach(account => {
                     tasks.push(async () => {
                         totalEnrollAttempts++;
-                        const cardNumber = account.display_account_number;
+                        const displayNumber = account.display_account_number;
 
-                        if (glb_excludedCards.includes(cardNumber)) {
-                            console.log(`Skipping card ${cardNumber} as it is excluded.`);
+                        if (glb_excludedCards.includes(account.account_token)) {
+                            console.log(`Skipping card ${displayNumber} as it is excluded.`);
                             return { offerId: offer.offerId, accountToken: account.account_token, result: false, explanationMessage: "Card excluded" };
                         }
+
                         // Delay for non-priority cards.
-                        if (!glb_priorityCards.includes(cardNumber)) {
+                        if (!glb_priorityCards.includes(account.account_token)) {
                             await delay(500);
                         }
+
                         try {
-                            const enrollResult = await fetchGet_enrollOffer(account.account_token, offer.offerId);
+                            const enrollResult = await api_enrollInOffer(account.account_token, offer.offerId);
                             if (enrollResult.result) {
                                 successfulEnrollments++;
-                                console.log(`Enroll "${offer.name}" on card ${cardNumber} successful`);
+                                console.log(`Enroll "${offer.name}" on card ${displayNumber} successful`);
                                 updateOfferEnrollment(offer, account);
                                 return { offerId: offer.offerId, accountToken: account.account_token, result: true };
                             } else {
-                                console.log(`Enroll "${offer.name}" on card ${cardNumber} failed. Reason: ${enrollResult.explanationMessage || "No explanation provided."}`);
+                                console.log(`Enroll "${offer.name}" on card ${displayNumber} failed. Reason: ${enrollResult.explanationMessage || "No explanation provided."}`);
                                 return {
                                     offerId: offer.offerId,
                                     accountToken: account.account_token,
@@ -2066,7 +2369,7 @@
                                 };
                             }
                         } catch (err) {
-                            console.log(`Enroll "${offer.name}" on card ${cardNumber} errored:`, err);
+                            console.log(`Enroll "${offer.name}" on card ${displayNumber} errored:`, err);
                             return {
                                 offerId: offer.offerId,
                                 accountToken: account.account_token,
@@ -2080,8 +2383,8 @@
         });
 
         // Execute tasks in batches.
-        const enrollmentResults = await runInBatches(tasks, runInBatchesLimit);
-        await get_offers();
+        const enrollmentResults = await util_runTasksInBatches(tasks, runInBatchesLimit);
+        await api_refreshOffersList();
 
         if (totalEnrollAttempts > 0) {
             const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
@@ -2092,14 +2395,20 @@
         return enrollmentResults;
     }
 
-
-    async function runInBatches(tasks, limit) {
+    async function util_runTasksInBatches(tasks, limit) {
         const results = [];
         let i = 0;
         while (i < tasks.length) {
             const chunk = tasks.slice(i, i + limit);
-            const chunkResults = await Promise.all(chunk.map(fn => fn()));
-            results.push(...chunkResults);
+            try {
+                const chunkResults = await Promise.allSettled(chunk.map(fn => fn()));
+                results.push(...chunkResults.map(result =>
+                    result.status === 'fulfilled' ? result.value :
+                        { result: false, error: result.reason }
+                ));
+            } catch (error) {
+                console.error("Batch processing error:", error);
+            }
             i += limit;
         }
         return results;
@@ -2112,28 +2421,57 @@
 
 
     // Core table renderer with iOS styling and smaller text
-    function renderTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
+    function ui_renderDataTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
+        // Create main table element with clean styling
         const tableElement = document.createElement('table');
         tableElement.className = 'ios-table';
         tableElement.style.fontSize = '13px';
         tableElement.style.borderCollapse = 'separate';
         tableElement.style.borderSpacing = '0';
+        tableElement.style.width = '100%';
+        tableElement.style.backgroundColor = '#ffffff';
+        tableElement.style.overflow = 'hidden';
+        tableElement.style.boxShadow = 'none';
 
-        // Build header with improved styling
-        const thead = document.createElement('thead');
-        thead.className = 'ios-table-head';
-        thead.style.background = 'var(--ios-header-bg)';
-        thead.style.borderBottom = '1px solid rgba(60, 60, 67, 0.2)';
-        thead.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.05)';
-        thead.style.position = 'sticky';
-        thead.style.top = '0';
-        thead.style.zIndex = '10';
+        // Create and append header
+        const thead = createTableHeader(headers, colWidths, sortHandler, sortableKeys);
+        tableElement.appendChild(thead);
 
-        const headerRow = document.createElement('tr');
+        // Create and append body
+        const tbody = createTableBody(headers, colWidths, items, cellRenderer);
+        tableElement.appendChild(tbody);
 
-        headers.forEach(headerItem => {
+        return tableElement;
+
+        // Helper function: Create table header
+        function createTableHeader(headers, colWidths, sortHandler, sortableKeys) {
+            const thead = document.createElement('thead');
+            thead.className = 'ios-table-head';
+            thead.style.position = 'sticky';
+            thead.style.top = '0';
+            thead.style.zIndex = '2';
+            thead.style.background = '#f5f5f7';
+            thead.style.borderBottom = '1px solid rgba(60, 60, 67, 0.2)';
+            thead.style.backdropFilter = 'none';
+            thead.style.webkitBackdropFilter = 'none';
+
+            const headerRow = document.createElement('tr');
+
+            headers.forEach(headerItem => {
+                const th = createHeaderCell(headerItem, colWidths, sortHandler, sortableKeys);
+                headerRow.appendChild(th);
+            });
+
+            thead.appendChild(headerRow);
+            return thead;
+        }
+
+        // Helper function: Create header cell with sort functionality
+        function createHeaderCell(headerItem, colWidths, sortHandler, sortableKeys) {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
+
+            // Base styling
             th.style.fontSize = '13px';
             th.style.padding = '12px 14px';
             th.style.fontWeight = '600';
@@ -2142,312 +2480,1896 @@
             th.style.textAlign = 'center';
             th.style.borderBottom = '1px solid rgba(60, 60, 67, 0.12)';
             th.style.verticalAlign = 'middle';
+            th.style.backgroundColor = '#f5f5f7';
 
+            // Apply column width if specified
             if (colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
             }
 
-            // Add sort functionality with improved styling
+            // Add sort functionality if sortable
             if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
-                th.className = 'sortable';
-                th.setAttribute('data-sort-key', headerItem.key);
-                th.style.paddingRight = '22px';
-                th.style.position = 'relative';
-                th.style.cursor = 'pointer';
-                th.style.transition = 'background-color 0.2s ease';
+                makeCellSortable(th, headerItem.key, sortHandler);
+            }
 
-                // Add hover effect to sortable headers
-                th.addEventListener('mouseenter', () => {
-                    th.style.backgroundColor = 'rgba(0, 0, 0, 0.02)';
+            return th;
+        }
+
+        // Helper function: Add sort functionality to header cell
+        function makeCellSortable(th, key, sortHandler) {
+            th.className = 'sortable';
+            th.setAttribute('data-sort-key', key);
+            th.style.paddingRight = '22px';
+            th.style.position = 'relative';
+            th.style.cursor = 'pointer';
+            th.style.transition = 'background-color 0.2s ease';
+
+            // Hover effect
+            th.addEventListener('mouseenter', () => {
+                th.style.backgroundColor = 'rgba(245, 245, 247, 0.9)';
+            });
+
+            th.addEventListener('mouseleave', () => {
+                th.style.backgroundColor = '#f5f5f7';
+            });
+
+            // Create sort button
+            const sortButton = document.createElement('div');
+            sortButton.className = 'ios-sort-button';
+            sortButton.style.position = 'absolute';
+            sortButton.style.right = '4px';
+            sortButton.style.top = '50%';
+            sortButton.style.transform = 'translateY(-50%)';
+            sortButton.style.width = '18px';
+            sortButton.style.height = '18px';
+            sortButton.style.borderRadius = '9px';
+            sortButton.style.display = 'flex';
+            sortButton.style.alignItems = 'center';
+            sortButton.style.justifyContent = 'center';
+
+            // Sort icon
+            const sortIcon = document.createElement('span');
+            sortIcon.textContent = '•';
+            sortIcon.style.color = 'var(--ios-blue)';
+            sortIcon.style.fontSize = '12px';
+
+            // Check current sort state
+            if (window.glb_memberSortState?.key === key) {
+                sortIcon.textContent = window.glb_memberSortState.direction === 1 ? '↑' : '↓';
+            } else if (window.glb_offerSortState?.key === key) {
+                sortIcon.textContent = window.glb_offerSortState.direction === 1 ? '↑' : '↓';
+            }
+
+            sortButton.appendChild(sortIcon);
+            th.appendChild(sortButton);
+
+            // Handle click to sort
+            th.addEventListener('click', () => {
+                sortHandler(key);
+
+                // Reset all sort indicators
+                th.closest('tr').querySelectorAll('th').forEach(header => {
+                    const icon = header.querySelector('.ios-sort-button span');
+                    if (icon) icon.textContent = '•';
                 });
-                th.addEventListener('mouseleave', () => {
-                    th.style.backgroundColor = 'transparent';
+
+                // Update this column's indicator
+                // We need to delay to ensure the sort state has been updated
+                setTimeout(() => {
+                    const direction = (window.glb_memberSortState?.key === key)
+                        ? window.glb_memberSortState.direction
+                        : window.glb_offerSortState?.direction;
+
+                    sortIcon.textContent = direction === 1 ? '↑' : '↓';
+                }, 0);
+            });
+        }
+
+        // Helper function: Create table body with rows
+        function createTableBody(headers, colWidths, items, cellRenderer) {
+            const tbody = document.createElement('tbody');
+
+            // Show empty state if no items
+            if (!items || items.length === 0) {
+                appendEmptyState(tbody, headers.length);
+                return tbody;
+            }
+
+            // Create rows for each item
+            items.forEach((item, idx) => {
+                const row = createTableRow(item, headers, colWidths, cellRenderer);
+                tbody.appendChild(row);
+            });
+
+            return tbody;
+        }
+
+        // Helper function: Create a single table row
+        function createTableRow(item, headers, colWidths, cellRenderer) {
+            const row = document.createElement('tr');
+            row.style.transition = 'background-color 0.2s ease';
+
+            // Check for highlighting more explicitly with debugging
+            const shouldHighlight = shouldHighlightItem(item);
+
+            if (shouldHighlight) {
+                // Make the highlight more pronounced
+                row.classList.add('ios-highlight-row');
+                row.style.backgroundColor = 'rgba(255, 204, 0, 0.2) !important';
+                row.style.borderLeft = '4px solid rgba(255, 204, 0, 0.8)';
+            }
+
+            // Alternate row styling - only apply if not highlighted
+            if (!shouldHighlight && item._index % 2 === 1) {
+                row.style.backgroundColor = 'var(--ios-secondary-bg)';
+            }
+
+            // Hover effect that preserves highlighting
+            row.addEventListener('mouseenter', () => {
+                if (!shouldHighlight) {
+                    row.style.backgroundColor = 'rgba(242, 242, 247, 0.85)';
+                }
+            });
+
+            row.addEventListener('mouseleave', () => {
+                if (!shouldHighlight) {
+                    if (item._index % 2 === 1) {
+                        row.style.backgroundColor = 'var(--ios-secondary-bg)';
+                    } else {
+                        row.style.backgroundColor = '';
+                    }
+                } else {
+                    row.style.backgroundColor = 'rgba(255, 204, 0, 0.2) !important';
+                }
+            });
+
+            // Create cells for each header
+            headers.forEach(headerItem => {
+                const td = createTableCell(item, headerItem, colWidths, cellRenderer);
+                row.appendChild(td);
+            });
+
+            return row;
+        }
+        // Helper function: Create table cell with content
+        function createTableCell(item, headerItem, colWidths, cellRenderer) {
+            const td = document.createElement('td');
+            td.style.fontSize = '13px';
+            td.style.padding = '10px 14px';
+            td.style.textAlign = 'center';
+            td.style.borderBottom = '1px solid rgba(60, 60, 67, 0.04)';
+            td.style.verticalAlign = 'middle';
+
+            // Apply column width if specified
+            if (colWidths[headerItem.key]) {
+                td.style.width = colWidths[headerItem.key];
+                td.style.maxWidth = colWidths[headerItem.key];
+                td.style.whiteSpace = 'normal';
+                td.style.wordWrap = 'break-word';
+            }
+
+            // Use cellRenderer to get content
+            const content = cellRenderer(item, headerItem);
+
+            // Handle different types of content
+            if (content instanceof Node) {
+                handleNodeContent(td, content);
+            } else if (typeof content === 'string') {
+                handleStringContent(td, content);
+            } else {
+                td.textContent = content || '';
+            }
+
+            return td;
+        }
+
+        // Helper function: Handle Node content
+        function handleNodeContent(td, content) {
+            // Center images
+            if (content.tagName === 'IMG') {
+                content.style.display = 'block';
+                content.style.margin = '0 auto';
+            }
+            // Center controls
+            else if (content.tagName === 'BUTTON' || content.tagName === 'INPUT') {
+                content.style.margin = '0 auto';
+                content.style.display = 'block';
+                content.style.fontSize = '12px'; // Smaller text
+            }
+
+            td.appendChild(content);
+        }
+
+        // Helper function: Handle string content
+        function handleStringContent(td, content) {
+            // Format currency
+            if (/^\$?\d+(\.\d{2})?$/.test(content)) {
+                const span = document.createElement('span');
+                span.className = 'ios-currency';
+                span.textContent = content;
+                span.style.fontSize = '13px';
+                td.appendChild(span);
+            }
+            // Handle status-like text
+            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
+                const statusSpan = document.createElement('span');
+                statusSpan.className = `ios-status ${content.toLowerCase()}`;
+                statusSpan.textContent = content;
+                statusSpan.style.fontSize = '12px';
+                td.appendChild(statusSpan);
+            }
+            // Regular text content
+            else {
+                td.textContent = content || '';
+            }
+        }
+
+        // Helper function: Append empty state message
+        function appendEmptyState(tbody, colSpan) {
+            const emptyRow = document.createElement('tr');
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = colSpan;
+            emptyCell.className = 'ios-empty-state';
+
+            const container = document.createElement('div');
+            ui_createEmptyState(container, {
+                callback: handleoffers_resetAllFilters
+            });
+
+            emptyCell.appendChild(container);
+            emptyRow.appendChild(emptyCell);
+            tbody.appendChild(emptyRow);
+        }
+
+        // Helper function: Reset filters
+        function handleoffers_resetAllFilters() {
+            if (typeof window.glb_filters !== 'undefined') {
+                // Reset all relevant filters
+                if (window.glb_filters.memberMerchantSearch) {
+                    window.glb_filters.memberMerchantSearch = '';
+                }
+
+                if (window.glb_filters.offerMerchantSearch) {
+                    window.glb_filters.offerMerchantSearch = '';
+                }
+
+                if (window.glb_filters.offerCardEnding) {
+                    window.glb_filters.offerCardEnding = '';
+                }
+
+                if (window.glb_filters.offerFav) {
+                    window.glb_filters.offerFav = false;
+                }
+
+                if (window.glb_filters.memberStatus !== 'Active') {
+                    window.glb_filters.memberStatus = 'Active';
+                }
+
+                if (window.glb_filters.memberCardtype !== 'all') {
+                    window.glb_filters.memberCardtype = 'all';
+                }
+
+                // Refresh the view
+                if (typeof window.ui_renderCurrentView === 'function') {
+                    window.ui_renderCurrentView();
+                }
+            }
+        }
+
+        // Helper function: Determine whether to highlight item
+        function shouldHighlightItem(item) {
+            // For accounts tab - check for merchant search match
+            if (item.display_account_number && glb_filters.memberMerchantSearch) {
+                const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
+
+                // Don't proceed if search term is empty
+                if (!searchTerm) return false;
+
+                // Check if any offers match this account and search term
+                const matchingOffers = glb_offer.filter(offer => {
+                    const nameMatch = offer.name.toLowerCase().includes(searchTerm);
+                    const isEligible = Array.isArray(offer.eligibleCards) &&
+                        offer.eligibleCards.includes(item.display_account_number);
+                    const isEnrolled = Array.isArray(offer.enrolledCards) &&
+                        offer.enrolledCards.includes(item.display_account_number);
+
+                    return nameMatch && (isEligible || isEnrolled);
                 });
 
-                // Create sort button
-                const sortButton = document.createElement('div');
-                sortButton.className = 'ios-sort-button';
-                sortButton.style.position = 'absolute';
-                sortButton.style.right = '4px';
-                sortButton.style.top = '50%';
-                sortButton.style.transform = 'translateY(-50%)';
-                sortButton.style.width = '18px';
-                sortButton.style.height = '18px';
-                sortButton.style.borderRadius = '9px';
-                sortButton.style.display = 'flex';
-                sortButton.style.alignItems = 'center';
-                sortButton.style.justifyContent = 'center';
+                const hasMatchingOffers = matchingOffers.length > 0;
 
-                // Sort icon
-                const sortIcon = document.createElement('span');
-                sortIcon.textContent = '•';
-                sortIcon.style.color = 'var(--ios-blue)';
-                sortIcon.style.fontSize = '12px';
+                // Also check direct card property matches
+                const accountMatches =
+                    item.display_account_number.toLowerCase().includes(searchTerm) ||
+                    (item.embossed_name && item.embossed_name.toLowerCase().includes(searchTerm)) ||
+                    (item.description && item.description.toLowerCase().includes(searchTerm));
 
-                sortButton.appendChild(sortIcon);
-                th.appendChild(sortButton);
+                const shouldHighlight = hasMatchingOffers || accountMatches;
 
-                // Handle click event
-                th.addEventListener('click', () => {
-                    // Reset all headers
-                    headerRow.querySelectorAll('.sortable').forEach(header => {
-                        const btn = header.querySelector('.ios-sort-button');
-                        if (btn) {
-                            btn.className = 'ios-sort-button';
-                            btn.querySelector('span').textContent = '•';
+                return shouldHighlight;
+            }
+
+            return false;
+        }
+    }
+
+    // Enhanced members page with optimized rendering
+    function members_renderPage() {
+        const containerDiv = document.createElement('div');
+        containerDiv.style.cssText = UI_STYLES.pageContainer;
+
+        // Add components in sequence
+        containerDiv.appendChild(members_renderStatsBar());
+        containerDiv.appendChild(members_renderFilterBar());
+
+        const tableWrapper = document.createElement('div');
+        tableWrapper.id = 'members-table-container';
+        tableWrapper.style.overflowX = 'auto';
+        tableWrapper.appendChild(members_renderTable());
+
+        containerDiv.appendChild(tableWrapper);
+        return containerDiv;
+    }
+
+    // Optimized stats bar with reusable stat item creator
+    function members_renderStatsBar() {
+        const statsBar = document.createElement('div');
+        statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
+
+        // Calculate statistics once
+        const stats = members_calculateStats();
+
+        // Helper function for creating stat items
+        function createStatItem(label, value, icon, color, filterAction) {
+            const statItem = document.createElement('div');
+            statItem.style.cssText = `display:flex; align-items:center; gap:10px; padding:10px 16px; background-color:rgba(${color}, 0.1); border-radius:10px; border:1px solid rgba(${color}, 0.2); min-width:150px; transition:all 0.2s ease; ${filterAction ? 'cursor:pointer;' : ''}`;
+
+            if (filterAction) {
+                statItem.addEventListener('mouseenter', () => {
+                    statItem.style.transform = 'translateY(-2px)';
+                    statItem.style.boxShadow = '0 4px 8px rgba(0,0,0,0.08)';
+                });
+                statItem.addEventListener('mouseleave', () => {
+                    statItem.style.transform = 'translateY(0)';
+                    statItem.style.boxShadow = 'none';
+                });
+                statItem.addEventListener('click', filterAction);
+            }
+
+            const iconElement = document.createElement('div');
+            iconElement.innerHTML = icon;
+            iconElement.style.color = `rgb(${color})`;
+
+            const textContainer = document.createElement('div');
+            textContainer.style.cssText = 'display:flex; flex-direction:column;';
+
+            const valueElement = document.createElement('div');
+            valueElement.textContent = value;
+            valueElement.style.cssText = `font-size:18px; font-weight:600; color:rgb(${color});`;
+
+            const labelElement = document.createElement('div');
+            labelElement.textContent = label;
+            labelElement.style.cssText = 'font-size:12px; color:var(--ios-text-secondary);';
+
+            textContainer.appendChild(valueElement);
+            textContainer.appendChild(labelElement);
+            statItem.appendChild(iconElement);
+            statItem.appendChild(textContainer);
+
+            return statItem;
+        }
+
+        // Define stat icons - using SVG constants for readability
+        const ICONS = {
+            CARD: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" fill="currentColor"/></svg>`,
+            ACTIVE: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg>`,
+            BASIC: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" fill="currentColor"/></svg>`,
+            BALANCE: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/></svg>`,
+            PENDING: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-14v7l5.2 3.2.8-1.3-4.5-2.7V6H11z" fill="currentColor"/></svg>`,
+            REMAIN: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M16 6v8h3v4h2V6c0-1.1-.9-2-2-2H7L7 6h9zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8z" fill="currentColor"/></svg>`
+        };
+
+        // Add stat items with click handlers
+        statsBar.appendChild(createStatItem('Total Cards', stats.totalCards, ICONS.CARD, '52, 152, 219', () => {
+            glb_filters.memberStatus = 'all';
+            glb_filters.memberCardtype = 'all';
+            members_applyFilters();
+        }));
+
+        statsBar.appendChild(createStatItem('Active Cards', stats.activeCards, ICONS.ACTIVE, '46, 204, 113', () => {
+            glb_filters.memberStatus = 'Active';
+            glb_filters.memberCardtype = 'all';
+            members_applyFilters();
+        }));
+
+        statsBar.appendChild(createStatItem('Basic Cards', stats.basicCards, ICONS.BASIC, '155, 89, 182', () => {
+            glb_filters.memberStatus = 'all';
+            glb_filters.memberCardtype = 'BASIC';
+            members_applyFilters();
+        }));
+
+
+        statsBar.appendChild(createStatItem('Total Balance', `$${stats.totalBalance.toFixed(2)}`, ICONS.BALANCE, '255, 149, 0'));
+        statsBar.appendChild(createStatItem('Total Pending', `$${stats.totalPending.toFixed(2)}`, ICONS.PENDING, '0, 122, 255'));
+        statsBar.appendChild(createStatItem('Remain Statement', `$${stats.totalRemaining.toFixed(2)}`, ICONS.REMAIN, '255, 45, 85'));
+
+        return statsBar;
+    }
+    // Helper function to calculate stats once
+    function members_calculateStats() {
+        const totalCards = glb_account.length;
+        const activeCards = glb_account.filter(acc => acc.account_status === "Active").length;
+        const basicCards = glb_account.filter(acc => acc.relationship === "BASIC").length;
+
+        // Calculate financial metrics
+        const { totalBalance, totalPending, totalRemaining } = glb_account
+            .filter(acc => acc.relationship === "BASIC" && acc.financialData)
+            .reduce((fin, acc) => {
+                fin.totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
+                fin.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
+                fin.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
+                return fin;
+            }, { totalBalance: 0, totalPending: 0, totalRemaining: 0 });
+
+        return { totalCards, activeCards, basicCards, totalBalance, totalPending, totalRemaining };
+    }
+
+    // Helper function to update filter UI and render page
+    function members_applyFilters() {
+        // Update UI elements if they exist
+        const statusFilter = document.getElementById('status-filter');
+        const typeFilter = document.getElementById('type-filter');
+
+        if (statusFilter) statusFilter.value = glb_filters.memberStatus;
+        if (typeFilter) typeFilter.value = glb_filters.memberCardtype;
+
+        ui_renderCurrentView();
+    }
+
+    // Streamlined filter bar with enhanced search
+    function members_renderFilterBar() {
+        return ui_createFilterBar({
+            searchPlaceholder: 'Search offers...',
+            onSearch: (value) => {
+                glb_filters.memberMerchantSearch = value.toLowerCase();
+                ui_renderCurrentView();
+            },
+            resetCallback: () => {
+                glb_filters.memberStatus = 'Active';
+                glb_filters.memberCardtype = 'all';
+                glb_filters.memberMerchantSearch = '';
+                ui_renderCurrentView();
+            }
+        });
+    }
+
+    // Reusable action button creator
+    function createResetBtn(text, icon, onClick, bgColor = 'var(--ios-blue)', textColor = 'white') {
+        return ui_createBtn_v2({
+            label: text,
+            icon: icon,
+            onClick: onClick,
+            bgColor: bgColor,
+            textColor: textColor,
+            type: bgColor === 'rgba(142, 142, 147, 0.1)' ? 'secondary' : 'primary'
+        });
+    }
+
+    // Helper to darken a color
+    function util_darkenColor(color) {
+        if (color.startsWith('var(')) return color;
+        if (color.startsWith('rgba(')) {
+            // For rgba, just return a slightly more opaque version
+            return color.replace(/rgba\(([^,]+,[^,]+,[^,]+),\s*([^)]+)\)/, (_, rgb, alpha) =>
+                `rgba(${rgb}, ${Math.min(parseFloat(alpha) + 0.1, 1)})`);
+        }
+        return color; // Return original if we can't easily darken it
+    }
+
+    // Optimized members table renderer
+    function members_renderTable() {
+        const headers = [
+            { label: "Index", key: "cardIndex" },
+            { label: "Logo", key: "small_card_art" },
+            { label: "Card Ending", key: "display_account_number" },
+            { label: "User Name", key: "embossed_name" },
+            { label: "Type", key: "relationship" },
+            { label: "Opened", key: "account_setup_date" },
+            { label: "Status", key: "account_status" },
+            { label: "Balance", key: "StatementBalance" },
+            { label: "Pending", key: "pending" },
+            { label: "Remaining", key: "remainingStaBal" },
+            { label: "Eligible", key: "eligibleOffers" },
+            { label: "Enrolled", key: "enrolledOffers" },
+            { label: "Priority", key: "priority" },
+            { label: "Exclude", key: "exclude" }
+        ];
+
+        const colWidths = {
+            cardIndex: "60px", small_card_art: "70px", display_account_number: "110px",
+            embossed_name: "180px", relationship: "85px", account_setup_date: "100px",
+            account_status: "90px", StatementBalance: "100px", pending: "100px",
+            remainingStaBal: "110px", eligibleOffers: "90px", enrolledOffers: "90px",
+            priority: "80px", exclude: "80px"
+        };
+
+        // Apply filters
+        const filteredAccounts = glb_account.filter(acc => {
+            const statusMatch = glb_filters.memberStatus === 'all' ||
+                acc.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
+            const typeMatch = glb_filters.memberCardtype === 'all' ||
+                acc.relationship === glb_filters.memberCardtype;
+            return statusMatch && typeMatch;
+        });
+
+        // Define cell rendering with organized handlers for each column type
+        const cellRenderer = (item, headerItem) => {
+            const key = headerItem.key;
+            const handlers = {
+                small_card_art: () => {
+                    if (item.small_card_art && item.small_card_art !== 'N/A') {
+                        const imgContainer = document.createElement('div');
+                        imgContainer.style.cssText = 'display:flex; justify-content:center; align-items:center; height:40px;';
+
+                        const img = document.createElement('img');
+                        img.src = item.small_card_art;
+                        img.alt = "Card Logo";
+                        img.style.cssText = 'max-width:40px; max-height:40px; border-radius:4px; transition:transform 0.2s ease;';
+
+                        imgContainer.addEventListener('mouseenter', () => img.style.transform = 'scale(1.15)');
+                        imgContainer.addEventListener('mouseleave', () => img.style.transform = 'scale(1)');
+
+                        imgContainer.appendChild(img);
+                        return imgContainer;
+                    }
+                    return 'N/A';
+                },
+
+                cardIndex: () => {
+                    const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
+                    const indexSpan = document.createElement('span');
+                    indexSpan.style.fontFamily = 'var(--ios-font)';
+                    indexSpan.style.fontSize = '13px';
+                    indexSpan.innerHTML = subIndex ?
+                        `<strong>${mainIndex}</strong>-${subIndex}` :
+                        `<strong>${mainIndex}</strong>`;
+                    return indexSpan;
+                },
+
+                display_account_number: () => {
+                    const cardNum = document.createElement('div');
+                    cardNum.style.cssText = 'font-weight:500; color:#1c1c1e; font-size:14px; padding:4px 8px; border-radius:6px; background-color:rgba(0,0,0,0.03); display:inline-block;';
+                    cardNum.textContent = item[key];
+                    return cardNum;
+                },
+
+                embossed_name: () => {
+                    const nameDiv = document.createElement('div');
+                    nameDiv.style.cssText = 'max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500; font-size:13px;';
+                    nameDiv.textContent = item[key];
+                    nameDiv.title = item[key];
+                    return nameDiv;
+                },
+
+                account_setup_date: () => {
+                    return (item[key] && item[key] !== 'N/A') ? util_formatDate(item[key]) : 'N/A';
+                },
+
+                eligibleOffers: () => createOfferBadge(item[key], 'eligible', item.account_token),
+                enrolledOffers: () => createOfferBadge(item[key], 'enrolled', item.account_token),
+
+                relationship: () => {
+                    if (item.relationship === "SUPP") {
+                        const parentCardNum = members_getParentCardNumber(item);
+                        const relationBadge = document.createElement('div');
+                        relationBadge.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:2px;';
+
+                        const typeLabel = document.createElement('span');
+                        typeLabel.textContent = 'SUPP';
+                        typeLabel.style.cssText = 'font-size:12px; color:var(--ios-blue); font-weight:600;';
+
+                        const parentLabel = document.createElement('span');
+                        parentLabel.textContent = `→ ${parentCardNum}`;
+                        parentLabel.style.cssText = 'font-size:11px; color:var(--ios-gray);';
+
+                        relationBadge.appendChild(typeLabel);
+                        relationBadge.appendChild(parentLabel);
+                        return relationBadge;
+                    }
+
+                    const typeBadge = document.createElement('span');
+                    typeBadge.textContent = 'BASIC';
+                    typeBadge.style.cssText = 'font-size:12px; font-weight:600; color:var(--ios-green);';
+                    return typeBadge;
+                },
+
+                account_status: () => {
+                    const statusBadge = document.createElement('span');
+                    statusBadge.textContent = item[key];
+                    statusBadge.style.cssText = `
+                    display:inline-block; padding:4px 10px; border-radius:12px; font-size:12px; 
+                    font-weight:600; text-transform:capitalize;
+                    ${getStatusStyle(item[key].toLowerCase())}
+                    `;
+                    return statusBadge;
+                },
+
+                pending: () => createFinancialValue(item, 'debits_credits_payments_total_amount'),
+                remainingStaBal: () => createFinancialValue(item, 'remaining_statement_balance_amount'),
+                StatementBalance: () => createFinancialValue(item, 'statement_balance_amount'),
+
+                priority: () => createToggleSwitch(item.display_account_number, 'priority'),
+                exclude: () => createToggleSwitch(item.display_account_number, 'exclude')
+            };
+
+            // Use the appropriate handler or default
+            return handlers[key] ? handlers[key]() : (util_cleanValue(item[key]) || '');
+        };
+
+        // Helper function for offer badges
+        function createOfferBadge(count, type, accountNumber) {
+            const parsedCount = parseInt(count || 0);
+            const container = document.createElement('div');
+            container.style.cssText = 'height:32px; display:flex; align-items:center; justify-content:center;';
+
+            if (parsedCount > 0) {
+                const isEligible = type === 'eligibleOffers';
+                const btn = document.createElement('button');
+
+                // Use appropriate colors and icons based on type
+                const bgColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                const textColor = isEligible ? 'var(--ios-blue)' : 'var(--ios-green)';
+                const borderColor = isEligible ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)';
+                const icon = isEligible ?
+                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${textColor}" style="margin-right:4px"><path d="M9.5 16.5v-9l7 4.5-7 4.5z"/></svg>` :
+                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${textColor}" style="margin-right:4px"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>`;
+
+                btn.className = isEligible ? 'eligible-badge' : 'enrolled-badge';
+                btn.style.cssText = `
+                border-radius:16px; background-color:${bgColor}; color:${textColor}; 
+                border:1px solid ${borderColor}; padding:5px 12px; font-weight:600; 
+                font-size:13px; cursor:pointer; transition:all 0.2s ease; display:flex; 
+                align-items:center; justify-content:center; min-width:40px;
+                `;
+                btn.innerHTML = icon + parsedCount;
+
+                // Add hover effects
+                btn.addEventListener('mouseover', () => {
+                    btn.style.transform = 'scale(1.05) translateY(-2px)';
+                    btn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                    btn.style.backgroundColor = isEligible ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
+                });
+
+                btn.addEventListener('mouseout', () => {
+                    btn.style.transform = 'scale(1) translateY(0)';
+                    btn.style.boxShadow = 'none';
+                    btn.style.backgroundColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                });
+
+                // Click handler for showing offers popup
+                btn.addEventListener('click', () => {
+                    members_showCardOffers(accountNumber, type);
+                });
+
+                container.appendChild(btn);
+            } else {
+                // Zero count indicator
+                const zeroSpan = document.createElement('span');
+                zeroSpan.textContent = '0';
+                zeroSpan.style.cssText = 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6;';
+                container.appendChild(zeroSpan);
+            }
+
+            return container;
+        }
+
+        // Helper function for financial values
+        function createFinancialValue(item, fieldName) {
+            if (item.relationship === "BASIC") {
+                if (item.financialData) {
+                    const value = item.financialData[fieldName];
+                    const sanitizedValue = util_cleanValue(value);
+                    const numValue = parseFloat(sanitizedValue);
+
+                    const amountDiv = document.createElement('div');
+                    amountDiv.style.cssText = `
+                    font-variant-numeric:tabular-nums; font-family:var(--ios-font); 
+                    font-weight:${numValue > 0 ? '600' : '400'}; 
+                    color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
+                    `;
+
+                    // Format with dollar sign and commas
+                    amountDiv.textContent = numValue.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2
+                    });
+
+                    return amountDiv;
+                }
+
+                // Loading spinner for data being fetched
+                return createLoadingSpinner();
+            }
+
+            return ""; // Empty cell for non-BASIC cards
+        }
+
+        // Helper function for toggle switches
+        function createToggleSwitch(account, type) {
+            // Determine if checked based on type and account token
+            const accountToken = account.account_token;
+            const displayNumber = account.display_account_number;
+
+            const isChecked = type === 'priority'
+                ? glb_priorityCards.includes(accountToken)
+                : glb_excludedCards.includes(accountToken);
+
+            const toggleContainer = document.createElement('div');
+            toggleContainer.style.cssText = 'display:flex; justify-content:center; align-items:center;';
+
+            // Create the toggle
+            const toggle = document.createElement('div');
+            toggle.style.cssText = `
+            display:inline-block; position:relative; width:36px; height:22px; 
+            border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
+            box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
+            background-color:${isChecked ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)') : '#e9e9ea'};
+            `;
+
+            // Create the toggle knob
+            const knob = document.createElement('div');
+            knob.style.cssText = `
+            position:absolute; width:18px; height:18px; border-radius:9px; 
+            background-color:#ffffff; box-shadow:0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1); 
+            top:2px; left:${isChecked ? '16px' : '2px'}; transition:left 0.3s ease, transform 0.1s ease;
+            `;
+
+            // Add interactions
+            toggle.addEventListener('mouseenter', () => knob.style.transform = 'scale(1.05)');
+            toggle.addEventListener('mouseleave', () => knob.style.transform = 'scale(1)');
+            toggle.addEventListener('mousedown', () => knob.style.transform = 'scale(0.95)');
+            toggle.addEventListener('mouseup', () => knob.style.transform = 'scale(1.05)');
+
+            // Add click handler
+            toggle.addEventListener('click', () => {
+                const newState = !isChecked;
+
+                // Update the visual state
+                knob.style.left = newState ? '16px' : '2px';
+                toggle.style.backgroundColor = newState
+                    ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
+                    : '#e9e9ea';
+
+                // Add animation effect
+                knob.animate([
+                    { transform: 'scale(0.9)' },
+                    { transform: 'scale(1.1)' },
+                    { transform: 'scale(1)' }
+                ], { duration: 300, easing: 'ease-out' });
+
+                // Update data state using account token
+                if (type === 'priority') {
+                    if (newState) {
+                        if (!glb_priorityCards.includes(accountToken)) {
+                            glb_priorityCards.push(accountToken);
+                        }
+                    } else {
+                        glb_priorityCards = glb_priorityCards.filter(token => token !== accountToken);
+                    }
+                    storage_manageData("set", storage_accToken, ["priorityCards"]);
+                } else {
+                    if (newState) {
+                        if (!glb_excludedCards.includes(accountToken)) {
+                            glb_excludedCards.push(accountToken);
+                        }
+                    } else {
+                        glb_excludedCards = glb_excludedCards.filter(token => token !== accountToken);
+                    }
+                    storage_manageData("set", storage_accToken, ["excludedCards"]);
+                }
+            });
+
+            // Set tooltip
+            toggle.title = type === 'priority' ? 'Priority Card (Enroll First)' : 'Exclude Card (Skip Enrollment)';
+
+            // Assemble toggle
+            toggle.appendChild(knob);
+            toggleContainer.appendChild(toggle);
+
+            return toggleContainer;
+        }
+
+        // Helper for status styles
+        function getStatusStyle(status) {
+            if (status === 'active') {
+                return 'background-color:rgba(52, 199, 89, 0.15); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25);';
+            } else if (status === 'canceled') {
+                return 'background-color:rgba(255, 59, 48, 0.15); color:var(--ios-red); border:1px solid rgba(255, 59, 48, 0.25);';
+            } else {
+                return 'background-color:rgba(255, 149, 0, 0.15); color:var(--ios-orange); border:1px solid rgba(255, 149, 0, 0.25);';
+            }
+        }
+
+        // Helper for loading spinner
+        function createLoadingSpinner() {
+            const loadingSpinner = document.createElement('div');
+            loadingSpinner.className = 'loading-spinner';
+            loadingSpinner.style.cssText = 'width:16px; height:16px; border:2px solid rgba(0, 122, 255, 0.2); border-top:2px solid var(--ios-blue); border-radius:50%; margin:0 auto; animation:spin 1s linear infinite;';
+
+            // Add CSS animation if needed
+            if (!document.querySelector('style#spinner-animation')) {
+                const style = document.createElement('style');
+                style.id = 'spinner-animation';
+                style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+                document.head.appendChild(style);
+            }
+
+            return loadingSpinner;
+        }
+
+        // Define sortable columns
+        const sortableKeys = [
+            "cardIndex", "display_account_number", "embossed_name", "relationship",
+            "account_setup_date", "account_status", "StatementBalance", "pending",
+            "remainingStaBal", "eligibleOffers", "enrolledOffers"
+        ];
+
+        // Create and return the table
+        const tableElement = ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
+        return tableElement;
+    }
+
+    // Enhanced render for the offer-on-card popup
+    function members_showCardOffers(accountToken, offerType) {
+        const existingOverlay = document.getElementById('offer-details-overlay');
+        if (existingOverlay) existingOverlay.remove();
+
+        const account = glb_account.find(acc => acc.account_token === accountToken);
+        const displayNumber = account.display_account_number;
+
+        // Create the overlay with enhanced blur effect
+        const overlay = document.createElement('div');
+        overlay.id = 'offer-details-overlay';
+        overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 10001;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.3s ease;
+        `;
+
+        // Modern popup container with enhanced styling
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 24px;
+        width: 90%;
+        max-width: 680px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+        position: relative;
+        transform: translateY(20px);
+        opacity: 0;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+        `;
+
+        // Card details section
+        const cardDetailsSection = document.createElement('div');
+        cardDetailsSection.style.marginBottom = '20px';
+
+        if (account) {
+            // Card info header
+            const cardInfo = document.createElement('div');
+            cardInfo.style.display = 'flex';
+            cardInfo.style.alignItems = 'center';
+            cardInfo.style.gap = '16px';
+            cardInfo.style.marginBottom = '16px';
+
+            // Card logo if available
+            if (account.small_card_art && account.small_card_art !== 'N/A') {
+                const cardLogo = document.createElement('img');
+                cardLogo.src = account.small_card_art;
+                cardLogo.alt = 'Card Logo';
+                cardLogo.style.width = '60px';
+                cardLogo.style.height = '60px';
+                cardLogo.style.borderRadius = '8px';
+                cardLogo.style.objectFit = 'contain';
+                cardInfo.appendChild(cardLogo);
+            }
+
+            // Card details text
+            const cardText = document.createElement('div');
+            cardText.style.flex = '1';
+
+            const cardTitle = document.createElement('div');
+            cardTitle.textContent = account.description || 'Card';
+            cardTitle.style.fontSize = '18px';
+            cardTitle.style.fontWeight = '600';
+            cardTitle.style.marginBottom = '4px';
+
+            const cardNumber = document.createElement('div');
+            cardNumber.textContent = `•••• ${displayNumber}`;
+            cardNumber.style.fontSize = '14px';
+            cardNumber.style.color = '#666';
+
+            const cardHolder = document.createElement('div');
+            cardHolder.textContent = account.embossed_name;
+            cardHolder.style.fontSize = '13px';
+            cardHolder.style.color = '#888';
+            cardHolder.style.marginTop = '2px';
+
+            cardText.appendChild(cardTitle);
+            cardText.appendChild(cardNumber);
+            cardText.appendChild(cardHolder);
+            cardInfo.appendChild(cardText);
+
+            cardDetailsSection.appendChild(cardInfo);
+        }
+
+        overlay.appendChild(popup);
+
+        // Header section
+        const topRow = document.createElement('div');
+        topRow.style.cssText = `
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eee;
+    `;
+
+        // Title with badge indicating offer type
+        const headerTitle = document.createElement('div');
+        headerTitle.style.display = 'flex';
+        headerTitle.style.alignItems = 'center';
+        headerTitle.style.gap = '10px';
+
+        const titleLabel = document.createElement('h3');
+        titleLabel.textContent = 'Card Offers';
+        titleLabel.style.cssText = `
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #1c1c1e;
+    `;
+
+        const offerTypeBadge = document.createElement('span');
+        offerTypeBadge.textContent = offerType === 'eligible' ? 'Eligible' : 'Enrolled';
+        offerTypeBadge.style.fontSize = '13px';
+        offerTypeBadge.style.fontWeight = '600';
+        offerTypeBadge.style.padding = '4px 10px';
+        offerTypeBadge.style.borderRadius = '12px';
+
+        if (offerType === 'eligible') {
+            offerTypeBadge.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+            offerTypeBadge.style.color = 'var(--ios-blue)';
+            offerTypeBadge.style.border = '1px solid rgba(0, 122, 255, 0.2)';
+        } else {
+            offerTypeBadge.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
+            offerTypeBadge.style.color = 'var(--ios-green)';
+            offerTypeBadge.style.border = '1px solid rgba(52, 199, 89, 0.2)';
+        }
+
+        headerTitle.appendChild(titleLabel);
+        headerTitle.appendChild(offerTypeBadge);
+
+        // Close button with enhanced styling
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+    background: rgba(0,0,0,0.05);
+    border: none;
+    font-size: 1.5rem;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    `;
+
+        closeBtn.addEventListener('mouseover', () => {
+            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.1)';
+            closeBtn.style.color = '#ff4444';
+        });
+
+        closeBtn.addEventListener('mouseout', () => {
+            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
+            closeBtn.style.color = '#666';
+        });
+
+        closeBtn.addEventListener('click', () => {
+            // Fade out animation
+            popup.style.transform = 'translateY(20px)';
+            popup.style.opacity = '0';
+            overlay.style.opacity = '0';
+
+            // Remove after animation completes
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        });
+
+        topRow.appendChild(headerTitle);
+        topRow.appendChild(closeBtn);
+
+        // Content Area
+        const contentDiv = document.createElement('div');
+        contentDiv.style.cssText = `
+    font-size: 14px;
+    line-height: 1.6;
+    `;
+
+        // Determine relevant offers based on offerType and account token
+        let relevantOffers = [];
+        if (offerType === 'eligible') {
+            relevantOffers = glb_offer.filter(offer =>
+                Array.isArray(offer.eligibleCards) &&
+                offer.eligibleCards.includes(accountToken)
+            );
+        } else if (offerType === 'enrolled') {
+            relevantOffers = glb_offer.filter(offer =>
+                Array.isArray(offer.enrolledCards) &&
+                offer.enrolledCards.includes(accountToken)
+            );
+        }
+
+        // Actions section (only for eligible offers)
+        if (offerType === 'eligible' && relevantOffers.length > 0) {
+            const actionsSection = document.createElement('div');
+            actionsSection.style.marginBottom = '20px';
+
+            const enrollAllBtn = document.createElement('button');
+            enrollAllBtn.textContent = 'Enroll All Offers';
+            enrollAllBtn.style.width = '100%';
+            enrollAllBtn.style.padding = '12px';
+            enrollAllBtn.style.borderRadius = '12px';
+            enrollAllBtn.style.border = 'none';
+            enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
+            enrollAllBtn.style.color = '#fff';
+            enrollAllBtn.style.fontSize = '15px';
+            enrollAllBtn.style.fontWeight = '600';
+            enrollAllBtn.style.cursor = 'pointer';
+            enrollAllBtn.style.display = 'flex';
+            enrollAllBtn.style.alignItems = 'center';
+            enrollAllBtn.style.justifyContent = 'center';
+            enrollAllBtn.style.gap = '8px';
+            enrollAllBtn.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+            enrollAllBtn.style.transition = 'all 0.2s ease';
+
+            // Add icon to button
+            enrollAllBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/>
+        </svg>
+        Enroll All Offers
+        `;
+
+            enrollAllBtn.addEventListener('mouseover', () => {
+                enrollAllBtn.style.backgroundColor = '#0062CC';
+                enrollAllBtn.style.transform = 'translateY(-2px)';
+                enrollAllBtn.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
+            });
+
+            enrollAllBtn.addEventListener('mouseout', () => {
+                enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
+                enrollAllBtn.style.transform = 'translateY(0)';
+                enrollAllBtn.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+            });
+
+            enrollAllBtn.addEventListener('click', async () => {
+                // Change button to loading state
+                const originalText = enrollAllBtn.innerHTML;
+                enrollAllBtn.innerHTML = `
+            <div class="loading-spinner" style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>
+            Enrolling...
+            `;
+                enrollAllBtn.disabled = true;
+                enrollAllBtn.style.opacity = '0.8';
+
+                // Call batch enrollment function for this card
+                try {
+                    await api_batchEnrollOffers(null, accountToken);
+
+                    // Update button to success state
+                    enrollAllBtn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                </svg>
+                Enrolled Successfully
+                `;
+                    enrollAllBtn.style.backgroundColor = 'var(--ios-green)';
+
+                    // Close and refresh after delay
+                    setTimeout(() => {
+                        closeBtn.click();
+                        ui_renderCurrentView();
+                    }, 1500);
+                } catch (err) {
+                    // Show error state
+                    enrollAllBtn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Error: Try Again
+                `;
+                    enrollAllBtn.style.backgroundColor = 'var(--ios-red)';
+
+                    // Reset after delay
+                    setTimeout(() => {
+                        enrollAllBtn.innerHTML = originalText;
+                        enrollAllBtn.disabled = false;
+                        enrollAllBtn.style.opacity = '1';
+                        enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
+                    }, 2000);
+
+                    console.error('Enrollment error:', err);
+                }
+            });
+
+            actionsSection.appendChild(enrollAllBtn);
+            contentDiv.appendChild(actionsSection);
+        }
+
+        // Offers list with styled cards
+        const offersList = document.createElement('div');
+        offersList.style.display = 'flex';
+        offersList.style.flexDirection = 'column';
+        offersList.style.gap = '12px';
+
+        if (relevantOffers.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.style.textAlign = 'center';
+            emptyState.style.padding = '30px 20px';
+            emptyState.style.backgroundColor = 'rgba(0,0,0,0.02)';
+            emptyState.style.borderRadius = '12px';
+
+            const emptyIcon = document.createElement('div');
+            emptyIcon.innerHTML = `
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            `;
+            emptyIcon.style.marginBottom = '16px';
+
+            const emptyText = document.createElement('div');
+            emptyText.textContent = `No ${offerType} offers found for this card.`;
+            emptyText.style.fontSize = '15px';
+            emptyText.style.color = '#666';
+
+            emptyState.appendChild(emptyIcon);
+            emptyState.appendChild(emptyText);
+            offersList.appendChild(emptyState);
+        } else {
+            // Sort offers by name
+            relevantOffers.sort((a, b) => a.name.localeCompare(b.name));
+
+            relevantOffers.forEach(offer => {
+                const offerCard = document.createElement('div');
+                offerCard.style.padding = '14px';
+                offerCard.style.borderRadius = '12px';
+                offerCard.style.border = '1px solid rgba(0,0,0,0.08)';
+                offerCard.style.display = 'flex';
+                offerCard.style.gap = '14px';
+                offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white';
+                offerCard.style.transition = 'all 0.2s ease';
+
+                offerCard.addEventListener('mouseenter', () => {
+                    offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.02)';
+                    offerCard.style.transform = 'translateY(-2px)';
+                    offerCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+                });
+
+                offerCard.addEventListener('mouseleave', () => {
+                    offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white';
+                    offerCard.style.transform = 'translateY(0)';
+                    offerCard.style.boxShadow = 'none';
+                });
+
+                // Offer logo
+                if (offer.logo && offer.logo !== 'N/A') {
+                    const logoContainer = document.createElement('div');
+                    logoContainer.style.width = '48px';
+                    logoContainer.style.height = '48px';
+                    logoContainer.style.display = 'flex';
+                    logoContainer.style.alignItems = 'center';
+                    logoContainer.style.justifyContent = 'center';
+                    logoContainer.style.flexShrink = '0';
+
+                    const logo = document.createElement('img');
+                    logo.src = offer.logo;
+                    logo.alt = offer.name;
+                    logo.style.maxWidth = '100%';
+                    logo.style.maxHeight = '100%';
+                    logo.style.borderRadius = '6px';
+
+                    logoContainer.appendChild(logo);
+                    offerCard.appendChild(logoContainer);
+                }
+
+                // Offer content
+                const offerContent = document.createElement('div');
+                offerContent.style.flex = '1';
+                offerContent.style.minWidth = '0'; // Important for text truncation
+
+                // Offer name with favorite indicator
+                const nameRow = document.createElement('div');
+                nameRow.style.display = 'flex';
+                nameRow.style.alignItems = 'center';
+                nameRow.style.gap = '6px';
+                nameRow.style.marginBottom = '4px';
+
+                if (offer.favorite) {
+                    const starIcon = document.createElement('span');
+                    starIcon.textContent = '★';
+                    starIcon.style.color = '#ff9500';
+                    starIcon.style.fontSize = '14px';
+                    nameRow.appendChild(starIcon);
+                }
+
+                const offerName = document.createElement('div');
+                offerName.textContent = offer.name;
+                offerName.style.fontWeight = '600';
+                offerName.style.fontSize = '15px';
+                offerName.style.whiteSpace = 'nowrap';
+                offerName.style.overflow = 'hidden';
+                offerName.style.textOverflow = 'ellipsis';
+                nameRow.appendChild(offerName);
+
+                // Offer details
+                const offerDetails = document.createElement('div');
+                offerDetails.style.fontSize = '13px';
+                offerDetails.style.color = '#666';
+                offerDetails.style.lineHeight = '1.4';
+                offerDetails.style.marginBottom = '8px';
+
+                // Format description - truncate if too long
+                const description = offer.short_description;
+                if (description && description.length > 100) {
+                    offerDetails.textContent = description.substring(0, 100) + '...';
+                    offerDetails.title = description; // Show full text on hover
+                } else {
+                    offerDetails.textContent = description || 'No description available';
+                }
+
+                // Offer metrics
+                const metricsRow = document.createElement('div');
+                metricsRow.style.display = 'flex';
+                metricsRow.style.gap = '8px';
+                metricsRow.style.flexWrap = 'wrap';
+
+                // Helper to create a metric badge
+                function createBadge(label, value, color = 'rgba(0,0,0,0.7)') {
+                    return ui_createBadge({
+                        label: label,
+                        value: value,
+                        color: color,
+                        size: 'medium'
+                    });
+                }
+
+                // Add metrics if available
+                const thresholdBadge = createBadge('Spend', offer.threshold, '#1c1c1e');
+                const rewardBadge = createBadge('Reward', offer.reward, 'var(--ios-green)');
+                const percentBadge = createBadge('Rate', offer.percentage, 'var(--ios-blue)');
+                const expiryBadge = createBadge('Expires', util_formatDate(offer.expiry_date), 'var(--ios-orange)');
+
+                if (thresholdBadge) metricsRow.appendChild(thresholdBadge);
+                if (rewardBadge) metricsRow.appendChild(rewardBadge);
+                if (percentBadge) metricsRow.appendChild(percentBadge);
+                if (expiryBadge) metricsRow.appendChild(expiryBadge);
+
+                // Assemble offer content
+                offerContent.appendChild(nameRow);
+                offerContent.appendChild(offerDetails);
+                offerContent.appendChild(metricsRow);
+                offerCard.appendChild(offerContent);
+
+                // Action button - only for eligible offers
+                if (offerType === 'eligible') {
+                    const enrollButton = document.createElement('button');
+                    enrollButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                    </svg>
+                    `;
+                    enrollButton.title = 'Enroll in this offer';
+                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                    enrollButton.style.color = 'var(--ios-blue)';
+                    enrollButton.style.border = 'none';
+                    enrollButton.style.borderRadius = '50%';
+                    enrollButton.style.width = '36px';
+                    enrollButton.style.height = '36px';
+                    enrollButton.style.display = 'flex';
+                    enrollButton.style.alignItems = 'center';
+                    enrollButton.style.justifyContent = 'center';
+                    enrollButton.style.cursor = 'pointer';
+                    enrollButton.style.alignSelf = 'center';
+                    enrollButton.style.transition = 'all 0.2s ease';
+                    enrollButton.style.flexShrink = '0';
+
+                    enrollButton.addEventListener('mouseenter', () => {
+                        enrollButton.style.backgroundColor = 'var(--ios-blue)';
+                        enrollButton.style.color = 'white';
+                        enrollButton.style.transform = 'scale(1.1)';
+                    });
+
+                    enrollButton.addEventListener('mouseleave', () => {
+                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                        enrollButton.style.color = 'var(--ios-blue)';
+                        enrollButton.style.transform = 'scale(1)';
+                    });
+
+                    enrollButton.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+
+                        // Find the account
+                        const acc = glb_account.find(a => a.accountToken === accountToken);
+                        if (!acc) {
+                            console.log(`Account not found for card: ${acc.display_account_number}`);
+                            return;
+                        }
+
+                        // Change button to loading state
+                        enrollButton.innerHTML = `<div class="loading-spinner" style="width:14px;height:14px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>`;
+                        enrollButton.style.pointerEvents = 'none';
+
+                        try {
+                            const res = await api_enrollInOffer(acc.account_token, offer.offerId);
+
+                            if (res.result) {
+                                // Enrollment successful
+                                enrollButton.innerHTML = `
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                </svg>
+                                `;
+                                enrollButton.style.backgroundColor = 'var(--ios-green)';
+                                enrollButton.style.color = 'white';
+
+                                // Update offer data
+                                const idx = offer.eligibleCards.indexOf(accountNumber);
+                                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                                if (!offer.enrolledCards.includes(accountNumber)) {
+                                    offer.enrolledCards.push(accountNumber);
+                                }
+
+                                // Animate the card away after success
+                                offerCard.style.transform = 'translateX(100%)';
+                                offerCard.style.opacity = '0';
+
+                                // Remove after animation
+                                setTimeout(() => {
+                                    offerCard.remove();
+
+                                    // If no more offers, refresh the entire popup
+                                    if (offersList.childElementCount === 0) {
+                                        members_showCardOffers(accountNumber, offerType);
+                                    }
+                                }, 500);
+                            } else {
+                                // Enrollment failed
+                                enrollButton.innerHTML = `
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                                </svg>
+                                `;
+                                enrollButton.style.backgroundColor = 'var(--ios-red)';
+                                enrollButton.style.color = 'white';
+
+                                // Reset after delay
+                                setTimeout(() => {
+                                    enrollButton.innerHTML = `
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    </svg>
+                                    `;
+                                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                                    enrollButton.style.color = 'var(--ios-blue)';
+                                    enrollButton.style.pointerEvents = 'auto';
+                                }, 2000);
+                            }
+                        } catch (err) {
+                            console.error('Error enrolling offer:', err);
+
+                            // Show error state
+                            enrollButton.innerHTML = `
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                            `;
+                            enrollButton.style.backgroundColor = 'var(--ios-red)';
+                            enrollButton.style.color = 'white';
+
+                            // Reset after delay
+                            setTimeout(() => {
+                                enrollButton.innerHTML = `
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                </svg>
+                                `;
+                                enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                                enrollButton.style.color = 'var(--ios-blue)';
+                                enrollButton.style.pointerEvents = 'auto';
+                            }, 2000);
                         }
                     });
 
-                    // Update current header
-                    const currentSort = th.getAttribute('data-sort-direction') || 'none';
-                    if (currentSort === 'none' || currentSort === 'desc') {
-                        th.setAttribute('data-sort-direction', 'asc');
-                        sortIcon.textContent = '↑';
-                        sortButton.classList.add('asc');
-                    } else {
-                        th.setAttribute('data-sort-direction', 'desc');
-                        sortIcon.textContent = '↓';
-                        sortButton.classList.add('desc');
-                    }
+                    offerCard.appendChild(enrollButton);
+                }
 
-                    // Call the sort handler
-                    sortHandler(headerItem.key);
-                });
-            }
+                offersList.appendChild(offerCard);
+            });
+        }
 
+        contentDiv.appendChild(offersList);
+
+        popup.appendChild(topRow);
+        popup.appendChild(cardDetailsSection);
+        popup.appendChild(contentDiv);
+        document.body.appendChild(overlay);
+
+        // Animate in
+        setTimeout(() => {
+            popup.style.transform = 'translateY(0)';
+            popup.style.opacity = '1';
+        }, 10);
+    }
+
+    // Helper function to create stylized badge elements
+    function ui_createBadge({ label, value, color = '#333', size = 'small' }) {
+        // Return null if no value provided
+        if (!value || value === 'N/A') return null;
+
+        const badge = document.createElement('div');
+
+        // Size-based styling
+        const sizeStyles = {
+            small: 'padding:3px 6px; font-size:11px;',
+            medium: 'padding:4px 8px; font-size:12px;',
+            large: 'padding:5px 10px; font-size:13px;'
+        };
+
+        badge.style.cssText = `
+            ${sizeStyles[size] || sizeStyles.small}
+            background-color: ${color}15;
+            color: ${color};
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: 500;
+            border: 1px solid ${color}30;
+            transition: all 0.2s ease;
+        `;
+
+        // Create label part if provided
+        if (label) {
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = label + ':';
+            labelSpan.style.cssText = 'opacity: 0.8; font-weight: 400;';
+            badge.appendChild(labelSpan);
+        }
+
+        // Create value part
+        const valueSpan = document.createElement('span');
+        valueSpan.textContent = value;
+        badge.appendChild(valueSpan);
+
+        // Add hover effect
+        badge.addEventListener('mouseenter', () => {
+            badge.style.transform = 'translateY(-2px)';
+            badge.style.boxShadow = `0 2px 5px ${color}20`;
+        });
+
+        badge.addEventListener('mouseleave', () => {
+            badge.style.transform = 'translateY(0)';
+            badge.style.boxShadow = 'none';
+        });
+
+        return badge;
+    }
+
+    // Enhanced offers_renderPage with better structure
+    function offers_renderPage() {
+        const containerDiv = document.createElement('div');
+        containerDiv.style.cssText = UI_STYLES.pageContainer;
+
+        // Add components sequentially
+        containerDiv.appendChild(offers_renderStatsBar());
+
+        // Create tab navigation for current vs history
+        const tabContainer = document.createElement('div');
+        tabContainer.style.cssText = 'display:flex; margin-bottom:16px; background-color:rgba(255,255,255,0.6); border-radius:10px; padding:4px; border:1px solid var(--ios-border);';
+
+        const currentTab = document.createElement('button');
+        currentTab.textContent = 'Current Offers';
+        currentTab.style.cssText = 'flex:1; padding:10px; border:none; border-radius:8px; background-color:var(--ios-blue); color:white; font-weight:500; cursor:pointer;';
+
+        const historyTab = document.createElement('button');
+        historyTab.textContent = 'Offer History';
+        historyTab.style.cssText = 'flex:1; padding:10px; border:none; border-radius:8px; background-color:transparent; color:var(--ios-text-secondary); font-weight:500; cursor:pointer;';
+
+        const displayContainer = document.createElement('div');
+        displayContainer.id = 'offers-display-container';
+
+        // Initialize with current offers view
+        const displayMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
+        displayContainer.appendChild(displayMode === 'grid' ? offers_renderGridView() : offers_renderTableView());
+
+        // Tab click handlers
+        currentTab.addEventListener('click', () => {
+            currentTab.style.backgroundColor = 'var(--ios-blue)';
+            currentTab.style.color = 'white';
+            historyTab.style.backgroundColor = 'transparent';
+            historyTab.style.color = 'var(--ios-text-secondary)';
+
+            displayContainer.innerHTML = '';
+            displayContainer.appendChild(displayMode === 'grid' ? offers_renderGridView() : offers_renderTableView());
+        });
+
+        historyTab.addEventListener('click', () => {
+            historyTab.style.backgroundColor = 'var(--ios-blue)';
+            historyTab.style.color = 'white';
+            currentTab.style.backgroundColor = 'transparent';
+            currentTab.style.color = 'var(--ios-text-secondary)';
+
+            displayContainer.innerHTML = '';
+            displayContainer.appendChild(offers_renderHistoryView());
+        });
+
+        tabContainer.appendChild(currentTab);
+        tabContainer.appendChild(historyTab);
+        containerDiv.appendChild(tabContainer);
+        containerDiv.appendChild(offers_renderSearchBar());
+        containerDiv.appendChild(displayContainer);
+
+        return containerDiv;
+    }
+
+    // Create a table for historical offers
+    function offers_renderHistoryView() {
+        const historyContainer = document.createElement('div');
+        historyContainer.style.cssText = 'display:flex; flex-direction:column; gap:24px;';
+
+        // Expired offers section
+        const expiredSection = document.createElement('div');
+        expiredSection.style.cssText = 'background:white; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.08);';
+
+        const expiredTitle = document.createElement('h3');
+        expiredTitle.textContent = 'Expired Offers';
+        expiredTitle.style.cssText = 'margin:0 0 16px 0; font-size:18px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;';
+        expiredTitle.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--ios-red)" opacity="0.8">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm4-12H8v2h8V8zm0 4H8v2h8v-2z"/>
+            </svg>
+            Expired Offers (${glb_offer_expired.length})
+        `;
+
+        expiredSection.appendChild(expiredTitle);
+
+        if (glb_offer_expired.length === 0) {
+            const emptyExpired = document.createElement('div');
+            emptyExpired.textContent = 'No expired offers tracked yet';
+            emptyExpired.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
+            expiredSection.appendChild(emptyExpired);
+        } else {
+            expiredSection.appendChild(renderHistoryTable(glb_offer_expired, 'expired'));
+        }
+
+        // Redeemed offers section
+        const redeemedSection = document.createElement('div');
+        redeemedSection.style.cssText = 'background:white; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.08);';
+
+        const redeemedTitle = document.createElement('h3');
+        redeemedTitle.textContent = 'Redeemed Offers';
+        redeemedTitle.style.cssText = 'margin:0 0 16px 0; font-size:18px; font-weight:600; color:#333; display:flex; align-items:center; gap:8px;';
+        redeemedTitle.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--ios-green)" opacity="0.8">
+                <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+            </svg>
+            Redeemed Offers (${glb_offer_redeemed.length})
+        `;
+
+        redeemedSection.appendChild(redeemedTitle);
+
+        if (glb_offer_redeemed.length === 0) {
+            const emptyRedeemed = document.createElement('div');
+            emptyRedeemed.textContent = 'No redeemed offers tracked yet';
+            emptyRedeemed.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
+            redeemedSection.appendChild(emptyRedeemed);
+        } else {
+            redeemedSection.appendChild(renderHistoryTable(glb_offer_redeemed, 'redeemed'));
+        }
+
+        historyContainer.appendChild(expiredSection);
+        historyContainer.appendChild(redeemedSection);
+
+        return historyContainer;
+    }
+
+    // Create a table for historical offers
+    function renderHistoryTable(offers, type) {
+        const tableElement = document.createElement('table');
+        tableElement.className = 'ios-table';
+        tableElement.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; font-size:14px;';
+
+        // Create headers based on type
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+
+        const headerRow = document.createElement('tr');
+
+        const headers = [
+            { label: "Name", key: "name" },
+            { label: type === 'expired' ? "Expired Date" : "Redeemed Date", key: type === 'expired' ? "expiredDate" : "redeemedDate" }
+        ];
+
+        // Add card column for redeemed offers
+        if (type === 'redeemed') {
+            headers.push({ label: "Redeemed Cards", key: "redeemedCards" });
+        }
+
+        // Create header cells
+        headers.forEach(header => {
+            const th = document.createElement('th');
+            th.textContent = header.label;
+            th.style.cssText = 'padding:12px 16px; text-align:left; border-bottom:1px solid rgba(0,0,0,0.1);';
             headerRow.appendChild(th);
         });
 
         thead.appendChild(headerRow);
         tableElement.appendChild(thead);
 
-        // Helper: determine whether to highlight the account row
-        function shouldHighlightAccount(acc) {
-            if (!glb_filters.memberMerchantSearch || glb_filters.memberMerchantSearch.trim().length === 0) {
-                return false;
-            }
-            const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
-            return glb_offer.some(offer => {
-                if (offer.name.toLowerCase().includes(searchTerm)) {
-                    return (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.display_account_number)) ||
-                        (Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.display_account_number));
-                }
-                return false;
-            });
-        }
-
-        // Build table body
+        // Create body
         const tbody = document.createElement('tbody');
 
-        if (items.length === 0) {
-            // Create empty state
-            const emptyRow = document.createElement('tr');
-            const emptyCell = document.createElement('td');
-            emptyCell.colSpan = headers.length;
-            emptyCell.className = 'ios-empty-state';
+        // Sort by date descending (newest first)
+        const sortedOffers = [...offers].sort((a, b) => {
+            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+            return new Date(b[dateKey]) - new Date(a[dateKey]);
+        });
 
-            emptyCell.innerHTML = `
-        <div class="ios-empty-state-container">
-            <div class="ios-empty-state-icon">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-            </div>
-            <div class="ios-empty-state-title">No Items Found</div>
-            <div class="ios-empty-state-message">Try adjusting your search or filters</div>
-            <button class="ios-empty-button">Reset Filters</button>
-        </div>
-    `;
+        sortedOffers.forEach((offer, index) => {
+            const row = document.createElement('tr');
+            row.style.cssText = index % 2 === 0 ? 'background-color:white;' : 'background-color:rgba(0,0,0,0.02);';
 
-            // Add reset filters functionality
-            const resetButton = emptyCell.querySelector('.ios-empty-button');
-            resetButton.addEventListener('click', () => {
-                if (typeof glb_filters !== 'undefined') {
-                    // Reset all relevant filters
-                    if (glb_filters.memberMerchantSearch) {
-                        glb_filters.memberMerchantSearch = '';
+            // Name cell
+            const nameCell = document.createElement('td');
+            nameCell.textContent = offer.name;
+            nameCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); font-weight:500;';
+            row.appendChild(nameCell);
+
+            // Date cell
+            const dateCell = document.createElement('td');
+            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+            const date = new Date(offer[dateKey]);
+            dateCell.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            dateCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+            row.appendChild(dateCell);
+
+            // Add cards for redeemed offers
+            if (type === 'redeemed' && offer.redeemedCards) {
+                const cardsCell = document.createElement('td');
+                cardsCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+
+                offer.redeemedCards.forEach((card, i) => {
+                    const cardBadge = document.createElement('span');
+                    cardBadge.textContent = card;
+                    cardBadge.style.cssText = 'display:inline-block; padding:3px 8px; background-color:rgba(0,0,0,0.05); border-radius:10px; margin-right:6px; margin-bottom:6px; font-size:13px;';
+                    cardsCell.appendChild(cardBadge);
+
+                    if (i < offer.redeemedCards.length - 1) {
+                        cardsCell.appendChild(document.createTextNode(' '));
                     }
-
-                    if (glb_filters.offerMerchantSearch) {
-                        glb_filters.offerMerchantSearch = '';
-                    }
-                    if (glb_filters.offerCardEnding) {
-                        glb_filters.offerCardEnding = '';
-                    }
-                    if (glb_filters.offerFav) {
-                        glb_filters.offerFav = false;
-                    }
-
-                    if (glb_filters.memberStatus !== 'Active') {
-                        glb_filters.memberStatus = 'Active';
-                    }
-                    if (glb_filters.memberCardtype !== 'all') {
-                        glb_filters.memberCardtype = 'all';
-                    }
-
-                    // Refresh the view
-                    if (typeof renderPage === 'function') {
-                        renderPage();
-                    }
-                }
-            });
-
-            emptyRow.appendChild(emptyCell);
-            tbody.appendChild(emptyRow);
-        } else {
-            // Render rows with data
-            items.forEach((item, idx) => {
-                const row = document.createElement('tr');
-
-                // Add highlight class if needed
-                if (shouldHighlightAccount(item)) {
-                    row.classList.add('ios-highlight-row');
-                }
-
-                headers.forEach((headerItem) => {
-                    const td = document.createElement('td');
-                    td.style.fontSize = '13px'; // Smaller cell text
-                    td.style.padding = '10px 14px'; // Reduced padding (from 16px 14px)
-
-                    if (colWidths[headerItem.key]) {
-                        td.style.width = colWidths[headerItem.key];
-                        td.style.maxWidth = colWidths[headerItem.key];
-                        td.style.whiteSpace = 'normal';
-                        td.style.wordWrap = 'break-word';
-                    }
-
-                    // Use the provided cellRenderer
-                    const content = cellRenderer(item, headerItem);
-
-                    if (content instanceof Node) {
-                        // For Node elements like images, ensure they're centered
-                        if (content.tagName === 'IMG') {
-                            content.style.display = 'block';
-                            content.style.margin = '0 auto';
-                        } else if (content.tagName === 'BUTTON' || content.tagName === 'INPUT') {
-                            // Center buttons and inputs
-                            content.style.margin = '0 auto';
-                            content.style.display = 'block';
-                        }
-                        // Apply smaller font size to buttons and inputs
-                        if (content.tagName === 'BUTTON' || content.tagName === 'INPUT') {
-                            content.style.fontSize = '12px'; // Smaller button/input text
-                        }
-                        td.appendChild(content);
-                    } else if (typeof content === 'string') {
-                        // Format currency
-                        if (/^\$?\d+(\.\d{2})?$/.test(content)) {
-                            const span = document.createElement('span');
-                            span.className = 'ios-currency';
-                            span.textContent = content;
-                            span.style.fontSize = '13px'; // Smaller currency text
-                            td.appendChild(span);
-                        }
-                        // Handle status-like text
-                        else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
-                            const statusSpan = document.createElement('span');
-                            statusSpan.className = `ios-status ${content.toLowerCase()}`;
-                            statusSpan.textContent = content;
-                            statusSpan.style.fontSize = '12px'; // Smaller status text
-                            td.appendChild(statusSpan);
-                        }
-                        // Regular text content
-                        else {
-                            td.textContent = content || '';
-                        }
-                    } else {
-                        td.textContent = content || '';
-                    }
-
-                    row.appendChild(td);
                 });
 
-                tbody.appendChild(row);
-            });
-        }
+                row.appendChild(cardsCell);
+            }
+
+            tbody.appendChild(row);
+        });
 
         tableElement.appendChild(tbody);
         return tableElement;
     }
 
-    // iOS-styled search input component with updated styling
-    function createSearchInput(placeholder, value, callback) {
-        const container = document.createElement('div');
-        container.style.position = 'relative';
-        container.style.width = '100%';
-        container.style.minWidth = '180px';
-        container.style.maxWidth = '250px';
-        container.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.03)';
-        container.style.borderRadius = '10px';
+    // Add notification functionality for new offers
+    function offers_showNotification(stats) {
+        if (stats.newCount > 0 || stats.expiredCount > 0 || stats.redeemedCount > 0) {
+            let message = '';
 
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.placeholder = placeholder;
-        input.value = value || '';
-        input.style.width = '100%';
-        input.style.padding = '10px 32px 10px 12px';
-        input.style.borderRadius = '10px';
-        input.style.border = '1px solid var(--ios-border)';
-        input.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
-        input.style.fontSize = '13px';
-        input.style.fontFamily = 'var(--ios-font)';
-        input.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-        input.style.transition = 'all 0.2s ease';
+            if (stats.newCount > 0) {
+                message += `${stats.newCount} new offer${stats.newCount > 1 ? 's' : ''} available! `;
+            }
 
-        input.addEventListener('focus', () => {
-            input.style.outline = 'none';
-            input.style.borderColor = 'var(--ios-blue)';
-            input.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
-        });
+            if (stats.expiredCount > 0) {
+                message += `${stats.expiredCount} offer${stats.expiredCount > 1 ? 's' : ''} expired. `;
+            }
 
-        input.addEventListener('blur', () => {
-            input.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-            input.style.borderColor = 'var(--ios-border)';
-        });
+            if (stats.redeemedCount > 0) {
+                message += `${stats.redeemedCount} offer${stats.redeemedCount > 1 ? 's' : ''} redeemed. `;
+            }
 
-        // Search icon
-        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        icon.setAttribute('width', '16');
-        icon.setAttribute('height', '16');
-        icon.setAttribute('viewBox', '0 0 24 24');
-        icon.style.position = 'absolute';
-        icon.style.right = '12px';
-        icon.style.top = '50%';
-        icon.style.transform = 'translateY(-50%)';
-        icon.style.color = 'var(--ios-blue)';
-        icon.style.opacity = '0.6';
-        icon.style.pointerEvents = 'none';
+            // Use GM.notification if available
+            if (typeof GM.notification === 'function') {
+                GM.notification({
+                    title: 'AMaxOffer Update',
+                    text: message,
+                    timeout: 5000
+                });
+            } else {
+                // Fallback to creating an on-screen notification
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position:fixed;
+                    bottom:20px;
+                    right:20px;
+                    background-color:white;
+                    border-radius:10px;
+                    padding:16px;
+                    box-shadow:0 4px 16px rgba(0,0,0,0.2);
+                    z-index:10000;
+                    max-width:300px;
+                    border-left:4px solid var(--ios-blue);
+                    font-family:var(--ios-font);
+                `;
 
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
-        path.setAttribute('fill', 'currentColor');
-        icon.appendChild(path);
+                const title = document.createElement('div');
+                title.textContent = 'AMaxOffer Update';
+                title.style.cssText = 'font-weight:600; margin-bottom:8px; font-size:16px;';
 
-        // Define debounce function
-        function debounce(func, wait) {
-            let timeout;
-            return function (...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
+                const text = document.createElement('div');
+                text.textContent = message;
+                text.style.cssText = 'font-size:14px; color:#555;';
+
+                notification.appendChild(title);
+                notification.appendChild(text);
+                document.body.appendChild(notification);
+
+                // Remove after 5 seconds
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    notification.style.transform = 'translateX(100%)';
+                    notification.style.transition = 'all 0.5s ease';
+
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 500);
+                }, 5000);
+            }
         }
-
-        // Add event listener with debounce
-        input.addEventListener('input', debounce(() => {
-            callback(input.value.trim());
-        }, 300));
-
-        container.appendChild(input);
-        container.appendChild(icon);
-
-        return container;
     }
 
-    // Summary page renderer
-    async function renderSummary_page() {
-        // Compute offer statistics using reduce
+    // Optimized stats bar with calculation caching and efficient layout
+    function offers_renderStatsBar() {
+        const statsBar = document.createElement('div');
+        statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
+
+        // Calculate stats once and reuse
+        const stats = offers_calculateStats();
+
+        // Helper for creating stat items
+        const createStatItem = (label, value, icon, color, filterAction) => {
+            const statItem = document.createElement('div');
+            statItem.style.cssText = `display:flex; align-items:center; gap:10px; padding:10px 16px; background-color:rgba(${color}, 0.1); border-radius:10px; border:1px solid rgba(${color}, 0.2); min-width:150px; transition:all 0.2s ease; ${filterAction ? 'cursor:pointer;' : ''}`;
+
+            if (filterAction) {
+                statItem.addEventListener('mouseenter', () => {
+                    statItem.style.transform = 'translateY(-2px)';
+                    statItem.style.boxShadow = '0 4px 8px rgba(0,0,0,0.08)';
+                });
+                statItem.addEventListener('mouseleave', () => {
+                    statItem.style.transform = 'translateY(0)';
+                    statItem.style.boxShadow = 'none';
+                });
+                statItem.addEventListener('click', filterAction);
+            }
+
+            const iconElement = document.createElement('div');
+            iconElement.innerHTML = icon;
+            iconElement.style.color = `rgb(${color})`;
+
+            const textContainer = document.createElement('div');
+            textContainer.style.cssText = 'display:flex; flex-direction:column;';
+
+            const valueElement = document.createElement('div');
+            valueElement.textContent = value;
+            valueElement.style.cssText = `font-size:18px; font-weight:600; color:rgb(${color});`;
+
+            const labelElement = document.createElement('div');
+            labelElement.textContent = label;
+            labelElement.style.cssText = 'font-size:12px; color:var(--ios-text-secondary);';
+
+            textContainer.appendChild(valueElement);
+            textContainer.appendChild(labelElement);
+            statItem.appendChild(iconElement);
+            statItem.appendChild(textContainer);
+
+            return statItem;
+        };
+
+        // Define all icons
+        const ICONS = {
+            TOTAL: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" fill="currentColor"/></svg>`,
+            FAVORITE: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" fill="currentColor"/></svg>`,
+            EXPIRING: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" fill="currentColor"/></svg>`,
+            ENROLLED: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg>`,
+            PENDING: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm1-10c-2.76 0-5 2.24-5 5h2c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.65-1.35 3-3 3v2c2.76 0 5-2.24 5-5s-2.24-5-5-5z" fill="currentColor"/></svg>`,
+            ELIGIBLE: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-5h4c.55 0 1-.45 1-1v-3c0-.55-.45-1-1-1v-1c0-1.11-.9-2-2-2s-2 .89-2 2v1c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1zm1.5-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v1h-3v-1z" fill="currentColor"/></svg>`
+        };
+
+        // Add all stats with click handlers
+        statsBar.appendChild(createStatItem('Total Offers', stats.totalOffers, ICONS.TOTAL, '52, 152, 219', () => {
+            offers_resetAllFilters();
+            ui_renderCurrentView();
+        }));
+
+        statsBar.appendChild(createStatItem('Favorites', stats.favoriteOffers, ICONS.FAVORITE, '255, 149, 0', () => {
+            offers_resetAllFilters();
+            glb_filters.offerFav = true;
+            ui_renderCurrentView();
+        }));
+
+        statsBar.appendChild(createStatItem('Expiring Soon', stats.expiringSoon, ICONS.EXPIRING, '244, 67, 54', () => {
+            offers_resetAllFilters();
+            glb_filters.customFilter = createExpiringFilter();
+            ui_renderCurrentView();
+        }));
+
+        // statsBar.appendChild(createStatItem('Fully Enrolled', stats.distinctFullyEnrolled, ICONS.ENROLLED, '88, 86, 214', () => {
+        //     offers_resetAllFilters();
+        //     glb_filters.enrollmentStatus = 'fully';
+        //     ui_renderCurrentView();
+        // }));
+
+        statsBar.appendChild(createStatItem('Pending Enrollment', stats.distinctNotFullyEnrolled, ICONS.PENDING, '255, 204, 0', () => {
+            offers_resetAllFilters();
+            glb_filters.enrollmentStatus = 'pending';
+            ui_renderCurrentView();
+        }));
+
+        statsBar.appendChild(createStatItem('Total Eligible', stats.totalEligible, ICONS.ELIGIBLE, '142, 142, 147', () => {
+            offers_resetAllFilters();
+            glb_filters.eligibleOnly = true;
+            ui_renderCurrentView();
+        }));
+
+        statsBar.appendChild(createStatItem('Total Enrolled', stats.totalEnrolled, ICONS.TOTAL, '50, 173, 230', () => {
+            offers_resetAllFilters();
+            glb_filters.enrolledOnly = true;
+            ui_renderCurrentView();
+        }));
+
+        return statsBar;
+    }
+
+    // Helper functions for offer stats
+    function offers_calculateStats() {
+        // Compute offer statistics
         const {
             distinctFullyEnrolled,
             distinctNotFullyEnrolled,
@@ -2467,1068 +4389,532 @@
             return stats;
         }, { distinctFullyEnrolled: 0, distinctNotFullyEnrolled: 0, totalEligible: 0, totalEnrolled: 0 });
 
-        // Compute financial stats for BASIC accounts with financialData
-        const { totalBalance, totalPending, totalRemaining } = glb_account
-            .filter(acc => acc.relationship === "BASIC" && acc.financialData)
-            .reduce((fin, acc) => {
-                fin.totalBalance += parseFloat(acc.financialData.statement_balance_amount) || 0;
-                fin.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount) || 0;
-                fin.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount) || 0;
-                return fin;
-            }, { totalBalance: 0, totalPending: 0, totalRemaining: 0 });
+        // Calculate other stats
+        const totalOffers = glb_offer.length;
+        const favoriteOffers = glb_offer.filter(offer => offer.favorite).length;
 
-        const numAccounts = glb_account.length;
-        const updateTime = lastUpdate || "Never";
+        // Calculate expiring soon
+        const now = new Date();
+        const twoWeeksFromNow = new Date(now);
+        twoWeeksFromNow.setDate(now.getDate() + 14);
+        const expiringSoon = glb_offer.filter(offer => {
+            if (!offer.expiry_date || offer.expiry_date === 'N/A') return false;
+            const expiryDate = new Date(offer.expiry_date);
+            return !isNaN(expiryDate) && expiryDate > now && expiryDate <= twoWeeksFromNow;
+        }).length;
 
-        // Create main container with iOS-style
-        const summaryDiv = document.createElement('div');
-        summaryDiv.className = 'summary-container';
-
-        // Header: Title with iOS-style typography and Last Updated badge
-        const header = document.createElement('div');
-        header.className = 'summary-header';
-
-        const title = document.createElement('h2');
-        title.className = 'summary-title';
-        title.textContent = 'Account Overview';
-
-        const updateBadge = document.createElement('div');
-        updateBadge.className = 'update-badge';
-        updateBadge.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" style="margin-right: 6px; fill: #007AFF;">
-            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-13v5l4.4 2.6.6-1-3.6-2.1V7H11z"/>
-        </svg>
-        Last Updated: ${updateTime}
-    `;
-
-        header.appendChild(title);
-        header.appendChild(updateBadge);
-        summaryDiv.appendChild(header);
-
-        // Status element for refresh operations
-        const refreshStatusEl = document.createElement('div');
-        refreshStatusEl.className = 'refresh-status';
-        refreshStatusEl.id = 'refresh-status';
-
-        // Create icons for stat cards
-        const iconColors = {
-            card: '52, 199, 89', // iOS green
-            balance: '255, 149, 0', // iOS orange
-            pending: '0, 122, 255', // iOS blue
-            remain: '255, 45, 85', // iOS red
-            enrolled: '88, 86, 214', // iOS purple
-            pending_enroll: '255, 204, 0', // iOS yellow
-            eligible: '142, 142, 147', // iOS gray
-            total: '50, 173, 230' // iOS teal
+        return {
+            totalOffers,
+            favoriteOffers,
+            expiringSoon,
+            distinctFullyEnrolled,
+            distinctNotFullyEnrolled,
+            totalEligible,
+            totalEnrolled
         };
-
-        // Icons in iOS style
-        const cardIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.card});">
-        <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
-    </svg>`;
-
-        const balanceIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.balance});">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-    </svg>`;
-
-        const pendingIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.pending});">
-        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-14v7l5.2 3.2.8-1.3-4.5-2.7V6H11z"/>
-    </svg>`;
-
-        const remainIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.remain});">
-        <path d="M16 6v8h3v4h2V6c0-1.1-.9-2-2-2H7L7 6h9zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8z"/>
-    </svg>`;
-
-        const enrolledIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.enrolled});">
-        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-    </svg>`;
-
-        const pendingEnrollIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.pending_enroll});">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm1-10c-2.76 0-5 2.24-5 5h2c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.65-1.35 3-3 3v2c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
-    </svg>`;
-
-        const eligibleIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.eligible});">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-5h4c.55 0 1-.45 1-1v-3c0-.55-.45-1-1-1v-1c0-1.11-.9-2-2-2s-2 .89-2 2v1c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1zm1.5-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v1h-3v-1z"/>
-    </svg>`;
-
-        const totalIcon = `<svg width="24" height="24" viewBox="0 0 24 24" style="fill: rgb(${iconColors.total});">
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zM3 7h18v2H3V7zm4 6H5v-2h2v2zm4 0H9v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/>
-    </svg>`;
-
-        // Create a helper function to create stat items
-        function createStatItem(label, value, color, icon) {
-            const statItem = document.createElement('div');
-            statItem.className = 'stat-item';
-
-            const statContainer = document.createElement('div');
-            statContainer.className = 'stat-container';
-
-            const iconContainer = document.createElement('div');
-            iconContainer.className = 'icon-container';
-            iconContainer.style.backgroundColor = `rgba(${color}, 0.1)`;
-            iconContainer.innerHTML = icon;
-
-            const statValue = document.createElement('div');
-            statValue.className = 'stat-value';
-            statValue.style.color = `rgb(${color})`;
-            statValue.textContent = value;
-
-            statContainer.appendChild(iconContainer);
-            statContainer.appendChild(statValue);
-
-            const statLabel = document.createElement('div');
-            statLabel.className = 'stat-label';
-            statLabel.textContent = label;
-
-            statItem.appendChild(statContainer);
-            statItem.appendChild(statLabel);
-
-            return statItem;
-        }
-
-        const statsContainer = document.createElement('div');
-        statsContainer.className = 'stats-container';
-        statsContainer.id = 'statsContainer';
-
-        // Create stats row
-        const statsRow = document.createElement('div');
-        statsRow.className = 'stats-row';
-
-        // Add all stat items to the row
-        statsRow.appendChild(createStatItem('Card Amount on Login', `${numAccounts}`, iconColors.card, cardIcon));
-        statsRow.appendChild(createStatItem('Total Balance', `${Math.round(totalBalance)}`, iconColors.balance, balanceIcon));
-        statsRow.appendChild(createStatItem('Total Pending Charge', `${Math.round(totalPending)}`, iconColors.pending, pendingIcon));
-        statsRow.appendChild(createStatItem('Remain Statement', `${Math.round(totalRemaining)}`, iconColors.remain, remainIcon));
-        statsRow.appendChild(createStatItem('Offers Fully Enrolled', distinctFullyEnrolled, iconColors.enrolled, enrolledIcon));
-        statsRow.appendChild(createStatItem('Offers Pending Enrollment', distinctNotFullyEnrolled, iconColors.pending_enroll, pendingEnrollIcon));
-        statsRow.appendChild(createStatItem('Total Eligible Offers', totalEligible, iconColors.eligible, eligibleIcon));
-        statsRow.appendChild(createStatItem('Total Enrolled Offers', totalEnrolled, iconColors.total, totalIcon));
-
-        statsContainer.appendChild(statsRow);
-        summaryDiv.appendChild(statsContainer);
-
-        // Button container with status text and buttons
-        const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'button-container';
-
-        // Create action buttons container
-        const actionButtonsContainer = document.createElement('div');
-        actionButtonsContainer.className = 'action-buttons';
-
-        // Helper to create iOS-style buttons
-        function createActionButton(text, icon, onClick, color = 'var(--ios-blue)') {
-            const btn = document.createElement('button');
-            btn.className = 'ios-button';
-            btn.style.backgroundColor = color;
-            btn.innerHTML = `${icon} ${text}`;
-            btn.addEventListener('click', onClick);
-            return btn;
-        }
-
-        // iOS-style icon for refresh button
-        const refreshIcon = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-        <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-    </svg>`;
-
-        // iOS-style icon for enroll button
-        const enrollIcon = `<svg style="width:20px;height:20px;fill:white" viewBox="0 0 24 24">
-        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-    </svg>`;
-
-        const refreshBtn = createActionButton('Refresh Data', refreshIcon, async () => {
-            try {
-                refreshStatusEl.textContent = "Refreshing accounts...";
-                await get_accounts();
-                refreshStatusEl.textContent = "Refreshing offers...";
-                await get_offers();
-                refreshStatusEl.textContent = "Refreshing balances...";
-                await get_balance();
-                refreshStatusEl.textContent = "Refreshing benefits...";
-                await get_benefit();
-                lastUpdate = new Date().toLocaleString();
-                localStorageHandler("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
-                refreshStatusEl.textContent = "Refresh complete.";
-                await renderPage();
-            } catch (e) {
-                console.error('Error refreshing data:', e);
-                refreshStatusEl.textContent = "Error refreshing data.";
-            }
-        });
-
-        const enrollBtn = createActionButton('Enroll All', enrollIcon, async () => {
-            try {
-                await get__batchEnrollOffer();
-                renderPage();
-            } catch (e) {
-                console.error('Error enrolling all:', e);
-            }
-        }, 'var(--ios-green)');
-
-        // Add status text and both buttons to action buttons container
-        actionButtonsContainer.append(refreshStatusEl, refreshBtn, enrollBtn);
-
-        // Add action buttons container to button container
-        buttonContainer.appendChild(actionButtonsContainer);
-        summaryDiv.appendChild(buttonContainer);
-
-        return summaryDiv;
     }
 
-    // Improved Members filter bar with iOS styling
-    function renderMembers_filterBar() {
-        const filtersCard = document.createElement('div');
-        filtersCard.style.background = 'var(--ios-background)';
-        filtersCard.style.backdropFilter = 'blur(8px)';
-        filtersCard.style.WebkitBackdropFilter = 'blur(8px)';
-        filtersCard.style.borderRadius = '14px';
-        filtersCard.style.padding = '16px 20px';
-        filtersCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-        filtersCard.style.display = 'flex';
-        filtersCard.style.gap = '16px';
-        filtersCard.style.flexWrap = 'wrap';
-        filtersCard.style.width = '100%';
-        filtersCard.style.boxSizing = 'border-box';
-        filtersCard.style.border = '1px solid var(--ios-border)';
-        filtersCard.style.marginBottom = '16px';
-        filtersCard.style.alignItems = 'center';
-
-        // Status Filter Container
-        const statusFilterDiv = document.createElement('div');
-        statusFilterDiv.style.display = 'flex';
-        statusFilterDiv.style.alignItems = 'center';
-        statusFilterDiv.style.gap = '8px';
-        statusFilterDiv.style.padding = '6px 12px';
-        statusFilterDiv.style.backgroundColor = 'rgba(250, 250, 250, 0.5)';
-        statusFilterDiv.style.borderRadius = '10px';
-        statusFilterDiv.style.border = '1px solid var(--ios-border)';
-
-        const statusFilterLabel = document.createElement('label');
-        statusFilterLabel.textContent = 'Status:';
-        statusFilterLabel.style.fontSize = '13px';
-        statusFilterLabel.style.fontWeight = '500';
-        statusFilterLabel.style.color = 'var(--ios-text-secondary)';
-        statusFilterLabel.style.fontFamily = 'var(--ios-font)';
-
-        const statusFilterSelect = document.createElement('select');
-        statusFilterSelect.id = 'status-filter';
-        statusFilterSelect.style.border = 'none';
-        statusFilterSelect.style.backgroundColor = 'transparent';
-        statusFilterSelect.style.fontSize = '13px';
-        statusFilterSelect.style.fontFamily = 'var(--ios-font)';
-        statusFilterSelect.style.color = 'var(--ios-text-primary)';
-        statusFilterSelect.style.padding = '2px 4px';
-        statusFilterSelect.style.borderRadius = '6px';
-        statusFilterSelect.style.appearance = 'none';
-        statusFilterSelect.style.backgroundImage = 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5%22%20stroke%3D%22%23777%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")';
-        statusFilterSelect.style.backgroundRepeat = 'no-repeat';
-        statusFilterSelect.style.backgroundPosition = 'right 4px center';
-        statusFilterSelect.style.backgroundSize = '14px';
-        statusFilterSelect.style.paddingRight = '20px';
-        statusFilterSelect.style.cursor = 'pointer';
-
-        const optionAll = document.createElement('option');
-        optionAll.value = 'all';
-        optionAll.textContent = 'All';
-        const optionActive = document.createElement('option');
-        optionActive.value = 'Active';
-        optionActive.textContent = 'Active';
-        const optionCanceled = document.createElement('option');
-        optionCanceled.value = 'Canceled';
-        optionCanceled.textContent = 'Canceled';
-
-        statusFilterSelect.appendChild(optionAll);
-        statusFilterSelect.appendChild(optionActive);
-        statusFilterSelect.appendChild(optionCanceled);
-        statusFilterSelect.value = glb_filters.memberStatus;
-
-        statusFilterSelect.addEventListener('change', () => {
-            glb_filters.memberStatus = statusFilterSelect.value;
-            renderPage();
-        });
-
-        statusFilterDiv.appendChild(statusFilterLabel);
-        statusFilterDiv.appendChild(statusFilterSelect);
-
-        // Type Filter Container
-        const typeFilterDiv = document.createElement('div');
-        typeFilterDiv.style.display = 'flex';
-        typeFilterDiv.style.alignItems = 'center';
-        typeFilterDiv.style.gap = '8px';
-        typeFilterDiv.style.padding = '6px 12px';
-        typeFilterDiv.style.backgroundColor = 'rgba(250, 250, 250, 0.5)';
-        typeFilterDiv.style.borderRadius = '10px';
-        typeFilterDiv.style.border = '1px solid var(--ios-border)';
-
-        const typeFilterLabel = document.createElement('label');
-        typeFilterLabel.textContent = 'Type:';
-        typeFilterLabel.style.fontSize = '13px';
-        typeFilterLabel.style.fontWeight = '500';
-        typeFilterLabel.style.color = 'var(--ios-text-secondary)';
-        typeFilterLabel.style.fontFamily = 'var(--ios-font)';
-
-        const typeFilterSelect = document.createElement('select');
-        typeFilterSelect.id = 'type-filter';
-        typeFilterSelect.style.border = 'none';
-        typeFilterSelect.style.backgroundColor = 'transparent';
-        typeFilterSelect.style.fontSize = '13px';
-        typeFilterSelect.style.fontFamily = 'var(--ios-font)';
-        typeFilterSelect.style.color = 'var(--ios-text-primary)';
-        typeFilterSelect.style.padding = '2px 4px';
-        typeFilterSelect.style.borderRadius = '6px';
-        typeFilterSelect.style.appearance = 'none';
-        typeFilterSelect.style.backgroundImage = 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5%22%20stroke%3D%22%23777%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")';
-        typeFilterSelect.style.backgroundRepeat = 'no-repeat';
-        typeFilterSelect.style.backgroundPosition = 'right 4px center';
-        typeFilterSelect.style.backgroundSize = '14px';
-        typeFilterSelect.style.paddingRight = '20px';
-        typeFilterSelect.style.cursor = 'pointer';
-
-        const typeOptionAll = document.createElement('option');
-        typeOptionAll.value = 'all';
-        typeOptionAll.textContent = 'All';
-        const typeOptionBasic = document.createElement('option');
-        typeOptionBasic.value = 'BASIC';
-        typeOptionBasic.textContent = 'BASIC';
-        const typeOptionSupp = document.createElement('option');
-        typeOptionSupp.value = 'SUPP';
-        typeOptionSupp.textContent = 'SUPP';
-
-        typeFilterSelect.appendChild(typeOptionAll);
-        typeFilterSelect.appendChild(typeOptionBasic);
-        typeFilterSelect.appendChild(typeOptionSupp);
-        typeFilterSelect.value = glb_filters.memberCardtype;
-
-        typeFilterSelect.addEventListener('change', () => {
-            glb_filters.memberCardtype = typeFilterSelect.value;
-            renderPage();
-        });
-
-        typeFilterDiv.appendChild(typeFilterLabel);
-        typeFilterDiv.appendChild(typeFilterSelect);
-
-        // Offer Search
-        const offerSearchContainer = document.createElement('div');
-        offerSearchContainer.style.display = 'flex';
-        offerSearchContainer.style.alignItems = 'center';
-        offerSearchContainer.style.gap = '8px';
-        offerSearchContainer.style.flex = '1';
-        offerSearchContainer.style.minWidth = '200px';
-        offerSearchContainer.style.maxWidth = '450px';
-
-        const offerSearchLabel = document.createElement('label');
-        offerSearchLabel.textContent = 'Search:';
-        offerSearchLabel.style.fontSize = '13px';
-        offerSearchLabel.style.fontWeight = '500';
-        offerSearchLabel.style.color = 'var(--ios-text-secondary)';
-        offerSearchLabel.style.fontFamily = 'var(--ios-font)';
-
-        // Use the updated createSearchInput
-        const searchInputContainer = createSearchInput(
-            'Search offers...',
-            glb_filters.memberMerchantSearch,
-            val => {
-                glb_filters.memberMerchantSearch = val.toLowerCase();
-                renderPage();
-            }
-        );
-        searchInputContainer.style.flex = '1';
-
-        // Reset button next to search bar
-        const resetButton = document.createElement('button');
-        resetButton.textContent = 'Reset';
-        resetButton.style.padding = '8px 16px';
-        resetButton.style.borderRadius = '10px';
-        resetButton.style.border = 'none';
-        resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        resetButton.style.color = 'var(--ios-text-secondary)';
-        resetButton.style.fontSize = '13px';
-        resetButton.style.fontWeight = '500';
-        resetButton.style.cursor = 'pointer';
-        resetButton.style.transition = 'all 0.2s ease';
-        resetButton.style.fontFamily = 'var(--ios-font)';
-        resetButton.style.marginLeft = '8px';
-
-        resetButton.addEventListener('mouseenter', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
-        });
-
-        resetButton.addEventListener('mouseleave', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        });
-
-        resetButton.addEventListener('click', () => {
-            statusFilterSelect.value = 'Active';
-            typeFilterSelect.value = 'all';
-            searchInputContainer.querySelector('input').value = '';
-            glb_filters.memberStatus = 'Active';
-            glb_filters.memberCardtype = 'all';
-            glb_filters.memberMerchantSearch = '';
-            renderPage();
-        });
-
-        offerSearchContainer.appendChild(offerSearchLabel);
-        offerSearchContainer.appendChild(searchInputContainer);
-        offerSearchContainer.appendChild(resetButton);
-
-        // No standalone reset button here anymore as it's next to search
-
-        filtersCard.appendChild(statusFilterDiv);
-        filtersCard.appendChild(typeFilterDiv);
-        filtersCard.appendChild(offerSearchContainer);
-
-        return filtersCard;
+    // Reset all filters
+    function offers_resetAllFilters() {
+        glb_filters.offerFav = false;
+        glb_filters.offerMerchantSearch = '';
+        glb_filters.offerCardEnding = '';
+        glb_filters.enrollmentStatus = null;
+        glb_filters.eligibleOnly = false;
+        glb_filters.enrolledOnly = false;
+        glb_filters.customFilter = null;
     }
 
-    // Members table
-    function renderMembers_table() {
-        const headers = [
-            { label: "Index", key: "cardIndex" },
-            { label: "Logo", key: "small_card_art" },
-            { label: "Ending", key: "display_account_number" },
-            { label: "User", key: "embossed_name" },
-            { label: "Type", key: "relationship" },
-            { label: "Opening", key: "account_setup_date" },
-            { label: "Status", key: "account_status" },
-            { label: "Balance", key: "StatementBalance" },
-            { label: "Pending", key: "pending" },
-            { label: "RemStBl", key: "remainingStaBal" },
-            { label: "Eligible", key: "eligibleOffers" },
-            { label: "Enrolled", key: "enrolledOffers" },
-            { label: "Priority", key: "priority" },
-            { label: "Exclude", key: "exclude" }
-        ];
-
-        const colWidths = {
-            cardIndex: "50px",
-            small_card_art: "60px",
-            display_account_number: "70px",
-            embossed_name: "180px",
-            relationship: "80px",
-            account_setup_date: "100px",
-            account_status: "80px",
-            StatementBalance: "90px",
-            pending: "90px",
-            remainingStaBal: "90px",
-            eligibleOffers: "80px",
-            enrolledOffers: "80px",
-            priority: "70px",
-            exclude: "70px"
+    // Create expiring soon filter
+    function createExpiringFilter() {
+        return (offer) => {
+            if (!offer.expiry_date || offer.expiry_date === 'N/A') return false;
+            const expiryDate = new Date(offer.expiry_date);
+            const now = new Date();
+            const twoWeeksFromNow = new Date(now);
+            twoWeeksFromNow.setDate(now.getDate() + 30);
+            return !isNaN(expiryDate) && expiryDate > now && expiryDate <= twoWeeksFromNow;
         };
-
-        // Filter accounts by status and type
-        const filteredAccounts = glb_account.filter(acc => {
-            const statusMatch = glb_filters.memberStatus === 'all' ||
-                acc.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
-            const typeMatch = glb_filters.memberCardtype === 'all' ||
-                acc.relationship === glb_filters.memberCardtype;
-            return statusMatch && typeMatch;
-        });
-
-        // Define cell rendering logic for members table
-        const cellRenderer = (item, headerItem) => {
-            const key = headerItem.key;
-            if (key === 'small_card_art') {
-                if (item.small_card_art && item.small_card_art !== 'N/A') {
-                    const img = document.createElement('img');
-                    img.src = item.small_card_art;
-                    img.alt = "Card Logo";
-                    img.style.maxWidth = "40px";
-                    img.style.maxHeight = "40px";
-                    return img;
-                }
-                return sanitizeValue('N/A');
-            } else if (key === 'eligibleOffers' || key === 'enrolledOffers') {
-                const count = parseInt(item[key] || 0);
-
-                // Create container for consistent height
-                const container = document.createElement('div');
-                container.style.height = '28px';  // Fixed height for all badges
-                container.style.display = 'flex';
-                container.style.alignItems = 'center';
-                container.style.justifyContent = 'center';
-
-                if (count > 0) {
-                    const btn = document.createElement('button');
-                    btn.textContent = count;
-                    btn.className = 'ios-counter-badge';
-
-                    // iOS-style badging
-                    btn.style.borderRadius = '14px';
-                    btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                    btn.style.color = key === 'eligibleOffers' ? 'var(--ios-blue)' : 'var(--ios-green)';
-                    btn.style.border = `1px solid ${key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)'}`;
-                    btn.style.padding = '4px 10px';
-                    btn.style.fontWeight = '500';
-                    btn.style.fontSize = '13px';
-                    btn.style.fontFamily = 'var(--ios-font)';
-                    btn.style.cursor = 'pointer';
-                    btn.style.transition = 'all 0.2s ease';
-                    btn.style.height = '28px';  // Match container height
-                    btn.style.boxSizing = 'border-box';
-                    // FIX: Add vertical alignment styles
-                    btn.style.display = 'flex';
-                    btn.style.alignItems = 'center';
-                    btn.style.justifyContent = 'center';
-                    btn.style.lineHeight = '1';
-
-                    btn.addEventListener('mouseover', () => {
-                        btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
-                        btn.style.transform = 'translateY(-1px)';
-                    });
-
-                    btn.addEventListener('mouseout', () => {
-                        btn.style.backgroundColor = key === 'eligibleOffers' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                        btn.style.transform = 'translateY(0)';
-                    });
-
-                    btn.addEventListener('click', () => {
-                        renderMembers_offerOnCard(item.display_account_number,
-                            (key === 'eligibleOffers') ? 'eligible' : 'enrolled');
-                    });
-                    container.appendChild(btn);
-                } else {
-                    // For zero count, return a disabled-looking badge with same height
-                    const span = document.createElement('span');
-                    span.textContent = '0';
-                    span.className = 'ios-counter-badge-disabled';
-                    span.style.borderRadius = '14px';
-                    span.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-                    span.style.color = 'var(--ios-gray)';
-                    span.style.border = '1px solid rgba(142, 142, 147, 0.2)';
-                    span.style.padding = '4px 10px';
-                    span.style.fontWeight = '500';
-                    span.style.fontSize = '13px';
-                    span.style.fontFamily = 'var(--ios-font)';
-                    span.style.height = '28px';  // Match container height
-                    span.style.boxSizing = 'border-box';
-                    // FIX: Change from inline-flex to flex and add vertical alignment
-                    span.style.display = 'flex';
-                    span.style.alignItems = 'center';
-                    span.style.justifyContent = 'center';
-                    span.style.lineHeight = '1';
-                    container.appendChild(span);
-                }
-
-                return container;
-            } else if (key === 'pending' || key === 'remainingStaBal' || key === 'StatementBalance') {
-                if (item.relationship === "BASIC") {
-                    if (item.financialData) {
-                        if (key === 'pending') {
-                            return sanitizeValue(item.financialData.debits_credits_payments_total_amount);
-                        } else if (key === 'remainingStaBal') {
-                            return sanitizeValue(item.financialData.remaining_statement_balance_amount);
-                        } else if (key === 'StatementBalance') {
-                            return sanitizeValue(item.financialData.statement_balance_amount);
-                        }
-                    }
-                    return "Loading...";
-                }
-                return ""; // Return empty string for non-BASIC cards
-            }
-            else if (key === 'relationship') {
-                if (item.relationship === "SUPP") {
-                    return getBasicAccountEndingForSuppAccount(item);
-                }
-                return sanitizeValue(item[key]);
-            }
-            else if (key === 'priority') {
-                const toggle = createIOSToggle(
-                    glb_priorityCards.includes(item.display_account_number),
-                    (checked) => {
-                        if (checked) {
-                            if (!glb_priorityCards.includes(item.display_account_number)) {
-                                glb_priorityCards.push(item.display_account_number);
-                            }
-                        } else {
-                            glb_priorityCards = glb_priorityCards.filter(num => num !== item.display_account_number);
-                        }
-                        localStorageHandler("set", storage_accToken, ["priorityCards"]);
-                    },
-                    'priority'
-                );
-                return toggle;
-            } else if (key === 'exclude') {
-                const toggle = createIOSToggle(
-                    glb_excludedCards.includes(item.display_account_number),
-                    (checked) => {
-                        if (checked) {
-                            if (!glb_excludedCards.includes(item.display_account_number)) {
-                                glb_excludedCards.push(item.display_account_number);
-                            }
-                        } else {
-                            glb_excludedCards = glb_excludedCards.filter(num => num !== item.display_account_number);
-                        }
-                        localStorageHandler("set", storage_accToken, ["excludedCards"]);
-                    },
-                    'exclude'
-                );
-                return toggle;
-            } else if (key === 'account_status') {
-                return item[key]; // Will be styled by renderTable's status handling
-            }
-            return sanitizeValue(item[key]);
-        };
-
-        // Define the sortable keys for members table
-        const sortableKeys = [
-            "cardIndex", "small_card_art", "display_account_number", "embossed_name",
-            "relationship", "account_setup_date", "account_status", "StatementBalance",
-            "pending", "remainingStaBal", "eligibleOffers", "enrolledOffers"
-        ];
-
-        const tableElement = renderTable(headers, colWidths, filteredAccounts, cellRenderer, sort_memberTab, sortableKeys);
-        const containerDiv = document.createElement('div');
-        containerDiv.appendChild(tableElement);
-        return containerDiv;
-
-        function createIOSToggle(isChecked, onChange, type = 'priority') {
-            // Create container
-            const container = document.createElement('div');
-            container.style.display = 'inline-block';
-            container.style.position = 'relative';
-            container.style.width = '36px';
-            container.style.height = '22px';
-            container.style.borderRadius = '11px';
-            container.style.cursor = 'pointer';
-            container.style.transition = 'background-color 0.3s ease';
-
-            // Set correct colors based on type and state
-            const backgroundColor = isChecked
-                ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
-                : '#e9e9ea';
-            container.style.backgroundColor = backgroundColor;
-
-            // Create toggle knob
-            const knob = document.createElement('div');
-            knob.style.position = 'absolute';
-            knob.style.width = '18px';
-            knob.style.height = '18px';
-            knob.style.borderRadius = '9px';
-            knob.style.backgroundColor = '#ffffff';
-            knob.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.15)';
-            knob.style.top = '2px';
-            knob.style.left = isChecked ? '16px' : '2px';
-            knob.style.transition = 'left 0.3s ease';
-
-            // Function to update visual state
-            const updateVisualState = (checked) => {
-                knob.style.left = checked ? '16px' : '2px';
-                container.style.backgroundColor = checked
-                    ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
-                    : '#e9e9ea';
-            };
-
-            // Add click event
-            container.addEventListener('click', () => {
-                isChecked = !isChecked;
-                updateVisualState(isChecked);
-                if (onChange) onChange(isChecked);
-            });
-
-            // Assemble the toggle
-            container.appendChild(knob);
-
-            // Add tooltip
-            container.title = type === 'priority' ? 'Priority Card' : 'Exclude Card';
-
-            return container;
-        }
     }
 
-    // Members offer on card popup
-    function renderMembers_offerOnCard(accountNumber, offerType) {
-        // Create the overlay with backdrop blur
-        const overlay = document.createElement('div');
-        overlay.id = 'offer-details-overlay';
-        overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0,0,0,0.4);
-        backdrop-filter: blur(4px);
-        z-index: 10000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    `;
-
-        // Modern popup container
-        const popup = document.createElement('div');
-        popup.style.cssText = `
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 24px;
-        width: 90%;
-        max-width: 400px;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-        position: relative;
-    `;
-
-        overlay.appendChild(popup);
-
-        // ───────── Top row: Title and Close Button ─────────
-        const topRow = document.createElement('div');
-        topRow.style.cssText = `
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid #eee;
-    `;
-
-        const leftTitle = document.createElement('h3');
-        leftTitle.textContent = `Offers ${offerType} for card ending ${accountNumber}`;
-        leftTitle.style.cssText = `
-        margin: 0;
-        font-size: 1.2rem;
-        font-weight: 600;
-        background: linear-gradient(45deg, #2c3e50, #4CAF50);
-        -webkit-background-clip: text;
-        color: transparent;
-    `;
-
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '&times;';
-        closeBtn.style.cssText = `
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        color: #666;
-        cursor: pointer;
-        padding: 4px;
-        transition: all 0.2s ease;
-    `;
-        closeBtn.addEventListener('mouseover', () => {
-            closeBtn.style.color = '#ff4444';
-        });
-        closeBtn.addEventListener('mouseout', () => {
-            closeBtn.style.color = '#666';
-        });
-        closeBtn.addEventListener('click', () => {
-            overlay.remove();
-        });
-
-        topRow.appendChild(leftTitle);
-        topRow.appendChild(closeBtn);
-        popup.appendChild(topRow);
-
-        // ───────── Content Area ─────────
-        const contentDiv = document.createElement('div');
-        contentDiv.style.cssText = `
-        font-size: 14px;
-        line-height: 1.4;
-    `;
-        popup.appendChild(contentDiv);
-
-        // Determine relevant offers based on offerType
-        let relevantOffers = [];
-        if (offerType === 'eligible') {
-            relevantOffers = glb_offer.filter(offer =>
-                Array.isArray(offer.eligibleCards) &&
-                offer.eligibleCards.includes(accountNumber)
-            );
-        } else if (offerType === 'enrolled') {
-            relevantOffers = glb_offer.filter(offer =>
-                Array.isArray(offer.enrolledCards) &&
-                offer.enrolledCards.includes(accountNumber)
-            );
-        }
-
-        if (relevantOffers.length === 0) {
-            contentDiv.textContent = `No ${offerType} offers found for card ${accountNumber}.`;
-        } else {
-            relevantOffers.forEach(offer => {
-                const offerPara = document.createElement('p');
-                offerPara.style.cssText = `
-                margin: 6px 0;
-                font-size: 14px;
-                color: #333;
-            `;
-                offerPara.textContent = offer.name;
-                contentDiv.appendChild(offerPara);
-            });
-        }
-
-        document.body.appendChild(overlay);
-    }
-
-    // Members page container
-    function renderMembers_page() {
-        const containerDiv = document.createElement('div');
-        containerDiv.style.display = 'flex';
-        containerDiv.style.flexDirection = 'column';
-        containerDiv.style.gap = '16px';
-        containerDiv.style.padding = '16px';
-        containerDiv.style.maxWidth = '1300px';
-        containerDiv.style.margin = '0 auto';
-        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
-
-        return containerDiv;
-    }
-
-
-    function renderOffers_searchBar() {
+    // Enhanced search bar with better organization
+    function offers_renderSearchBar() {
         const filterCard = document.createElement('div');
-        filterCard.style.background = 'var(--ios-background)';
-        filterCard.style.backdropFilter = 'blur(8px)';
-        filterCard.style.WebkitBackdropFilter = 'blur(8px)';
-        filterCard.style.borderRadius = '14px';
-        filterCard.style.padding = '16px 20px';
-        filterCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-        filterCard.style.display = 'flex';
-        filterCard.style.gap = '16px';
-        filterCard.style.flexWrap = 'wrap';
-        filterCard.style.width = '100%';
-        filterCard.style.boxSizing = 'border-box';
-        filterCard.style.border = '1px solid var(--ios-border)';
-        filterCard.style.marginBottom = '16px';
-        filterCard.style.alignItems = 'center';
+        filterCard.style.cssText = 'background:var(--ios-background); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; padding:16px 20px; box-shadow:0 4px 12px rgba(0,0,0,0.08); display:flex; gap:16px; flex-wrap:wrap; width:100%; box-sizing:border-box; border:1px solid var(--ios-border); margin-bottom:8px; align-items:center;';
 
-        // Favorites Toggle with iOS styling
-        const favContainer = document.createElement('div');
-        favContainer.style.display = 'flex';
-        favContainer.style.alignItems = 'center';
-        favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
-        favContainer.style.padding = '6px 12px';
-        favContainer.style.borderRadius = '10px';
-        favContainer.style.border = '1px solid rgba(0, 122, 255, 0.15)';
-        favContainer.style.transition = 'all 0.2s ease';
+        // Create left container with view toggle and enroll button
+        const filterContainer = createFilterContainer();
+        filterCard.appendChild(filterContainer);
 
-        const favCheckbox = document.createElement('input');
-        favCheckbox.type = 'checkbox';
-        favCheckbox.checked = glb_filters.offerFav;
-        favCheckbox.style.cursor = 'pointer';
-        favCheckbox.style.accentColor = 'var(--ios-blue)';
-        favCheckbox.style.marginRight = '8px';
-        favCheckbox.style.height = '16px';
-        favCheckbox.style.width = '16px';
-
-        favCheckbox.addEventListener('change', () => {
-            glb_filters.offerFav = favCheckbox.checked;
-            if (favCheckbox.checked) {
-                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-            } else {
-                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
-            }
-            renderPage();
-        });
-
-        const favLabel = document.createElement('label');
-        favLabel.textContent = "Show Favorites Only";
-        favLabel.style.fontSize = '13px';
-        favLabel.style.cursor = 'pointer';
-        favLabel.style.fontWeight = '500';
-        favLabel.style.color = 'var(--ios-text-secondary)';
-        favLabel.style.fontFamily = 'var(--ios-font)';
-
-        favContainer.appendChild(favCheckbox);
-        favContainer.appendChild(favLabel);
-
-        favContainer.addEventListener('mouseenter', () => {
-            if (!favCheckbox.checked) {
-                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.12)';
-            }
-        });
-
-        favContainer.addEventListener('mouseleave', () => {
-            if (!favCheckbox.checked) {
-                favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
-            }
-        });
-
-        // Custom search input for merchants
-        const merchantSearchContainer = document.createElement('div');
-        merchantSearchContainer.style.position = 'relative';
-        merchantSearchContainer.style.flex = '1';
-        merchantSearchContainer.style.minWidth = '200px';
-        merchantSearchContainer.style.maxWidth = '300px';
-
-        const merchantSearchInput = document.createElement('input');
-        merchantSearchInput.type = 'text';
-        merchantSearchInput.placeholder = 'Search merchants...';
-        merchantSearchInput.value = glb_filters.offerMerchantSearch || '';
-        merchantSearchInput.style.width = '100%';
-        merchantSearchInput.style.padding = '10px 32px 10px 12px';
-        merchantSearchInput.style.borderRadius = '10px';
-        merchantSearchInput.style.border = '1px solid var(--ios-border)';
-        merchantSearchInput.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
-        merchantSearchInput.style.fontSize = '13px';
-        merchantSearchInput.style.fontFamily = 'var(--ios-font)';
-        merchantSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-        merchantSearchInput.style.transition = 'all 0.2s ease';
-
-        merchantSearchInput.addEventListener('focus', () => {
-            merchantSearchInput.style.outline = 'none';
-            merchantSearchInput.style.borderColor = 'var(--ios-blue)';
-            merchantSearchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
-        });
-
-        merchantSearchInput.addEventListener('blur', () => {
-            merchantSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-            merchantSearchInput.style.borderColor = 'var(--ios-border)';
-        });
-
-        // Search icon
-        const merchantSearchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        merchantSearchIcon.setAttribute('width', '16');
-        merchantSearchIcon.setAttribute('height', '16');
-        merchantSearchIcon.setAttribute('viewBox', '0 0 24 24');
-        merchantSearchIcon.style.position = 'absolute';
-        merchantSearchIcon.style.right = '12px';
-        merchantSearchIcon.style.top = '50%';
-        merchantSearchIcon.style.transform = 'translateY(-50%)';
-        merchantSearchIcon.style.color = 'var(--ios-blue)';
-        merchantSearchIcon.style.opacity = '0.6';
-        merchantSearchIcon.style.pointerEvents = 'none';
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
-        path.setAttribute('fill', 'currentColor');
-        merchantSearchIcon.appendChild(path);
-
-        merchantSearchContainer.appendChild(merchantSearchInput);
-        merchantSearchContainer.appendChild(merchantSearchIcon);
-
-        // Debounce function for search input
-        const debounce = (func, wait) => {
-            let timeout;
-            return function (...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
-        };
-
-        // Add event listener with debounce
-        merchantSearchInput.addEventListener('input', debounce(() => {
-            glb_filters.offerMerchantSearch = merchantSearchInput.value.toLowerCase();
-            renderPage();
-        }, 300));
-
-        // Card ending search input
-        const cardSearchContainer = document.createElement('div');
-        cardSearchContainer.style.position = 'relative';
-        cardSearchContainer.style.flex = '1';
-        cardSearchContainer.style.minWidth = '150px';
-        cardSearchContainer.style.maxWidth = '200px';
-
-        const cardSearchInput = document.createElement('input');
-        cardSearchInput.type = 'text';
-        cardSearchInput.placeholder = 'Card ending...';
-        cardSearchInput.value = glb_filters.offerCardEnding || '';
-        cardSearchInput.style.width = '100%';
-        cardSearchInput.style.padding = '10px 32px 10px 12px';
-        cardSearchInput.style.borderRadius = '10px';
-        cardSearchInput.style.border = '1px solid var(--ios-border)';
-        cardSearchInput.style.backgroundColor = 'rgba(250, 250, 250, 0.7)';
-        cardSearchInput.style.fontSize = '13px';
-        cardSearchInput.style.fontFamily = 'var(--ios-font)';
-        cardSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-        cardSearchInput.style.transition = 'all 0.2s ease';
-
-        cardSearchInput.addEventListener('focus', () => {
-            cardSearchInput.style.outline = 'none';
-            cardSearchInput.style.borderColor = 'var(--ios-blue)';
-            cardSearchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.08)';
-        });
-
-        cardSearchInput.addEventListener('blur', () => {
-            cardSearchInput.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05) inset';
-            cardSearchInput.style.borderColor = 'var(--ios-border)';
-        });
-
-        // Card icon
-        const cardIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        cardIcon.setAttribute('width', '16');
-        cardIcon.setAttribute('height', '16');
-        cardIcon.setAttribute('viewBox', '0 0 24 24');
-        cardIcon.style.position = 'absolute';
-        cardIcon.style.right = '12px';
-        cardIcon.style.top = '50%';
-        cardIcon.style.transform = 'translateY(-50%)';
-        cardIcon.style.color = 'var(--ios-blue)';
-        cardIcon.style.opacity = '0.6';
-        cardIcon.style.pointerEvents = 'none';
-
-        const cardPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        cardPath.setAttribute('d', 'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z');
-        cardPath.setAttribute('fill', 'currentColor');
-        cardIcon.appendChild(cardPath);
-
-        cardSearchContainer.appendChild(cardSearchInput);
-        cardSearchContainer.appendChild(cardIcon);
-
-        // Add event listener with debounce
-        cardSearchInput.addEventListener('input', debounce(() => {
-            glb_filters.offerCardEnding = cardSearchInput.value;
-            renderPage();
-        }, 300));
-
-        // Reset button
-        const resetButton = document.createElement('button');
-        resetButton.textContent = 'Reset';
-        resetButton.style.padding = '8px 16px';
-        resetButton.style.borderRadius = '10px';
-        resetButton.style.border = 'none';
-        resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        resetButton.style.color = 'var(--ios-text-secondary)';
-        resetButton.style.fontSize = '13px';
-        resetButton.style.fontWeight = '500';
-        resetButton.style.cursor = 'pointer';
-        resetButton.style.transition = 'all 0.2s ease';
-        resetButton.style.fontFamily = 'var(--ios-font)';
-
-        resetButton.addEventListener('mouseenter', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
-        });
-
-        resetButton.addEventListener('mouseleave', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        });
-
-        resetButton.addEventListener('click', () => {
-            merchantSearchInput.value = '';
-            cardSearchInput.value = '';
-            favCheckbox.checked = false;
-            glb_filters.offerMerchantSearch = '';
-            glb_filters.offerCardEnding = '';
-            glb_filters.offerFav = false;
-            favContainer.style.backgroundColor = 'rgba(0, 122, 255, 0.08)';
-            renderPage();
-        });
-
-        filterCard.appendChild(favContainer);
-        filterCard.appendChild(merchantSearchContainer);
-        filterCard.appendChild(cardSearchContainer);
-        filterCard.appendChild(resetButton);
+        // Create right container with search and reset
+        const searchContainer = createSearchContainer();
+        filterCard.appendChild(searchContainer);
 
         return filterCard;
     }
 
-    // Offers table
-    function renderOffers_table() {
-        // Filter offers based on search criteria.
-        const filteredOffers = glb_offer.filter(o => {
+    // Create left filter container with controls
+    function createFilterContainer() {
+        const filterContainer = document.createElement('div');
+        filterContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:12px; flex:1; align-items:center;';
+
+        // Add view mode toggle
+        const viewModeToggle = createViewModeToggle();
+        filterContainer.appendChild(viewModeToggle);
+
+        // Add Enroll All button
+        const enrollAllBtn = ui_createBtn_v2({
+            label: 'Enroll All Offers',
+            icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>',
+            onClick: async () => {
+                try {
+                    await api_batchEnrollOffers();
+                    ui_renderCurrentView();
+                } catch (e) {
+                    console.error('Error enrolling all:', e);
+                }
+            },
+            bgColor: 'var(--ios-green)',
+            size: 'large',
+            fullWidth: true,
+            maxWidth: '200px'
+        });
+
+        filterContainer.appendChild(enrollAllBtn);
+        return filterContainer;
+    }
+
+    // Create view mode toggle
+    function createViewModeToggle() {
+        const currentMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
+
+        const toggleContainer = document.createElement('div');
+        toggleContainer.style.cssText = 'display:flex; border-radius:10px; overflow:hidden; border:1px solid var(--ios-border); background-color:rgba(250, 250, 250, 0.5);';
+
+        // Table view button
+        const tableBtn = document.createElement('button');
+        tableBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z"/>
+        </svg>
+        `;
+        tableBtn.style.cssText = `padding:8px 12px; border:none; background-color:${currentMode === 'table' ? 'rgba(0, 122, 255, 0.1)' : 'transparent'}; color:${currentMode === 'table' ? 'var(--ios-blue)' : 'var(--ios-text-secondary)'}; cursor:pointer; transition:all 0.2s ease;`;
+
+        // Grid view button
+        const gridBtn = document.createElement('button');
+        gridBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 3v8h8V3H3zm0 18h8v-8H3v8zm10 0h8v-8h-8v8zm8-18h-8v8h8V3z"/>
+        </svg>
+        `;
+        gridBtn.style.cssText = `padding:8px 12px; border:none; background-color:${currentMode === 'grid' ? 'rgba(0, 122, 255, 0.1)' : 'transparent'}; color:${currentMode === 'grid' ? 'var(--ios-blue)' : 'var(--ios-text-secondary)'}; cursor:pointer; transition:all 0.2s ease;`;
+
+        // Add event listeners
+        tableBtn.addEventListener('click', () => updateViewMode('table', tableBtn, gridBtn));
+        gridBtn.addEventListener('click', () => updateViewMode('grid', gridBtn, tableBtn));
+
+        // Add hover effects
+        const hoverEffect = (btn, mode) => {
+            btn.addEventListener('mouseenter', () => {
+                if (currentMode !== mode) {
+                    btn.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                }
+            });
+            btn.addEventListener('mouseleave', () => {
+                if (currentMode !== mode) {
+                    btn.style.backgroundColor = 'transparent';
+                }
+            });
+        };
+
+        hoverEffect(tableBtn, 'table');
+        hoverEffect(gridBtn, 'grid');
+
+        toggleContainer.appendChild(tableBtn);
+        toggleContainer.appendChild(gridBtn);
+        return toggleContainer;
+    }
+
+    // Update view mode
+    function updateViewMode(mode, activeBtn, inactiveBtn) {
+        localStorage.setItem('amaxoffer_offers_display', mode);
+
+        // Update button styles
+        activeBtn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+        activeBtn.style.color = 'var(--ios-blue)';
+        inactiveBtn.style.backgroundColor = 'transparent';
+        inactiveBtn.style.color = 'var(--ios-text-secondary)';
+
+        // Update the display
+        const container = document.getElementById('offers-display-container');
+        if (container) {
+            container.innerHTML = '';
+            container.appendChild(mode === 'grid' ? offers_renderGridView() : offers_renderTableView());
+        }
+    }
+
+    // Create search container
+    function createSearchContainer() {
+        const searchContainer = document.createElement('div');
+        searchContainer.style.cssText = 'display:flex; gap:12px; align-items:center; flex-wrap:wrap; flex:1; justify-content:flex-end;';
+
+        // Merchant search
+        const merchantSearchContainer = document.createElement('div');
+        merchantSearchContainer.style.cssText = 'position:relative; box-sizing:border-box; min-width:180px; max-width:300px; flex:1; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;';
+
+        const merchantInput = document.createElement('input');
+        merchantInput.className = 'ios-search-input';
+        merchantInput.type = 'text';
+        merchantInput.placeholder = 'Search merchants...';
+        merchantInput.value = glb_filters.offerMerchantSearch || '';
+        merchantInput.style.cssText = 'width:100%; padding:10px 32px 10px 12px; border-radius:10px; border:1px solid #e0e0e0; background-color:rgba(250, 250, 250, 0.8); font-size:14px; font-family:var(--ios-font);';
+
+        const merchantSearchIcon = document.createElement('div');
+        merchantSearchIcon.className = 'ios-search-icon';
+        merchantSearchIcon.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:0.6; color:var(--ios-blue); pointer-events:none;';
+        merchantSearchIcon.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        `;
+
+        merchantInput.addEventListener('input', util_debounce(() => {
+            glb_filters.offerMerchantSearch = merchantInput.value.toLowerCase();
+            ui_renderCurrentView();
+        }, 300));
+
+        merchantSearchContainer.appendChild(merchantInput);
+        merchantSearchContainer.appendChild(merchantSearchIcon);
+        searchContainer.appendChild(merchantSearchContainer);
+
+        // Card ending search
+        const cardSearchContainer = document.createElement('div');
+        cardSearchContainer.style.cssText = 'position:relative; box-sizing:border-box; min-width:150px; max-width:200px; flex:0.7; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;';
+
+        const cardInput = document.createElement('input');
+        cardInput.className = 'ios-search-input';
+        cardInput.type = 'text';
+        cardInput.placeholder = 'Card ending...';
+        cardInput.value = glb_filters.offerCardEnding || '';
+        cardInput.style.cssText = 'width:100%; padding:10px 32px 10px 12px; border-radius:10px; border:1px solid #e0e0e0; background-color:rgba(250, 250, 250, 0.8); font-size:14px; font-family:var(--ios-font);';
+
+        const cardSearchIcon = document.createElement('div');
+        cardSearchIcon.className = 'ios-search-icon';
+        cardSearchIcon.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:0.6; color:var(--ios-blue); pointer-events:none;';
+        cardSearchIcon.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"/>
+            <line x1="2" y1="10" x2="22" y2="10"/>
+        </svg>
+        `;
+
+        cardInput.addEventListener('input', util_debounce(() => {
+            glb_filters.offerCardEnding = cardInput.value;
+            ui_renderCurrentView();
+        }, 300));
+
+        cardSearchContainer.appendChild(cardInput);
+        cardSearchContainer.appendChild(cardSearchIcon);
+        searchContainer.appendChild(cardSearchContainer);
+
+        // Reset button
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset Filters';
+        resetButton.style.cssText = 'padding:10px 16px; border-radius:10px; border:none; background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s ease; display:flex; align-items:center; gap:8px;';
+
+        const resetIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        resetIcon.setAttribute('width', '16');
+        resetIcon.setAttribute('height', '16');
+        resetIcon.setAttribute('viewBox', '0 0 24 24');
+        resetIcon.setAttribute('fill', 'none');
+        resetIcon.setAttribute('stroke', 'currentColor');
+        resetIcon.setAttribute('stroke-width', '2');
+        resetIcon.setAttribute('stroke-linecap', 'round');
+        resetIcon.setAttribute('stroke-linejoin', 'round');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M3 12h18M3 6h18M3 18h18');
+        resetIcon.appendChild(path);
+        resetButton.prepend(resetIcon);
+
+        resetButton.addEventListener('mouseenter', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+        });
+
+        resetButton.addEventListener('mouseleave', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        });
+
+        resetButton.addEventListener('click', () => {
+            // Reset all filters
+            merchantInput.value = '';
+            cardInput.value = '';
+            offers_resetAllFilters();
+            ui_renderCurrentView();
+        });
+
+        searchContainer.appendChild(resetButton);
+        return searchContainer;
+    }
+
+    // util_debounce function for input events
+    function util_debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    // Optimized filter offers
+    function offers_filterOffersList() {
+        return glb_offer.filter(o => {
+            // Check favorite filter
             if (glb_filters.offerFav && !o.favorite) return false;
+
+            // Check merchant search
             if (glb_filters.offerMerchantSearch && !o.name.toLowerCase().includes(glb_filters.offerMerchantSearch)) return false;
+
+            // Check card ending filter
             if (glb_filters.offerCardEnding) {
                 const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(glb_filters.offerCardEnding);
                 const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(glb_filters.offerCardEnding);
                 if (!eligible && !enrolled) return false;
             }
+
+            // Check enrollment status filters
+            if (glb_filters.enrollmentStatus === 'fully') {
+                const eligible = o.eligibleCards?.length || 0;
+                const enrolled = o.enrolledCards?.length || 0;
+                if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
+            }
+
+            if (glb_filters.enrollmentStatus === 'pending') {
+                const eligible = o.eligibleCards?.length || 0;
+                const enrolled = o.enrolledCards?.length || 0;
+                if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
+            }
+
+            if (glb_filters.eligibleOnly) {
+                if ((o.eligibleCards?.length || 0) === 0) return false;
+            }
+
+            if (glb_filters.enrolledOnly) {
+                if ((o.enrolledCards?.length || 0) === 0) return false;
+            }
+
+            // Check custom filter for expiring soon
+            if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
+                if (!glb_filters.customFilter(o)) return false;
+            }
+
             return true;
         });
+    }
+
+    // Optimized empty state creator
+    function ui_createEmptyState(container, options = {}) {
+        const {
+            title = 'No Items Found',
+            message = 'Try adjusting your search or filters',
+            buttonText = 'Reset Filters',
+            iconSvg = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
+            callback = handleoffers_resetAllFilters
+        } = options;
+
+        container.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; text-align:center; background-color:rgba(0,0,0,0.02); border-radius:16px; margin:20px 0;';
+
+        // Illustration
+        const illustration = document.createElement('div');
+        illustration.style.cssText = 'margin-bottom:24px; width:100px; height:100px; display:flex; align-items:center; justify-content:center;';
+        illustration.innerHTML = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">${iconSvg}</svg>`;
+
+        // Message elements
+        const titleElement = document.createElement('div');
+        titleElement.style.cssText = 'font-size:18px; font-weight:600; margin-bottom:12px; color:#1c1c1e;';
+        titleElement.textContent = title;
+
+        const subtitleElement = document.createElement('div');
+        subtitleElement.style.cssText = 'font-size:14px; color:var(--ios-gray); max-width:400px; margin:0 auto 24px;';
+        subtitleElement.textContent = message;
+
+        // Reset button
+        const resetButton = document.createElement('button');
+        resetButton.textContent = buttonText;
+        resetButton.style.cssText = 'padding:10px 20px; background-color:var(--ios-blue); color:white; border:none; border-radius:10px; font-size:14px; font-weight:500; cursor:pointer; box-shadow:0 2px 8px rgba(0, 122, 255, 0.3); transition:all 0.2s ease;';
+
+        resetButton.addEventListener('mouseenter', () => {
+            resetButton.style.transform = 'translateY(-2px)';
+            resetButton.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
+        });
+
+        resetButton.addEventListener('mouseleave', () => {
+            resetButton.style.transform = 'translateY(0)';
+            resetButton.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+        });
+
+        resetButton.addEventListener('click', callback);
+
+        // Assemble empty state
+        container.appendChild(illustration);
+        container.appendChild(titleElement);
+        container.appendChild(subtitleElement);
+        container.appendChild(resetButton);
+
+        return container;
+    }
+
+    function ui_createFilterBar(options = {}) {
+        const {
+            searchPlaceholder = 'Search...',
+            resetCallback = () => { },
+            onSearch = () => { },
+            additionalControls = []
+        } = options;
+
+        const filtersCard = document.createElement('div');
+        filtersCard.style.cssText = 'background:var(--ios-background); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; padding:16px 20px; box-shadow:0 4px 12px rgba(0,0,0,0.08); display:flex; flex-wrap:wrap; gap:16px; width:100%; box-sizing:border-box; border:1px solid var(--ios-border); margin-bottom:8px; align-items:center; justify-content:flex-end;';
+
+        // Create search container
+        const searchContainer = document.createElement('div');
+        searchContainer.style.cssText = 'display:flex; gap:12px; align-items:center; flex-wrap:nowrap; margin-left:auto;';
+
+        // Search input container
+        const searchInputContainer = document.createElement('div');
+        searchInputContainer.style.cssText = 'position:relative; width:250px; max-width:300px; margin-right:4px; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;';
+
+        // Search icon
+        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        searchIcon.setAttribute('width', '16');
+        searchIcon.setAttribute('height', '16');
+        searchIcon.setAttribute('viewBox', '0 0 24 24');
+        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        searchIcon.appendChild(path);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = searchPlaceholder;
+        input.className = 'ios-search-input';
+        input.style.cssText = 'width:100%; padding:10px 32px 10px 12px; border-radius:10px; border:1px solid #e0e0e0; background-color:rgba(250, 250, 250, 0.8); font-size:14px; font-family:var(--ios-font);';
+
+        input.addEventListener('input', util_debounce(() => {
+            onSearch(input.value);
+        }, 300));
+
+        searchInputContainer.appendChild(input);
+        searchInputContainer.appendChild(searchIcon);
+        searchContainer.appendChild(searchInputContainer);
+
+        // Add additional controls
+        additionalControls.forEach(control => {
+            searchContainer.appendChild(control);
+        });
+
+        // Add reset button
+        const resetButton = createResetBtn('Reset Filters', null, resetCallback);
+        searchContainer.appendChild(resetButton);
+        filtersCard.appendChild(searchContainer);
+
+        return filtersCard;
+    }
+
+    function ui_createBtn_v2(config = {}) {
+        const {
+            label = '',
+            icon = null,
+            onClick = () => { },
+            bgColor = 'var(--ios-blue)',
+            textColor = 'white',
+            size = 'medium',
+            type = 'primary',
+            fullWidth = false,
+            maxWidth = null // New parameter
+        } = config;
+
+        const btn = document.createElement('button');
+
+        if (icon) {
+            btn.innerHTML = `${icon} ${label}`;
+        } else {
+            btn.textContent = label;
+        }
+
+        const sizeStyles = {
+            small: 'padding:6px 12px; font-size:13px;',
+            medium: 'padding:10px 16px; font-size:14px;',
+            large: 'padding:12px 24px; font-size:16px;'
+        };
+
+        const typeStyles = {
+            primary: `background-color:${bgColor}; color:${textColor}; border:none;`,
+            secondary: `background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary); border:none;`,
+            outline: `background-color:transparent; color:${bgColor}; border:1px solid ${bgColor};`
+        };
+
+        btn.style.cssText = `
+            ${sizeStyles[size] || sizeStyles.medium}
+            ${typeStyles[type] || typeStyles.primary}
+            border-radius:10px;
+            font-weight:500;
+            cursor:pointer;
+            transition:all 0.2s ease;
+            display:flex;
+            align-items:center;
+            gap:8px;
+            ${fullWidth ? 'width:100%;' : ''}
+            ${maxWidth ? `max-width:${maxWidth};` : ''}
+            `;
+
+        btn.addEventListener('mouseenter', () => {
+            if (type === 'primary') {
+                btn.style.backgroundColor = util_darkenColor(bgColor);
+                btn.style.transform = 'translateY(-2px)';
+            } else if (type === 'secondary') {
+                btn.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+            } else if (type === 'outline') {
+                btn.style.backgroundColor = `${bgColor}10`;
+            }
+        });
+
+        btn.addEventListener('mouseleave', () => {
+            if (type === 'primary') {
+                btn.style.backgroundColor = bgColor;
+                btn.style.transform = 'translateY(0)';
+            } else if (type === 'secondary') {
+                btn.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+            } else if (type === 'outline') {
+                btn.style.backgroundColor = 'transparent';
+            }
+        });
+
+        btn.addEventListener('click', onClick);
+
+        return btn;
+    }
+
+    const UI_STYLES = {
+        cardContainer: 'background:var(--ios-background); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); border:1px solid var(--ios-border);',
+        pageContainer: 'display:flex; flex-direction:column; gap:20px; padding:20px; max-width:100%; margin:0 auto; font-family:var(--ios-font); transition:all 0.3s ease;',
+        flexRow: 'display:flex; align-items:center; gap:12px;',
+        flexColumn: 'display:flex; flex-direction:column; gap:12px;'
+    };
+
+    // Renderer for offers table (optimizing cell creation)
+    function offers_renderTableView() {
+        // Filter offers based on search criteria
+        const filteredOffers = offers_filterOffersList();
 
         const headers = [
-            { label: "❤️", key: "favorite" },
+            { label: "★", key: "favorite" },
             { label: "Logo", key: "logo" },
             { label: "Offer", key: "name" },
             { label: "Type", key: "achievement_type" },
-            { label: "Cat", key: "category" },
+            { label: "Category", key: "category" },
             { label: "Expiry", key: "expiry_date" },
             { label: "Usage", key: "redemption_types" },
             { label: "Description", key: "short_description" },
@@ -3540,741 +4926,3047 @@
         ];
 
         const colWidths = {
-            favorite: "40px",
-            logo: "70px",
-            name: "180px",
-            achievement_type: "70px",
-            category: "40px",
-            expiry_date: "120px",
-            redemption_types: "80px",
-            short_description: "230px",
-            threshold: "90px",
-            reward: "90px",
-            percentage: "80px",
-            eligibleCards: "80px",
-            enrolledCards: "80px"
+            favorite: "40px", logo: "70px", name: "180px", achievement_type: "70px",
+            category: "90px", expiry_date: "110px", redemption_types: "80px",
+            short_description: "230px", threshold: "90px", reward: "90px",
+            percentage: "80px", eligibleCards: "80px", enrolledCards: "80px"
         };
 
+        // Check if we have any offers after filtering
+        if (filteredOffers.length === 0) {
+            const container = document.createElement('div');
+            return ui_createEmptyState(container, {
+                title: 'No Offers Found',
+                message: glb_filters.offerFav ? 'No favorite offers found' :
+                    (glb_filters.offerMerchantSearch ? `No offers match "${glb_filters.offerMerchantSearch}"` : 'No offers available')
+            });
+        }
 
-        // Define cell rendering logic for offers table
-        const cellRenderer = (item, headerItem) => {
-            const key = headerItem.key;
-            if (key === 'logo') {
-                if (item.logo && item.logo !== "N/A") {
+        // Create cell handlers for cleaner code organization
+        const cellHandlers = {
+            favorite: (offer) => {
+                const starBtn = document.createElement('button');
+                starBtn.innerHTML = offer.favorite ?
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+                starBtn.style.cssText = 'background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; margin:0 auto; padding:5px; border-radius:50%; transition:all 0.2s ease;';
+
+                starBtn.addEventListener('mouseenter', () => {
+                    starBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                    starBtn.style.transform = 'scale(1.1)';
+                });
+
+                starBtn.addEventListener('mouseleave', () => {
+                    starBtn.style.backgroundColor = 'transparent';
+                    starBtn.style.transform = 'scale(1)';
+                });
+
+                starBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    offer.favorite = !offer.favorite;
+                    starBtn.innerHTML = offer.favorite ?
+                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+
+                    // Save to storage
+                    storage_manageData("set", storage_accToken, ["offer"]);
+
+                    // If favorite filter is on, we need to re-render
+                    if (glb_filters.offerFav) {
+                        ui_renderCurrentView();
+                    }
+                });
+
+                return starBtn;
+            },
+
+            logo: (offer) => {
+                if (offer.logo && offer.logo !== "N/A") {
+                    const imgContainer = document.createElement('div');
+                    imgContainer.style.cssText = 'display:flex; justify-content:center; align-items:center; height:50px;';
+
                     const img = document.createElement('img');
-                    img.src = item.logo;
+                    img.src = offer.logo;
                     img.alt = "Offer Logo";
-                    img.style.maxWidth = "60px";
-                    img.style.maxHeight = "60px";
-                    return img;
+                    img.style.cssText = 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;';
+
+                    imgContainer.addEventListener('mouseenter', () => img.style.transform = 'scale(1.15)');
+                    imgContainer.addEventListener('mouseleave', () => img.style.transform = 'scale(1)');
+
+                    imgContainer.appendChild(img);
+                    return imgContainer;
                 }
                 return 'N/A';
-            } else if (key === 'achievement_type') {
-                let value = item.achievement_type;
-                if (value === "STATEMENT_CREDIT") {
-                    value = "Cash";
-                } else if (value === "MEMBERSHIP_REWARDS") {
-                    value = "MR";
+            },
+
+            name: (offer) => {
+                const nameContainer = document.createElement('div');
+                nameContainer.style.cssText = 'max-width:170px; font-weight:600; font-size:14px; color:var(--ios-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:8px 4px;';
+                nameContainer.textContent = offer.name;
+                nameContainer.title = offer.name;
+                return nameContainer;
+            },
+
+            achievement_type: (offer) => {
+                const achievementType = offer.achievement_type;
+                const achievementDiv = document.createElement('div');
+
+                if (achievementType === "STATEMENT_CREDIT") {
+                    achievementDiv.textContent = "Cash";
+                    achievementDiv.style.color = '#2e7d32';
+                } else if (achievementType === "MEMBERSHIP_REWARDS") {
+                    achievementDiv.textContent = "MR";
+                    achievementDiv.style.color = '#1976d2';
+                } else {
+                    achievementDiv.textContent = achievementType;
                 }
-                return value;
-            } else if (key === 'category') {
-                if (item.category && item.category !== "N/A") {
-                    const cat = item.category.toString().toLowerCase().trim();
-                    // Map full names to an emoji (or short text)
+
+                achievementDiv.style.fontWeight = '500';
+                achievementDiv.style.fontSize = '13px';
+                return achievementDiv;
+            },
+
+            category: (offer) => {
+                if (offer.category && offer.category !== "N/A") {
+                    const cat = offer.category.toString().toLowerCase().trim();
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:6px;';
+
+                    // Map categories to icons and colors
                     const categoryMap = {
-                        "default": "🔰",
-                        "dining": "🍽️",
-                        "entertainment": "🎭",
-                        "services": "⚙️",
-                        "shopping": "🛍️",
-                        "travel": "✈️"
+                        "default": { icon: "🔰", color: "#9e9e9e" },
+                        "dining": { icon: "🍽️", color: "#d32f2f" },
+                        "entertainment": { icon: "🎭", color: "#7b1fa2" },
+                        "services": { icon: "⚙️", color: "#616161" },
+                        "shopping": { icon: "🛍️", color: "#1976d2" },
+                        "travel": { icon: "✈️", color: "#0288d1" }
                     };
-                    return categoryMap[cat] || (cat.charAt(0).toUpperCase() + cat.slice(1));
+
+                    const config = categoryMap[cat] || { icon: "•", color: "#757575" };
+
+                    const badge = document.createElement('span');
+                    badge.textContent = config.icon;
+
+                    const label = document.createElement('span');
+                    label.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                    label.style.color = config.color;
+                    label.style.fontSize = '13px';
+
+                    categoryDiv.appendChild(badge);
+                    categoryDiv.appendChild(label);
+                    return categoryDiv;
                 }
                 return 'N/A';
-            } else if (key === 'redemption_types') {
-                if (item.redemption_types && item.redemption_types !== "N/A") {
-                    let parts = item.redemption_types.toString().split(",");
-                    let abbreviatedParts = parts.map(val => {
+            },
+
+            redemption_types: (offer) => {
+                if (offer.redemption_types && offer.redemption_types !== "N/A") {
+                    let parts = offer.redemption_types.toString().split(",");
+                    const iconsDiv = document.createElement('div');
+                    iconsDiv.style.cssText = 'display:flex; justify-content:center; gap:8px;';
+
+                    parts.forEach(val => {
                         let trimmed = val.trim().toLowerCase();
-                        if (trimmed.includes("instore")) return "🏬";
-                        if (trimmed.includes("online")) return "🌐";
-                        // Fallback: take the first three letters in uppercase
-                        return trimmed.toUpperCase().slice(0, 3);
+                        const icon = document.createElement('span');
+                        icon.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background-color:rgba(0,0,0,0.05);';
+
+                        if (trimmed.includes("instore")) {
+                            icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1976d2" stroke-width="2">
+                            <path d="M3 3h18v7H3z"/>
+                            <path d="M21 10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10"/>
+                            <path d="M11 14h.01M6 14h.01M16 14h.01M4 11v-1h16v1"/>
+                        </svg>`;
+                            icon.title = "In-Store";
+                        } else if (trimmed.includes("online")) {
+                            icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V4l-8-2-8 2v8c0 6 8 10 8 10z"/>
+                        </svg>`;
+                            icon.title = "Online";
+                        } else {
+                            icon.textContent = trimmed.toUpperCase().slice(0, 1);
+                            icon.title = trimmed;
+                        }
+
+                        iconsDiv.appendChild(icon);
                     });
-                    return abbreviatedParts.join("");
+                    return iconsDiv;
                 }
                 return "N/A";
-            } else if (key === 'expiry_date') {
-                if (item.expiry_date && item.expiry_date !== 'N/A') {
-                    const d = new Date(item.expiry_date);
+            },
+
+            expiry_date: (offer) => {
+                if (offer.expiry_date && offer.expiry_date !== 'N/A') {
+                    const d = new Date(offer.expiry_date);
                     if (!isNaN(d)) {
-                        const yy = d.getFullYear().toString().slice(-2);
-                        const mm = String(d.getMonth() + 1).padStart(2, '0');
-                        const dd = String(d.getDate()).padStart(2, '0');
-                        return `${mm}-${dd}-${yy}`;
+                        const now = new Date();
+                        const daysUntilExpiry = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+
+                        const expiryContainer = document.createElement('div');
+                        expiryContainer.style.cssText = 'display:flex; flex-direction:column; align-items:center;';
+
+                        const dateSpan = document.createElement('span');
+                        dateSpan.textContent = util_formatDate(offer.expiry_date);
+                        dateSpan.style.fontSize = '13px';
+
+                        const daysSpan = document.createElement('span');
+
+                        if (daysUntilExpiry < 0) {
+                            daysSpan.textContent = 'Expired';
+                            daysSpan.style.color = 'var(--ios-red)';
+                        } else if (daysUntilExpiry <= 30) {
+                            daysSpan.textContent = `${daysUntilExpiry} days left`;
+                            daysSpan.style.color = 'var(--ios-orange)';
+                        } else {
+                            daysSpan.textContent = `${daysUntilExpiry} days left`;
+                            daysSpan.style.color = 'var(--ios-gray)';
+                            daysSpan.style.fontSize = '11px';
+                        }
+
+                        expiryContainer.appendChild(dateSpan);
+                        expiryContainer.appendChild(daysSpan);
+                        return expiryContainer;
                     }
                     return 'N/A';
                 }
                 return 'N/A';
-            } else if (key === 'favorite') {
-                const chk = document.createElement('input');
-                chk.type = 'checkbox';
-                chk.checked = item.favorite === true;
-                chk.style.cursor = 'pointer';
-                chk.addEventListener('change', () => {
-                    item.favorite = chk.checked;
-                    localStorageHandler("set", storage_accToken, ["offer"]);
-                });
-                return chk;
-            } else if (key === 'eligibleCards' || key === 'enrolledCards') {
-                const cards = Array.isArray(item[key]) ? item[key] : [];
-                const count = cards.length;
+            },
 
-                // Create container for consistent height across all counts
-                const container = document.createElement('div');
-                container.style.height = '28px';  // Fixed height for all badges
-                container.style.display = 'flex';
-                container.style.alignItems = 'center';
-                container.style.justifyContent = 'center';
+            short_description: (offer) => {
+                const descContainer = document.createElement('div');
+                descContainer.style.cssText = 'font-size:13px; color:var(--ios-text-secondary); max-width:220px; max-height:60px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; line-height:1.3;';
+                descContainer.textContent = offer.short_description || 'No description available';
+                descContainer.title = offer.short_description;
+                return descContainer;
+            },
 
-                if (count > 0) {
-                    const btn = document.createElement('button');
-                    btn.textContent = count;
-                    btn.className = 'ios-counter-badge';
+            threshold: (offer) => renderFormattedValue(offer.threshold, '#1c1c1e'),
+            reward: (offer) => renderFormattedValue(offer.reward, 'var(--ios-green)'),
+            percentage: (offer) => renderFormattedValue(offer.percentage, 'var(--ios-blue)'),
 
-                    // iOS-style badging
-                    btn.style.borderRadius = '14px';
-                    btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                    btn.style.color = key === 'eligibleCards' ? 'var(--ios-blue)' : 'var(--ios-green)';
-                    btn.style.border = `1px solid ${key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)'}`;
-                    btn.style.padding = '4px 10px';
-                    btn.style.fontWeight = '500';
-                    btn.style.fontSize = '13px';
-                    btn.style.fontFamily = 'var(--ios-font)';
-                    btn.style.cursor = 'pointer';
-                    btn.style.transition = 'all 0.2s ease';
-                    btn.style.height = '28px';  // Match container height
-                    btn.style.boxSizing = 'border-box';
-                    // FIX: Add vertical alignment styles
-                    btn.style.display = 'flex';
-                    btn.style.alignItems = 'center';
-                    btn.style.justifyContent = 'center';
-                    btn.style.lineHeight = '1';
-
-                    btn.addEventListener('mouseover', () => {
-                        btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
-                        btn.style.transform = 'translateY(-1px)';
-                    });
-
-                    btn.addEventListener('mouseout', () => {
-                        btn.style.backgroundColor = key === 'eligibleCards' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                        btn.style.transform = 'translateY(0)';
-                    });
-
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        renderOffers_enrollCard(item.offerId);
-                    });
-                    container.appendChild(btn);
-                } else {
-                    // For zero count, return a disabled-looking badge with same height
-                    const span = document.createElement('span');
-                    span.textContent = '0';
-                    span.className = 'ios-counter-badge-disabled';
-                    span.style.borderRadius = '14px';
-                    span.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-                    span.style.color = 'var(--ios-gray)';
-                    span.style.border = '1px solid rgba(142, 142, 147, 0.2)';
-                    span.style.padding = '4px 10px';
-                    span.style.fontWeight = '500';
-                    span.style.fontSize = '13px';
-                    span.style.fontFamily = 'var(--ios-font)';
-                    span.style.height = '28px';  // Match container height
-                    span.style.boxSizing = 'border-box';
-                    // FIX: Change from inline-flex to flex and add vertical alignment
-                    span.style.display = 'flex';
-                    span.style.alignItems = 'center';
-                    span.style.justifyContent = 'center';
-                    span.style.lineHeight = '1';
-                    container.appendChild(span);
-                }
-
-                return container;
-            }
-
-            return item[key];
+            eligibleCards: (offer) => renderCardsCountBadge(offer, 'eligibleCards'),
+            enrolledCards: (offer) => renderCardsCountBadge(offer, 'enrolledCards')
         };
 
-        // Define the sortable keys for offers table
-        const sortableKeysOffers = [
-            "favorite", "logo", "name", "achievement_type", "category",
-            "expiry_date", "redemption_types", "short_description", "threshold",
-            "reward", "percentage", "eligibleCards", "enrolledCards"
+        // Helper function for formatted values
+        function renderFormattedValue(value, color) {
+            if (value && value !== 'N/A') {
+                const valueDiv = document.createElement('div');
+                valueDiv.style.cssText = `font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color};`;
+                valueDiv.textContent = value;
+                return valueDiv;
+            }
+            return 'N/A';
+        }
+
+        // Helper function for card count badges
+        function renderCardsCountBadge(offer, key) {
+            const cardTokens = Array.isArray(offer[key]) ? offer[key] : [];
+            const count = cardTokens.length;
+
+            const container = document.createElement('div');
+            container.style.cssText = 'height:32px; display:flex; align-items:center; justify-content:center;';
+
+            if (count > 0) {
+                const isEligible = key === 'eligibleCards';
+                const btn = document.createElement('button');
+                btn.className = isEligible ? 'eligible-badge' : 'enrolled-badge';
+
+                const bgColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
+                const textColor = isEligible ? 'var(--ios-blue)' : 'var(--ios-green)';
+                const borderColor = isEligible ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)';
+
+                btn.style.cssText = `
+                border-radius:16px; background-color:${bgColor}; color:${textColor}; 
+                border:1px solid ${borderColor}; padding:5px 12px; font-weight:600; 
+                font-size:13px; cursor:pointer; transition:all 0.2s ease; display:flex; 
+                align-items:center; justify-content:center; gap:4px;
+                `;
+
+                // Add icon based on type
+                if (isEligible) {
+                    btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textColor}" stroke-width="2">
+                        <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+                        <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+                    </svg>
+                    ${count}
+                    `;
+                } else {
+                    btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textColor}" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <path d="M22 4L12 14.01l-3-3"/>
+                    </svg>
+                    ${count}
+                    `;
+                }
+
+                btn.addEventListener('mouseover', () => {
+                    btn.style.transform = 'translateY(-2px)';
+                    btn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                });
+
+                btn.addEventListener('mouseout', () => {
+                    btn.style.transform = 'translateY(0)';
+                    btn.style.boxShadow = 'none';
+                });
+
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent row click
+                    offers_showEnrollment(offer.offerId);
+                });
+
+                container.appendChild(btn);
+            } else {
+                // Zero count indicator
+                const emptySpan = document.createElement('span');
+                emptySpan.textContent = '0';
+                emptySpan.style.cssText = 'color:rgba(0,0,0,0.3);';
+                container.appendChild(emptySpan);
+            }
+
+            return container;
+        }
+
+        // Define cell renderer with handler pattern
+        const cellRenderer = (offer, headerItem) => {
+            const key = headerItem.key;
+            return cellHandlers[key] ? cellHandlers[key](offer) : (offer[key] || 'N/A');
+        };
+
+        // Define sortable columns
+        const sortableKeys = [
+            "favorite", "name", "achievement_type", "category",
+            "expiry_date", "threshold", "reward", "percentage",
+            "eligibleCards", "enrolledCards"
         ];
 
-        const tableElement = renderTable(headers, colWidths, filteredOffers, cellRenderer, sort_offerTab, sortableKeysOffers);
-        const containerDiv = document.createElement('div');
-        containerDiv.appendChild(tableElement);
-        return containerDiv;
+        // Use the improved ui_renderDataTable function
+        const tableElement = ui_renderDataTable(headers, colWidths, filteredOffers, cellRenderer, offers_sortTable, sortableKeys);
+
+        // Apply required styling directly to the table
+        tableElement.style.cssText = 'font-size:13px; border-collapse:separate; border-spacing:0; background-color:#ffffff; border-radius:var(--ios-radius); overflow:hidden; width:100%; box-shadow:none; border:1px solid rgba(60, 60, 67, 0.12);';
+
+        // Make rows clickable to open enrollment modal
+        setTimeout(() => {
+            const rows = tableElement.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                    if (index < filteredOffers.length) {
+                        offers_showEnrollment(filteredOffers[index].offerId);
+                    }
+                });
+            });
+        }, 0);
+
+        return tableElement;
     }
 
-    // Offers enrollment card modal
-    async function renderOffers_enrollCard(offerId) {
+    // Optimized grid view renderer
+    function offers_renderGridView() {
+        // Filter offers
+        const filteredOffers = offers_filterOffersList();
+
+        // Create container
+        const gridContainer = document.createElement('div');
+        gridContainer.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:20px; width:100%; margin-top:16px;';
+
+        // Check for empty state
+        if (filteredOffers.length === 0) {
+            return ui_createEmptyState(gridContainer);
+        }
+
+        // Create a card for each offer
+        filteredOffers.forEach(offer => {
+            const card = offers_createGridCard(offer);
+            gridContainer.appendChild(card);
+        });
+
+        return gridContainer;
+    }
+
+    // Helper to create each offer card
+    function offers_createGridCard(offer) {
+        const card = document.createElement('div');
+        card.className = 'offer-card';
+        card.style.cssText = `background-color:white; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); overflow:hidden; transition:all 0.3s ease; border:${offer.favorite ? '2px solid rgba(255, 149, 0, 0.5)' : '1px solid rgba(0,0,0,0.08)'}; display:flex; flex-direction:column; height:100%;`;
+
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-6px)';
+            card.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)';
+        });
+
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        });
+
+        // Card components
+        const cardHeader = offers_createCardHeader(offer);
+        const cardBody = offers_createCardBody(offer);
+        const cardFooter = offers_createCardFooter(offer);
+
+        card.appendChild(cardHeader);
+        card.appendChild(cardBody);
+        card.appendChild(cardFooter);
+
+        // Make entire card clickable
+        card.addEventListener('click', () => {
+            offers_showEnrollment(offer.offerId);
+        });
+
+        return card;
+    }
+
+
+    function offers_createCard(offer, options = {}) {
+        const { showHeader = true, showBody = true, showFooter = true } = options;
+        const card = document.createElement('div');
+        card.className = 'offer-card';
+        card.style.cssText = `background-color:white; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); overflow:hidden; transition:all 0.3s ease; border:${offer.favorite ? '2px solid rgba(255, 149, 0, 0.5)' : '1px solid rgba(0,0,0,0.08)'}; display:flex; flex-direction:column; height:100%;`;
+
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-6px)';
+            card.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)';
+        });
+
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        });
+
+        // Add components conditionally
+        if (showHeader) card.appendChild(offers_createCardHeader(offer));
+        if (showBody) card.appendChild(offers_createCardBody(offer));
+        if (showFooter) card.appendChild(offers_createCardFooter(offer));
+
+        // Make entire card clickable
+        card.addEventListener('click', () => {
+            offers_showEnrollment(offer.offerId);
+        });
+
+        return card;
+    }
+
+    // Create card header with merchant logo and favorite button
+    function offers_createCardHeader(offer) {
+        const cardHeader = document.createElement('div');
+        cardHeader.style.cssText = 'padding:16px; display:flex; align-items:center; border-bottom:1px solid rgba(0,0,0,0.04);';
+
+        // Logo container
+        const logoContainer = document.createElement('div');
+        logoContainer.style.cssText = 'width:48px; height:48px; background-color:rgba(0,0,0,0.03); border-radius:8px; display:flex; align-items:center; justify-content:center; margin-right:12px; flex-shrink:0;';
+
+        if (offer.logo && offer.logo !== 'N/A') {
+            const logo = document.createElement('img');
+            logo.src = offer.logo;
+            logo.alt = offer.name;
+            logo.style.cssText = 'max-width:80%; max-height:80%;';
+            logoContainer.appendChild(logo);
+        } else {
+            // Fallback to first letter of merchant name
+            const logoText = document.createElement('div');
+            logoText.textContent = offer.name.charAt(0).toUpperCase();
+            logoText.style.cssText = 'font-size:24px; font-weight:600; color:rgba(0,0,0,0.7);';
+            logoContainer.appendChild(logoText);
+        }
+
+        // Merchant name and category
+        const nameContainer = document.createElement('div');
+        nameContainer.style.cssText = 'flex:1; overflow:hidden;';
+
+        const nameRow = document.createElement('div');
+        nameRow.style.cssText = 'display:flex; align-items:center; gap:6px; margin-bottom:4px;';
+
+        if (offer.favorite) {
+            const starIcon = document.createElement('span');
+            starIcon.textContent = '★';
+            starIcon.style.cssText = 'color:#ff9500; font-size:14px;';
+            nameRow.appendChild(starIcon);
+        }
+
+        const merchantName = document.createElement('div');
+        merchantName.textContent = offer.name;
+        merchantName.style.cssText = 'font-weight:600; font-size:16px; color:#1c1c1e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+        nameRow.appendChild(merchantName);
+        nameContainer.appendChild(nameRow);
+
+        // Add category badge if available
+        if (offer.category && offer.category !== 'N/A') {
+            const categoryBadge = document.createElement('div');
+            categoryBadge.textContent = offer.category;
+            categoryBadge.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5); background-color:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;';
+            nameContainer.appendChild(categoryBadge);
+        }
+
+        // Favorite toggle button
+        const favButton = document.createElement('button');
+        favButton.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="${offer.favorite ? '#ff9500' : 'none'}" 
+             stroke="${offer.favorite ? '#ff9500' : '#888'}" stroke-width="2">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+        </svg>
+        `;
+        favButton.style.cssText = 'background:none; border:none; cursor:pointer; padding:6px; border-radius:50%; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;';
+
+        favButton.addEventListener('mouseenter', () => {
+            favButton.style.backgroundColor = 'rgba(0,0,0,0.05)';
+            favButton.style.transform = 'scale(1.1)';
+        });
+
+        favButton.addEventListener('mouseleave', () => {
+            favButton.style.backgroundColor = 'transparent';
+            favButton.style.transform = 'scale(1)';
+        });
+
+        favButton.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent card click
+            offer.favorite = !offer.favorite;
+
+            // Update star icon
+            favButton.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="${offer.favorite ? '#ff9500' : 'none'}" 
+                 stroke="${offer.favorite ? '#ff9500' : '#888'}" stroke-width="2">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+            `;
+
+            // Update card border
+            card.style.border = offer.favorite ? '2px solid rgba(255, 149, 0, 0.5)' : '1px solid rgba(0,0,0,0.08)';
+
+            // Save to storage
+            storage_manageData("set", storage_accToken, ["offer"]);
+
+            // If favorite filter is on, we need to re-render
+            if (glb_filters.offerFav) {
+                ui_renderCurrentView();
+            }
+        });
+
+        // Assemble header
+        cardHeader.appendChild(logoContainer);
+        cardHeader.appendChild(nameContainer);
+        cardHeader.appendChild(favButton);
+
+        return cardHeader;
+    }
+
+    // Create card body with offer details
+    function offers_createCardBody(offer) {
+        const cardBody = document.createElement('div');
+        cardBody.style.cssText = 'padding:16px; flex:1; display:flex; flex-direction:column;';
+
+        // Offer description
+        const description = document.createElement('div');
+        description.style.cssText = 'font-size:14px; color:#4a4a4a; margin-bottom:16px; flex:1; line-height:1.5;';
+
+        // Truncate description if too long
+        if (offer.short_description && offer.short_description.length > 120) {
+            description.textContent = offer.short_description.substring(0, 120) + '...';
+            description.title = offer.short_description;
+        } else {
+            description.textContent = offer.short_description || 'No description available';
+        }
+
+        // Offer metrics grid with reusable component
+        const metricsGrid = document.createElement('div');
+        metricsGrid.style.cssText = 'display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:16px;';
+
+        // Helper for metric tiles
+        const createMetricTile = (label, value, iconSvg) => {
+            if (!value || value === 'N/A') return null;
+
+            const tile = document.createElement('div');
+            tile.style.cssText = 'background-color:rgba(0,0,0,0.02); border-radius:8px; padding:10px; display:flex; align-items:center;';
+
+            const icon = document.createElement('div');
+            icon.innerHTML = iconSvg;
+            icon.style.cssText = 'margin-right:8px; color:var(--ios-blue);';
+
+            const textContent = document.createElement('div');
+
+            const labelEl = document.createElement('div');
+            labelEl.textContent = label;
+            labelEl.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5); margin-bottom:2px;';
+
+            const valueEl = document.createElement('div');
+            valueEl.textContent = value;
+            valueEl.style.cssText = 'font-size:14px; font-weight:600; color:#1c1c1e;';
+
+            textContent.appendChild(labelEl);
+            textContent.appendChild(valueEl);
+
+            tile.appendChild(icon);
+            tile.appendChild(textContent);
+
+            return tile;
+        };
+
+        // Metric icons
+        const icons = {
+            threshold: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 20h20M6 16V4M10 16V8M14 16v-4M18 16V4"/>
+        </svg>`,
+            reward: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v6M12 18v4M4.93 10.93l4.24 4.24M14.83 8.93l4.24-4.24M3 18h18M3 6h18"/>
+        </svg>`,
+            percent: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 5L5 19M9 5a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM15 15a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
+        </svg>`,
+            expiry: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+        </svg>`
+        };
+
+        // Add available metrics
+        const tiles = [
+            createMetricTile('Spend', offer.threshold, icons.threshold),
+            createMetricTile('Reward', offer.reward, icons.reward),
+            createMetricTile('Percent', offer.percentage, icons.percent),
+            createMetricTile('Expires', util_formatDate(offer.expiry_date), icons.expiry)
+        ];
+
+        tiles.forEach(tile => {
+            if (tile) metricsGrid.appendChild(tile);
+        });
+
+        // Assemble body
+        cardBody.appendChild(description);
+        cardBody.appendChild(metricsGrid);
+
+        return cardBody;
+    }
+
+    // Create card footer with eligible/enrolled cards
+    function offers_createCardFooter(offer) {
+        const cardFooter = document.createElement('div');
+        cardFooter.style.cssText = 'padding:16px; border-top:1px solid rgba(0,0,0,0.04); display:flex; justify-content:space-between; align-items:center;';
+
+        // Count eligible and enrolled cards
+        const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
+        const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
+
+        // Helper for badge creation
+        const createCountBadge = (count, label, color, iconSvg) => {
+            const badge = document.createElement('div');
+            badge.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+            const icon = document.createElement('div');
+            icon.innerHTML = iconSvg;
+            icon.style.color = color;
+
+            const countContainer = document.createElement('div');
+
+            const countValue = document.createElement('div');
+            countValue.textContent = count;
+            countValue.style.cssText = `font-weight:600; font-size:16px; color:${count > 0 ? color : 'rgba(0,0,0,0.3)'};`;
+
+            const countLabel = document.createElement('div');
+            countLabel.textContent = label;
+            countLabel.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5);';
+
+            countContainer.appendChild(countValue);
+            countContainer.appendChild(countLabel);
+
+            badge.appendChild(icon);
+            badge.appendChild(countContainer);
+
+            return badge;
+        };
+
+        // Badge icons
+        const eligibleIcon = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+            <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+        </svg>
+        `;
+
+        const enrolledIcon = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <path d="M22 4L12 14.01l-3-3"/>
+        </svg>
+        `;
+
+        // Create badges
+        const eligibleBadge = createCountBadge(eligibleCount, 'Eligible', 'var(--ios-blue)', eligibleIcon);
+        const enrolledBadge = createCountBadge(enrolledCount, 'Enrolled', 'var(--ios-green)', enrolledIcon);
+
+        // Add click handlers
+        if (eligibleCount > 0) {
+            eligibleBadge.style.cursor = 'pointer';
+            eligibleBadge.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card click
+                offers_showEnrollment(offer.offerId);
+            });
+
+            eligibleBadge.addEventListener('mouseenter', () => {
+                eligibleBadge.style.transform = 'scale(1.05)';
+            });
+
+            eligibleBadge.addEventListener('mouseleave', () => {
+                eligibleBadge.style.transform = 'scale(1)';
+            });
+        }
+
+        if (enrolledCount > 0) {
+            enrolledBadge.style.cursor = 'pointer';
+            enrolledBadge.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card click
+                offers_showEnrollment(offer.offerId);
+            });
+
+            enrolledBadge.addEventListener('mouseenter', () => {
+                enrolledBadge.style.transform = 'scale(1.05)';
+            });
+
+            enrolledBadge.addEventListener('mouseleave', () => {
+                enrolledBadge.style.transform = 'scale(1)';
+            });
+        }
+
+        // Add badges to footer
+        cardFooter.appendChild(eligibleBadge);
+        cardFooter.appendChild(enrolledBadge);
+
+        return cardFooter;
+    }
+
+    // Enhanced enrollment card modal
+    function offers_showEnrollment(offerId) {
+        // Get offer data
+        const offer = glb_offer.find(o => o.offerId === offerId);
+
+        if (!offer) {
+            console.error('Offer not found for ID:', offerId);
+            return;
+        }
+
         // Remove existing overlay
         const overlayId = 'offer-details-overlay';
         const existing = document.getElementById(overlayId);
         if (existing) existing.remove();
 
-        // Get offer data
-        const offer = glb_offer.find(o => o.offerId === offerId);
-        const offerName = offer ? offer.name : 'Unknown Offer';
-
-        // Create overlay and popup
+        // Create overlay with smooth animation
         const overlay = document.createElement('div');
         overlay.id = overlayId;
-        overlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10000;
-      display: flex; justify-content: center; align-items: center;
-    `;
-        const popup = document.createElement('div');
-        popup.style.cssText = `
-      background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 440px;
-      max-height: 90vh; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15); position: relative;
-    `;
-        // Header
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(0,0,0,0.4)';
+        overlay.style.backdropFilter = 'blur(8px)';
+        overlay.style.WebkitBackdropFilter = 'blur(8px)';
+        overlay.style.zIndex = '10001';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s ease';
+
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.style.backgroundColor = '#fff';
+        modal.style.borderRadius = '16px';
+        modal.style.boxShadow = '0 20px 60px rgba(0,0,0,0.15)';
+        modal.style.width = '90%';
+        modal.style.maxWidth = '800px';
+        modal.style.maxHeight = '90vh';
+        modal.style.overflow = 'hidden';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.transform = 'translateY(40px) scale(0.95)';
+        modal.style.opacity = '0';
+        modal.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+
+        // Modal header with offer details
         const header = document.createElement('div');
-        header.style.cssText = `display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #eee;`;
-        const title = document.createElement('h3');
-        title.textContent = offerName;
-        title.style.cssText = `margin: 0; font-size: 1.2rem; font-weight: 600;
-      background: linear-gradient(45deg, #2c3e50, #4CAF50); -webkit-background-clip: text; color: transparent;`;
-        const closeBtn = createIconButton('×', () => { overlay.remove(); saveCurrentScrollState(); renderPage(); });
-        closeBtn.style.cssText += 'font-size:1.5rem; color:#666; padding:4px;';
-        header.append(title, closeBtn);
-        popup.appendChild(header);
+        header.style.padding = '20px';
+        header.style.borderBottom = '1px solid rgba(0,0,0,0.08)';
+        header.style.position = 'relative';
 
-        if (offer) {
-            if (offer.eligibleCards?.length) {
-                const enrollAll = createIconButton('Enroll All Cards', async () => {
-                    console.log(`Calling batch enrollment for "${offerName}" (source_id: ${offer.source_id}).`);
-                    const results = await get__batchEnrollOffer(offer.source_id);
-                    results.forEach(r => {
-                        if (r.offerId !== offerId) return;
-                        const acc = glb_account.find(a => a.account_token === r.accountToken);
-                        if (!acc) return;
-                        const cardEnd = acc.display_account_number;
+        // Offer title row
+        const titleRow = document.createElement('div');
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'flex-start';
+        titleRow.style.gap = '16px';
+        titleRow.style.marginRight = '24px'; // Space for close button
 
-                        if (r.result) {
-                            const idx = offer.eligibleCards.indexOf(cardEnd);
-                            if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                            if (!offer.enrolledCards.includes(cardEnd)) offer.enrolledCards.push(cardEnd);
-                        }
-                        const cardElem = document.getElementById(`offerCard_${offerId}_${cardEnd}`);
-                        if (cardElem) {
-                            cardElem.style.backgroundColor = r.result ? '#c0ffc0' : '#ffc0c0';
-                            setTimeout(() => cardElem.style.backgroundColor = r.result ? '#e8f5e9' : '#e3f2fd', 3000);
-                        }
-                    });
-                    setTimeout(() => renderOffers_enrollCard(offerId), 3000);
-                }, 'plus');
-                enrollAll.style.cssText += `
-          width: 100%; margin: 0 0 20px 0; background: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
-          color: white; border-radius: 8px; font-weight: 500;
-        `;
-                popup.appendChild(enrollAll);
-            }
-            // Card Sections
-            popup.appendChild(createSection('Eligible Cards', offer.eligibleCards, offerId, false, offer));
-            popup.appendChild(createSection('Enrolled Cards', offer.enrolledCards, offerId, true, offer));
+        // Logo container
+        const logoContainer = document.createElement('div');
+        logoContainer.style.width = '60px';
+        logoContainer.style.height = '60px';
+        logoContainer.style.borderRadius = '8px';
+        logoContainer.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        logoContainer.style.display = 'flex';
+        logoContainer.style.alignItems = 'center';
+        logoContainer.style.justifyContent = 'center';
+        logoContainer.style.overflow = 'hidden';
+        logoContainer.style.flexShrink = '0';
+
+        if (offer.logo && offer.logo !== 'N/A') {
+            const logo = document.createElement('img');
+            logo.src = offer.logo;
+            logo.alt = offer.name;
+            logo.style.maxWidth = '80%';
+            logo.style.maxHeight = '80%';
+            logoContainer.appendChild(logo);
         } else {
-            popup.appendChild(createErrorElement('Offer not found'));
+            // Fallback logo
+            logoContainer.textContent = offer.name.charAt(0).toUpperCase();
+            logoContainer.style.fontSize = '30px';
+            logoContainer.style.fontWeight = '600';
+            logoContainer.style.color = '#1c1c1e';
         }
-        overlay.appendChild(popup);
+
+        // Title and details
+        const titleContainer = document.createElement('div');
+        titleContainer.style.flex = '1';
+
+        const title = document.createElement('h2');
+        title.textContent = offer.name;
+        title.style.margin = '0 0 8px 0';
+        title.style.fontSize = '20px';
+        title.style.fontWeight = '600';
+        title.style.color = '#1c1c1e';
+
+        const details = document.createElement('div');
+        details.style.fontSize = '14px';
+        details.style.color = 'var(--ios-text-secondary)';
+        details.style.lineHeight = '1.4';
+
+        // Format description
+        details.textContent = offer.short_description || 'No description available';
+
+        // Badge row for metrics
+        const badgeRow = document.createElement('div');
+        badgeRow.style.display = 'flex';
+        badgeRow.style.flexWrap = 'wrap';
+        badgeRow.style.gap = '8px';
+        badgeRow.style.marginTop = '12px';
+
+        // Helper for creating metric badges
+        function createBadge(label, value, color) {
+            if (!value || value === 'N/A') return null;
+
+            const badge = document.createElement('div');
+            badge.style.backgroundColor = `rgba(${color}, 0.1)`;
+            badge.style.color = `rgb(${color})`;
+            badge.style.padding = '5px 10px';
+            badge.style.borderRadius = '12px';
+            badge.style.fontSize = '13px';
+            badge.style.fontWeight = '600';
+            badge.style.display = 'flex';
+            badge.style.alignItems = 'center';
+            badge.style.gap = '4px';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = label + ':';
+            labelSpan.style.opacity = '0.8';
+            labelSpan.style.fontWeight = '400';
+
+            const valueSpan = document.createElement('span');
+            valueSpan.textContent = value;
+
+            badge.appendChild(labelSpan);
+            badge.appendChild(valueSpan);
+
+            return badge;
+        }
+
+        // Add available badges
+        const thresholdBadge = createBadge('Spend', offer.threshold, '74, 74, 74');
+        const rewardBadge = createBadge('Reward', offer.reward, '76, 175, 80');
+        const percentBadge = createBadge('Rate', offer.percentage, '33, 150, 243');
+        const expiryBadge = createBadge('Expires', util_formatDate(offer.expiry_date), '255, 87, 34');
+
+        if (thresholdBadge) badgeRow.appendChild(thresholdBadge);
+        if (rewardBadge) badgeRow.appendChild(rewardBadge);
+        if (percentBadge) badgeRow.appendChild(percentBadge);
+        if (expiryBadge) badgeRow.appendChild(expiryBadge);
+
+        // Add type badge
+        if (offer.achievement_type) {
+            let typeLabel = offer.achievement_type;
+            let typeColor = '97, 97, 97'; // Default gray
+
+            if (offer.achievement_type === 'STATEMENT_CREDIT') {
+                typeLabel = 'Cash Back';
+                typeColor = '76, 175, 80'; // Green
+            } else if (offer.achievement_type === 'MEMBERSHIP_REWARDS') {
+                typeLabel = 'MR Points';
+                typeColor = '33, 150, 243'; // Blue
+            }
+
+            const typeBadge = createBadge('Type', typeLabel, typeColor);
+            if (typeBadge) badgeRow.appendChild(typeBadge);
+        }
+
+        // Assemble title container
+        titleContainer.appendChild(title);
+        titleContainer.appendChild(details);
+        titleContainer.appendChild(badgeRow);
+
+        // Close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+        `;
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '16px';
+        closeBtn.style.right = '16px';
+        closeBtn.style.width = '32px';
+        closeBtn.style.height = '32px';
+        closeBtn.style.borderRadius = '50%';
+        closeBtn.style.border = 'none';
+        closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
+        closeBtn.style.color = '#666';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.style.justifyContent = 'center';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.transition = 'all 0.2s ease';
+
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.1)';
+            closeBtn.style.color = '#333';
+        });
+
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
+            closeBtn.style.color = '#666';
+        });
+
+        closeBtn.addEventListener('click', () => {
+            // Fade out animation
+            modal.style.transform = 'translateY(40px) scale(0.95)';
+            modal.style.opacity = '0';
+            overlay.style.opacity = '0';
+
+            // Remove after animation
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        });
+
+        // Add favorite button next to title
+        const favBtn = document.createElement('button');
+        favBtn.innerHTML = offer.favorite ? `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff9500">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+        </svg>
+        ` : `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+        </svg>
+        `;
+        favBtn.style.cssText = `
+        background:none;
+        border:none;
+        padding:4px 6px;
+        margin-left:10px;
+        border-radius:16px;
+        background-color:${offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.05)'};
+        color:${offer.favorite ? '#ff9500' : '#666'};
+        cursor:pointer;
+        display:inline-flex;
+        align-items:center;
+        transition:all 0.2s ease;
+        vertical-align:middle;
+        `;
+
+        favBtn.addEventListener('mouseenter', () => {
+            favBtn.style.transform = 'scale(1.05)';
+        });
+
+        favBtn.addEventListener('mouseleave', () => {
+            favBtn.style.transform = 'scale(1)';
+        });
+
+        favBtn.addEventListener('click', () => {
+            offer.favorite = !offer.favorite;
+
+            // Update button appearance
+            favBtn.innerHTML = offer.favorite ? `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff9500">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+            ` : `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+            `;
+
+            favBtn.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.05)';
+            favBtn.style.color = offer.favorite ? '#ff9500' : '#666';
+
+            // Save to storage
+            storage_manageData("set", storage_accToken, ["offer"]);
+        });
+
+        // Assemble header
+        titleRow.appendChild(logoContainer);
+        titleRow.appendChild(titleContainer);
+        header.appendChild(titleRow);
+        header.appendChild(closeBtn);
+        header.appendChild(favBtn);
+
+        // Create tabbed navigation area
+        const tabContainer = document.createElement('div');
+        tabContainer.style.cssText = `
+        display: flex;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+        padding: 0 20px;
+        background-color: #f8f8f8;
+        `;
+
+        // Create the tabs
+        const tabs = ['Cards', 'Details', 'Terms'];
+        const tabButtons = {};
+
+        tabs.forEach((tabName, index) => {
+            const tab = document.createElement('button');
+            tab.textContent = tabName;
+            tab.style.cssText = `
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 15px;
+            font-weight: 500;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-right: 8px;
+            ${index === 0 ? 'border-bottom-color: var(--ios-blue); color: var(--ios-blue);' : ''}
+            `;
+
+            tab.addEventListener('mouseenter', () => {
+                if (!tab.classList.contains('active')) {
+                    tab.style.backgroundColor = 'rgba(0,0,0,0.03)';
+                }
+            });
+
+            tab.addEventListener('mouseleave', () => {
+                if (!tab.classList.contains('active')) {
+                    tab.style.backgroundColor = 'transparent';
+                }
+            });
+
+            tab.addEventListener('click', () => {
+                // Deactivate all tabs
+                Object.values(tabButtons).forEach(btn => {
+                    btn.style.borderBottomColor = 'transparent';
+                    btn.style.color = '#555';
+                    btn.classList.remove('active');
+                });
+
+                // Activate this tab
+                tab.style.borderBottomColor = 'var(--ios-blue)';
+                tab.style.color = 'var(--ios-blue)';
+                tab.classList.add('active');
+
+                // Show corresponding content
+                showTabContent(tabName.toLowerCase());
+            });
+
+            tabButtons[tabName.toLowerCase()] = tab;
+            tabContainer.appendChild(tab);
+        });
+
+        // Create content area with tab-specific content
+        const contentContainer = document.createElement('div');
+        contentContainer.style.cssText = `
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        `;
+
+        // Content for each tab
+        const tabContents = {};
+
+        // 1. Cards tab content - eligible and enrolled cards
+        tabContents.cards = document.createElement('div');
+        tabContents.cards.style.cssText = `
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        `;
+
+        // Add enroll all button if there are eligible cards
+        if (Array.isArray(offer.eligibleCards) && offer.eligibleCards.length > 0) {
+            const enrollAllContainer = document.createElement('div');
+            enrollAllContainer.style.cssText = 'margin-bottom: 16px;';
+
+            const enrollAllBtn = document.createElement('button');
+            enrollAllBtn.style.cssText = `
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(to right, #2196F3, #4CAF50);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
+            transition: all 0.2s ease;
+            `;
+
+            enrollAllBtn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <path d="M22 4L12 14.01l-3-3"/>
+            </svg>
+            Enroll All Eligible Cards (${offer.eligibleCards.length})
+            `;
+
+            // Add hover effects
+            enrollAllBtn.addEventListener('mouseenter', () => {
+                enrollAllBtn.style.transform = 'translateY(-2px)';
+                enrollAllBtn.style.boxShadow = '0 6px 16px rgba(0, 122, 255, 0.3)';
+            });
+
+            enrollAllBtn.addEventListener('mouseleave', () => {
+                enrollAllBtn.style.transform = 'translateY(0)';
+                enrollAllBtn.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.2)';
+            });
+
+            enrollAllBtn.addEventListener('click', async () => {
+                enrollAllBtn.innerHTML = '<div style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>Enrolling...';
+                enrollAllBtn.disabled = true;
+                enrollAllBtn.style.opacity = '0.8';
+
+                try {
+                    await api_batchEnrollOffers(offer.source_id);
+                    enrollAllBtn.innerHTML = '✓ Enrolled Successfully';
+                    enrollAllBtn.style.background = 'linear-gradient(to right, #4CAF50, #2E7D32)';
+                    setTimeout(() => {
+                        closeBtn.click();
+                        ui_renderCurrentView();
+                    }, 1500);
+                } catch (err) {
+                    console.error('Error:', err);
+                    enrollAllBtn.innerHTML = '× Error - Try Again';
+                    enrollAllBtn.style.background = '#F44336';
+                    setTimeout(() => {
+                        enrollAllBtn.disabled = false;
+                        enrollAllBtn.style.opacity = '1';
+                    }, 2000);
+                }
+            });
+
+            enrollAllContainer.appendChild(enrollAllBtn);
+            tabContents.cards.appendChild(enrollAllContainer);
+        }
+
+        // Create sections for eligible and enrolled cards
+
+
+
+        // Create sections for eligible and enrolled cards
+        const eligibleSection = createCardList('Eligible Cards', offer.eligibleCards || [], 'eligible');
+        const enrolledSection = createCardList('Enrolled Cards', offer.enrolledCards || [], 'enrolled');
+
+        // Add sections to container
+        tabContents.cards.appendChild(eligibleSection);
+        tabContents.cards.appendChild(enrolledSection);
+
+        // 2. Details tab content
+        tabContents.details = document.createElement('div');
+        tabContents.details.style.cssText = `
+        padding: 20px;
+        display: none;
+        `;
+
+        // Only show details if we have long_description
+        if (!offer.long_description && !offer.terms) {
+            // Try to fetch detailed information if not already present
+            const fetchDetailsBtn = document.createElement('button');
+            fetchDetailsBtn.textContent = 'Load Detailed Information';
+            fetchDetailsBtn.style.cssText = `
+            margin: 40px auto;
+            display: block;
+            padding: 12px 24px;
+            background-color: var(--ios-blue);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            `;
+
+            fetchDetailsBtn.addEventListener('mouseenter', () => {
+                fetchDetailsBtn.style.transform = 'translateY(-2px)';
+                fetchDetailsBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            });
+
+            fetchDetailsBtn.addEventListener('mouseleave', () => {
+                fetchDetailsBtn.style.transform = 'translateY(0)';
+                fetchDetailsBtn.style.boxShadow = 'none';
+            });
+
+            fetchDetailsBtn.addEventListener('click', async () => {
+                // Find a valid account for this offer
+                const account = glb_account.find(acc =>
+                    acc.account_status?.trim().toLowerCase() === "active" &&
+                    (offer.eligibleCards?.includes(acc.display_account_number) ||
+                        offer.enrolledCards?.includes(acc.display_account_number))
+                );
+
+                if (!account) {
+                    console.error("No valid account found for this offer");
+                    return;
+                }
+
+                // Change button to loading state
+                fetchDetailsBtn.textContent = 'Loading...';
+                fetchDetailsBtn.disabled = true;
+
+                try {
+                    const details = await api_fetchOfferDetails(account.account_token, offer.offerId);
+
+                    if (details && (details.terms || details.long_description)) {
+                        // Update the offer object with the fetched data
+                        offer.terms = details.terms;
+                        offer.long_description = details.long_description;
+
+                        // Save updated data
+                        storage_manageData("set", storage_accToken, ["offer"]);
+
+                        // Rebuild the details tab content
+                        buildDetailsContent();
+                    } else {
+                        throw new Error("No detailed information available");
+                    }
+                } catch (error) {
+                    console.error("Error loading offer details:", error);
+
+                    fetchDetailsBtn.textContent = 'Unable to Load Details';
+                    setTimeout(() => {
+                        fetchDetailsBtn.textContent = 'Try Again';
+                        fetchDetailsBtn.disabled = false;
+                    }, 2000);
+                }
+            });
+
+            tabContents.details.appendChild(fetchDetailsBtn);
+        } else {
+            buildDetailsContent();
+        }
+
+        function buildDetailsContent() {
+            tabContents.details.innerHTML = '';
+
+            if (offer.long_description) {
+                const detailsTitle = document.createElement('h3');
+                detailsTitle.textContent = 'Offer Details';
+                detailsTitle.style.cssText = `
+                font-size: 18px;
+                font-weight: 600;
+                margin: 0 0 16px 0;
+                color: #333;
+                `;
+
+                const detailsText = document.createElement('div');
+                detailsText.style.cssText = `
+                font-size: 15px;
+                line-height: 1.6;
+                color: #333;
+                padding: 16px;
+                background-color: rgba(0,0,0,0.02);
+                border-radius: 12px;
+                margin-bottom: 24px;
+                `;
+                detailsText.textContent = offer.long_description;
+
+                tabContents.details.appendChild(detailsTitle);
+                tabContents.details.appendChild(detailsText);
+            } else {
+                // Show placeholder for missing description
+                const noDetailsMessage = document.createElement('div');
+                noDetailsMessage.style.cssText = `
+                text-align: center;
+                padding: 30px;
+                color: #888;
+                background-color: rgba(0,0,0,0.02);
+                border-radius: 12px;
+                margin-bottom: 24px;
+                `;
+                noDetailsMessage.textContent = 'No detailed description available for this offer.';
+
+                tabContents.details.appendChild(noDetailsMessage);
+            }
+
+            // Add redemption info if available
+            if (offer.redemption_types) {
+                const redemptionTitle = document.createElement('h3');
+                redemptionTitle.textContent = 'Redemption Options';
+                redemptionTitle.style.cssText = `
+                font-size: 18px;
+                font-weight: 600;
+                margin: 24px 0 16px 0;
+                color: #333;
+                `;
+
+                // Rest of redemption code...
+            }
+
+            // Add links if available
+            if (offer.location || offer.cta) {
+                // Rest of links code...
+            }
+        }
+
+        function createOfferLink(text, url) {
+            const link = document.createElement('a');
+            link.textContent = text;
+            link.href = url;
+            link.target = '_blank';
+            link.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background-color: #f5f5f5;
+            color: #333;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            max-width: fit-content;
+            `;
+
+            link.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            ${text}
+            `;
+
+            link.addEventListener('mouseenter', () => {
+                link.style.backgroundColor = '#eee';
+                link.style.transform = 'translateY(-2px)';
+            });
+
+            link.addEventListener('mouseleave', () => {
+                link.style.backgroundColor = '#f5f5f5';
+                link.style.transform = 'translateY(0)';
+            });
+
+            return link;
+        }
+
+        // 3. Terms tab content
+        tabContents.terms = document.createElement('div');
+        tabContents.terms.style.cssText = `
+        padding: 20px;
+        display: none;
+        `;
+
+        if (!offer.terms) {
+            // Terms aren't available - show message
+            const termsPlaceholder = document.createElement('div');
+            termsPlaceholder.style.cssText = `
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            background-color: rgba(0,0,0,0.02);
+            border-radius: 12px;
+            `;
+            termsPlaceholder.textContent = 'No terms and conditions available for this offer.';
+            tabContents.terms.appendChild(termsPlaceholder);
+        } else {
+            // Show terms
+            const termsContainer = document.createElement('div');
+            termsContainer.style.cssText = `
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+            padding: 16px;
+            background-color: rgba(0,0,0,0.02);
+            border-radius: 12px;
+            `;
+            termsContainer.innerHTML = offer.terms;
+            tabContents.terms.appendChild(termsContainer);
+        }
+
+        // Function to show tab content
+        function showTabContent(tabName) {
+            Object.entries(tabContents).forEach(([name, element]) => {
+                element.style.display = name === tabName ? 'block' : 'none';
+            });
+        }
+
+        // Add all tabs to content container
+        Object.values(tabContents).forEach(element => {
+            contentContainer.appendChild(element);
+        });
+
+        // Assemble modal
+        modal.appendChild(header);
+        modal.appendChild(tabContainer);
+        modal.appendChild(contentContainer);
+
+        // Add modal to overlay
+        overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // --- Helper Functions ---
-        function createSection(label, cards, offerId, enrolled, offer) {
+        // Trigger animations after a small delay
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'translateY(0) scale(1)';
+            modal.style.opacity = '1';
+        }, 10);
+
+        // Helper function to create a card section
+        function createCardList(title, cardTokens, type) {
             const section = document.createElement('div');
-            section.style.marginBottom = '24px';
-            const secTitle = document.createElement('h4');
-            secTitle.textContent = label;
-            secTitle.style.cssText = `margin: 0 0 12px 0; color: ${enrolled ? '#4CAF50' : '#2196F3'}; font-size: 0.95rem;`;
-            const grid = document.createElement('div');
-            grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px;';
-            const sortedCards = [...cards].sort((a, b) => {
-                const accA = glb_account.find(acc => acc.display_account_number === a);
-                const accB = glb_account.find(acc => acc.display_account_number === b);
-                const [aMain, aSub] = parseCardIndex(accA?.cardIndex);
-                const [bMain, bSub] = parseCardIndex(accB?.cardIndex);
-                return aMain - bMain || aSub - bSub;
-            });
-            sortedCards.forEach(cardEnd => grid.appendChild(createCard(cardEnd, offerId, enrolled, offer)));
-            section.append(secTitle, grid);
+
+            // Section header (existing code)
+            const sectionHeader = document.createElement('div');
+            sectionHeader.style.display = 'flex';
+            sectionHeader.style.alignItems = 'center';
+            sectionHeader.style.justifyContent = 'space-between';
+            sectionHeader.style.marginBottom = '12px';
+
+            const sectionTitle = document.createElement('h3');
+            sectionTitle.textContent = title;
+            sectionTitle.style.margin = '0';
+            sectionTitle.style.fontSize = '16px';
+            sectionTitle.style.fontWeight = '600';
+            sectionTitle.style.color = type === 'eligible' ? 'var(--ios-blue)' : 'var(--ios-green)';
+
+            const cardCount = document.createElement('span');
+            cardCount.textContent = `${cardTokens.length || 0} cards`;
+            cardCount.style.fontSize = '14px';
+            cardCount.style.color = 'var(--ios-gray)';
+
+            sectionHeader.appendChild(sectionTitle);
+            sectionHeader.appendChild(cardCount);
+            section.appendChild(sectionHeader);
+
+            // Cards container
+            const cardsContainer = document.createElement('div');
+            cardsContainer.id = `${type}-cards-container`;
+            cardsContainer.style.display = 'grid';
+            cardsContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
+            cardsContainer.style.gap = '12px';
+
+            // No cards message
+            if (!cardTokens || cardTokens.length === 0) {
+                const emptyMessage = document.createElement('div');
+                emptyMessage.textContent = `No ${type} cards for this offer`;
+                emptyMessage.style.gridColumn = '1 / -1';
+                emptyMessage.style.padding = '16px';
+                emptyMessage.style.textAlign = 'center';
+                emptyMessage.style.backgroundColor = 'rgba(0,0,0,0.02)';
+                emptyMessage.style.borderRadius = '10px';
+                emptyMessage.style.color = 'var(--ios-gray)';
+                emptyMessage.style.fontSize = '14px';
+                cardsContainer.appendChild(emptyMessage);
+            } else {
+                // Create card items
+                cardTokens.forEach(cardToken => {
+                    if (!cardToken) return; // Skip undefined tokens
+
+                    // Find the card - WITH PROPER ERROR HANDLING
+                    const account = glb_account.find(acc => acc.account_token === cardToken);
+                    // Use optional chaining and provide a fallback value
+                    const displayNumber = account.display_account_number;
+
+                    // Create card item
+                    const cardItem = document.createElement('div');
+                    cardItem.id = `card-${type}-${displayNumber}`;
+                    cardItem.style.backgroundColor = 'white';
+                    cardItem.style.borderRadius = '12px';
+                    cardItem.style.border = '1px solid rgba(0,0,0,0.08)';
+                    cardItem.style.padding = '12px';
+                    cardItem.style.display = 'flex';
+                    cardItem.style.flexDirection = 'column';
+                    cardItem.style.gap = '8px';
+                    cardItem.style.transition = 'all 0.2s ease';
+
+                    // Card logo/icon with null check
+                    const cardIcon = document.createElement('div');
+                    cardIcon.style.width = '40px';
+                    cardIcon.style.height = '40px';
+                    cardIcon.style.marginBottom = '4px';
+
+                    if (account?.small_card_art && account.small_card_art !== 'N/A') {
+                        const cardImage = document.createElement('img');
+                        cardImage.src = account.small_card_art;
+                        cardImage.alt = 'Card';
+                        cardImage.style.width = '100%';
+                        cardImage.style.height = '100%';
+                        cardImage.style.objectFit = 'contain';
+                        cardIcon.appendChild(cardImage);
+                    } else {
+                        // Fallback icon
+                        cardIcon.innerHTML = `
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5">
+                            <rect x="2" y="5" width="20" height="14" rx="2" />
+                            <line x1="2" y1="10" x2="22" y2="10" />
+                        </svg>
+                        `;
+                    }
+
+                    // Card number - with fallback
+                    const cardNumberEl = document.createElement('div');
+                    cardNumberEl.textContent = `•••• ${typeof displayNumber === 'string' ? displayNumber : displayNumber}`;
+                    cardNumberEl.style.fontWeight = '600';
+                    cardNumberEl.style.fontSize = '14px';
+
+                    // Card description/name if available
+                    let cardNameEl;
+                    if (account) {
+                        cardNameEl = document.createElement('div');
+                        cardNameEl.textContent = account.description || account.embossed_name || '';
+                        cardNameEl.style.fontSize = '12px';
+                        cardNameEl.style.color = 'var(--ios-gray)';
+                        cardNameEl.style.whiteSpace = 'nowrap';
+                        cardNameEl.style.overflow = 'hidden';
+                        cardNameEl.style.textOverflow = 'ellipsis';
+                    }
+
+                    // Enroll button (only for eligible cards)
+                    let enrollButton;
+                    if (type === 'eligible') {
+                        enrollButton = document.createElement('button');
+                        enrollButton.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Enroll
+                        `;
+                        enrollButton.style.marginTop = '8px';
+                        enrollButton.style.padding = '6px 10px';
+                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                        enrollButton.style.color = 'var(--ios-blue)';
+                        enrollButton.style.border = 'none';
+                        enrollButton.style.borderRadius = '8px';
+                        enrollButton.style.fontSize = '12px';
+                        enrollButton.style.fontWeight = '500';
+                        enrollButton.style.cursor = 'pointer';
+                        enrollButton.style.display = 'flex';
+                        enrollButton.style.alignItems = 'center';
+                        enrollButton.style.justifyContent = 'center';
+                        enrollButton.style.gap = '4px';
+                        enrollButton.style.transition = 'all 0.2s ease';
+
+                        // Hover effect
+                        enrollButton.addEventListener('mouseenter', () => {
+                            enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.2)';
+                        });
+
+                        enrollButton.addEventListener('mouseleave', () => {
+                            enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                        });
+
+                        // Enroll functionality
+                        enrollButton.addEventListener('click', async (e) => {
+                            e.stopPropagation(); // Prevent card click
+
+                            if (!account) {
+                                console.error('Account not found for card:', displayNumber);
+                                return;
+                            }
+
+                            // Change button to loading state
+                            const originalButtonHtml = enrollButton.innerHTML;
+                            enrollButton.innerHTML = `
+                            <div class="spinner" style="width:12px;height:12px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>
+                            `;
+                            enrollButton.disabled = true;
+
+                            try {
+                                // Call enrollment API
+                                const result = await api_enrollInOffer(account.account_token, offer.offerId);
+
+                                if (result.result) {
+                                    // Success state
+                                    enrollButton.innerHTML = `
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    </svg>
+                                    `;
+                                    enrollButton.style.backgroundColor = 'var(--ios-green)';
+                                    enrollButton.style.color = 'white';
+
+                                    // Update data
+                                    const idx = offer.eligibleCards.indexOf(cardToken);
+                                    if (idx !== -1) {
+                                        offer.eligibleCards.splice(idx, 1);
+                                    }
+                                    if (!offer.enrolledCards.includes(account.account_token)) {
+                                        offer.enrolledCards.push(account.account_token);
+                                    }
+
+                                    // Animate card movement
+                                    setTimeout(() => {
+                                        cardItem.style.transform = 'translateX(100%)';
+                                        cardItem.style.opacity = '0';
+
+                                        // Remove after animation and update sections
+                                        setTimeout(() => {
+                                            cardItem.remove();
+                                            updateCardSections();
+                                        }, 300);
+                                    }, 500);
+                                } else {
+                                    // Error state
+                                    enrollButton.innerHTML = `
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <line x1="15" y1="9" x2="9" y2="15"/>
+                                        <line x1="9" y1="9" x2="15" y2="15"/>
+                                    </svg>
+                                    `;
+                                    enrollButton.style.backgroundColor = 'var(--ios-red)';
+                                    enrollButton.style.color = 'white';
+
+                                    // Reset after delay
+                                    setTimeout(() => {
+                                        enrollButton.innerHTML = originalButtonHtml;
+                                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                                        enrollButton.style.color = 'var(--ios-blue)';
+                                        enrollButton.disabled = false;
+                                    }, 2000);
+                                }
+                            } catch (error) {
+                                console.error('Error enrolling card:', error);
+
+                                // Error state
+                                enrollButton.innerHTML = `
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                `;
+                                enrollButton.style.backgroundColor = 'var(--ios-red)';
+                                enrollButton.style.color = 'white';
+
+                                // Reset after delay
+                                setTimeout(() => {
+                                    enrollButton.innerHTML = originalButtonHtml;
+                                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                                    enrollButton.style.color = 'var(--ios-blue)';
+                                    enrollButton.disabled = false;
+                                }, 2000);
+                            }
+                        });
+                    }
+
+                    // Assemble card item
+                    cardItem.appendChild(cardIcon);
+                    cardItem.appendChild(cardNumberEl);
+                    if (cardNameEl) cardItem.appendChild(cardNameEl);
+                    if (enrollButton) cardItem.appendChild(enrollButton);
+
+                    // Add hover effect
+                    cardItem.addEventListener('mouseenter', () => {
+                        cardItem.style.transform = 'translateY(-3px)';
+                        cardItem.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                    });
+
+                    cardItem.addEventListener('mouseleave', () => {
+                        cardItem.style.transform = 'translateY(0)';
+                        cardItem.style.boxShadow = 'none';
+                    });
+
+                    cardsContainer.appendChild(cardItem);
+                });
+            }
+
+            section.appendChild(cardsContainer);
             return section;
         }
 
-        function createCard(cardEnd, offerId, enrolled, offer) {
-            const card = document.createElement('div');
-            card.id = `offerCard_${offerId}_${cardEnd}`;
-            card.textContent = cardEnd;
-            card.style.cssText = `
-        padding: 8px; border-radius: 6px; text-align: center; font-size: 0.85rem;
-        transition: all 0.2s ease; background-color: ${enrolled ? '#e8f5e9' : '#e3f2fd'};
-        ${!enrolled ? 'cursor: pointer;' : ''}
-      `;
-            if (!enrolled) {
-                card.onclick = async () => {
-                    const acc = glb_account.find(a => a.display_account_number === cardEnd);
-                    if (!acc) { console.log(`Account not found for card: ${cardEnd}`); return; }
-                    const res = await fetchGet_enrollOffer(acc.account_token, offerId);
-                    if (res.result) {
-                        console.log(`Enrollment successful for card ${cardEnd}, offer "${offerName}"`);
-                        const idx = offer.eligibleCards.indexOf(cardEnd);
-                        if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                        if (!offer.enrolledCards.includes(cardEnd)) offer.enrolledCards.push(cardEnd);
-                    } else {
-                        console.log(`Enrollment failed for card ${cardEnd}, offer "${offerName}"`);
-                    }
-                    card.style.backgroundColor = res.result ? '#c0ffc0' : '#ffc0c0';
-                    setTimeout(() => card.style.backgroundColor = res.result ? '#e8f5e9' : '#e3f2fd', 3000);
-                    setTimeout(() => renderOffers_enrollCard(offerId), 3000);
-                };
-                card.onmouseover = () => card.style.transform = 'translateY(-2px)';
-                card.onmouseout = () => card.style.transform = 'none';
+        // Helper function to update the card sections after enrollment changes
+        function updateCardSections() {
+            const eligibleContainer = document.getElementById('eligible-cards-container');
+            const enrolledContainer = document.getElementById('enrolled-cards-container');
+
+            if (eligibleContainer && enrolledContainer) {
+                // Clear containers
+                eligibleContainer.innerHTML = '';
+                enrolledContainer.innerHTML = '';
+
+                // Re-create card sections
+                const newEligibleSection = createCardList('Eligible Cards', offer.eligibleCards || [], 'eligible');
+                const newEnrolledSection = createCardList('Enrolled Cards', offer.enrolledCards || [], 'enrolled');
+
+                // Get the parent elements
+                const eligibleParent = eligibleContainer.parentNode;
+                const enrolledParent = enrolledContainer.parentNode;
+
+                // Replace with new sections
+                eligibleParent.innerHTML = '';
+                enrolledParent.innerHTML = '';
+
+                eligibleParent.appendChild(newEligibleSection.children[0]); // Header
+                eligibleParent.appendChild(newEligibleSection.children[0]); // Cards container
+
+                enrolledParent.appendChild(newEnrolledSection.children[0]); // Header
+                enrolledParent.appendChild(newEnrolledSection.children[0]); // Cards container
+
+                // Update count badges
+                const eligibleCount = eligibleParent.querySelector('span');
+                if (eligibleCount) eligibleCount.textContent = `${offer.eligibleCards.length} cards`;
+
+                const enrolledCount = enrolledParent.querySelector('span');
+                if (enrolledCount) enrolledCount.textContent = `${offer.enrolledCards.length} cards`;
             }
-            return card;
         }
 
-        function createIconButton(text, handler, iconType) {
-            const btn = document.createElement('button');
-            btn.textContent = text;
-            if (iconType) {
-                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svg.setAttribute('viewBox', '0 0 24 24');
-                svg.setAttribute('width', '16');
-                svg.setAttribute('height', '16');
-                const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                p.setAttribute('fill', 'currentColor');
-                p.setAttribute('d', iconType === 'plus'
-                    ? 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'
-                    : 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z');
-                svg.appendChild(p);
-                btn.prepend(svg);
-            }
-            btn.onclick = handler;
-            btn.style.cssText = 'display:flex; align-items:center; gap:8px; padding:12px; border:none; cursor:pointer; transition: transform 0.2s ease;';
-            btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
-            btn.onmouseout = () => btn.style.transform = 'none';
-            return btn;
-        }
-
-        function createErrorElement(msg) {
-            const err = document.createElement('div');
-            err.textContent = msg;
-            err.style.cssText = 'padding:16px; background:#ffebee; border-radius:8px; color:#c62828; display:flex; align-items:center; gap:8px;';
-            return err;
-        }
+        // Show the 'Cards' tab by default
+        showTabContent('cards');
     }
+    //----------------------------  Benefits Page  ----------------------------//
 
-    // Offers page container
-    function renderOffers_page() {
-        const containerDiv = document.createElement('div');
-        containerDiv.style.display = 'flex';
-        containerDiv.style.flexDirection = 'column';
-        containerDiv.style.gap = '16px';
-        containerDiv.style.padding = '16px';
-        containerDiv.style.maxWidth = '1300px';
-        containerDiv.style.margin = '0 auto';
-        containerDiv.style.fontFamily = "'Inter', system-ui, sans-serif";
-        return containerDiv;
-    }
-
-    // Benefits page renderer
-    async function renderBenefits() {
+    // Improved benefits page rendering with better state management and UI rendering
+    async function benefits_renderPage() {
+        // Ensure we have benefit data
         if (!glb_benefit || glb_benefit.length === 0) {
-            await get_benefit();
+            await api_fetchAllBenefits();
         }
 
         const containerDiv = document.createElement('div');
         containerDiv.className = 'benefits-container';
-        const groupedBenefits = groupBenefits(glb_benefit);
-        const sortedBenefitGroups = sortBenefitGroups(groupedBenefits);
+        containerDiv.style.cssText = 'padding:20px; background-color:rgba(255,255,255,0.04); border-radius:12px; max-width:1000px; margin:0 auto;';
 
-        // Define statusLegendConfig here, making it accessible to all helper functions
+        // Process all data once before rendering to improve performance
+        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefits_processAndGroup(glb_benefit);
+
+        // Add benefits overview statistics
+        containerDiv.appendChild(benefits_renderStatsSummary(statusCounts));
+
+        // Create status legend with enhanced styling
         const statusLegendConfig = {
             'ACHIEVED': { label: 'Completed', color: 'var(--ios-green)' },
-            'IN_PROGRESS': { label: 'In Progress', color: 'var(--ios-blue)' }
+            'IN_PROGRESS': { label: 'In Progress', color: 'var(--ios-blue)' },
+            'NOT_STARTED': { label: 'Not Started', color: 'var(--ios-gray)' }
         };
 
-        const legend = createStatusLegend(statusLegendConfig); // Pass statusLegendConfig
-        containerDiv.appendChild(legend);
+        containerDiv.appendChild(benefits_createStatusKey(statusLegendConfig));
 
+        // Handle empty state with better user feedback
         if (sortedBenefitGroups.length === 0) {
-            const emptyState = createEmptyState();
-            containerDiv.appendChild(emptyState);
+            containerDiv.appendChild(ui_createEmptyState());
         } else {
+            // Create filter controls
+            const filterControls = benefits_createFilters();
+            containerDiv.appendChild(filterControls);
+
+            // Create accordion items with a document fragment for better performance
+            const accordionContainer = document.createElement('div');
+            accordionContainer.className = 'accordion-container';
+
+            const fragment = document.createDocumentFragment();
             sortedBenefitGroups.forEach(groupObj => {
-                const accordionItem = createAccordionItem(groupObj, statusLegendConfig); // Pass statusLegendConfig
-                containerDiv.appendChild(accordionItem);
+                fragment.appendChild(benefits_createExpandableItem(groupObj, statusLegendConfig));
             });
+
+            accordionContainer.appendChild(fragment);
+            containerDiv.appendChild(accordionContainer);
         }
 
         return containerDiv;
+    }
 
-        // --- Helper Functions ---
+    // Enhanced benefits overview with statistics
+    function benefits_renderStatsSummary(statusCounts) {
+        const overviewSection = document.createElement('div');
+        overviewSection.style.cssText = 'display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; justify-content:center;';
 
-        function groupBenefits(benefits) {
-            const grouped = {};
-            benefits.forEach(trackerObj => {
-                const key = trackerObj.benefitId;
-                grouped[key] = grouped[key] || [];
-                grouped[key].push(trackerObj);
+        // Create stat cards for each status
+        const createStatCard = (label, value, color, icon) => {
+            const card = document.createElement('div');
+            card.style.cssText = `
+            background-color:white; 
+            border-radius:16px; 
+            padding:16px 20px; 
+            min-width:140px; 
+            box-shadow:0 4px 12px rgba(0,0,0,0.06); 
+            display:flex; 
+            flex-direction:column; 
+            align-items:center; 
+            border-top:3px solid ${color};
+            transition:transform 0.2s ease;
+            `;
+
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-4px)';
             });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'translateY(0)';
+            });
+
+            const valueEl = document.createElement('div');
+            valueEl.textContent = value;
+            valueEl.style.cssText = `font-size:32px; font-weight:700; color:${color}; margin-bottom:8px;`;
+
+            const labelEl = document.createElement('div');
+            labelEl.textContent = label;
+            labelEl.style.cssText = 'font-size:14px; color:#666; text-align:center;';
+
+            // Add icon if provided
+            if (icon) {
+                const iconEl = document.createElement('div');
+                iconEl.innerHTML = icon;
+                iconEl.style.cssText = 'margin-bottom:10px;';
+                card.appendChild(iconEl);
+            }
+
+            card.appendChild(valueEl);
+            card.appendChild(labelEl);
+
+            return card;
+        };
+
+        // Icons for stat cards
+        const icons = {
+            total: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.total ? 'var(--ios-blue)' : '#aaa'}">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+            <path d="M7 12h2v5H7v-5zm4-7h2v12h-2V5zm4 4h2v8h-2v-8z"/>
+        </svg>`,
+            completed: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.achieved ? 'var(--ios-green)' : '#aaa'}">
+            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+        </svg>`,
+            inProgress: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.inProgress ? 'var(--ios-blue)' : '#aaa'}">
+            <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
+        </svg>`,
+            notStarted: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.notStarted ? 'var(--ios-gray)' : '#aaa'}">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+            <path d="M11 7h2v6h-2zm0 8h2v2h-2z"/>
+        </svg>`
+        };
+
+        // Add stats cards
+        overviewSection.appendChild(createStatCard('Total Benefits', statusCounts.total || 0, 'var(--ios-blue)', icons.total));
+        overviewSection.appendChild(createStatCard('Completed', statusCounts.achieved || 0, 'var(--ios-green)', icons.completed));
+        overviewSection.appendChild(createStatCard('In Progress', statusCounts.inProgress || 0, 'var(--ios-blue)', icons.inProgress));
+        overviewSection.appendChild(createStatCard('Not Started', statusCounts.notStarted || 0, 'var(--ios-gray)', icons.notStarted));
+
+        return overviewSection;
+    }
+
+    function benefits_createFilters() {
+        const filterContainer = document.createElement('div');
+        filterContainer.style.cssText = `
+        display:flex;
+        flex-wrap:wrap;
+        gap:12px;
+        margin-bottom:20px;
+        padding:16px;
+        background-color:rgba(255,255,255,0.6);
+        border-radius:12px;
+        box-shadow:0 2px 8px rgba(0,0,0,0.05);
+        align-items:center;
+        `;
+
+        // Search input
+        const searchWrapper = document.createElement('div');
+        searchWrapper.style.cssText = 'position:relative; flex:1; min-width:200px;';
+
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search benefits...';
+        searchInput.style.cssText = `
+        width:100%;
+        padding:10px 12px;
+        padding-left:36px;
+        border-radius:8px;
+        border:1px solid #ddd;
+        font-size:14px;
+        outline:none;
+        transition:all 0.2s ease;
+        `;
+
+        searchInput.addEventListener('focus', () => {
+            searchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.2)';
+            searchInput.style.borderColor = 'var(--ios-blue)';
+        });
+
+        searchInput.addEventListener('blur', () => {
+            searchInput.style.boxShadow = 'none';
+            searchInput.style.borderColor = '#ddd';
+        });
+
+        // Search icon
+        const searchIcon = document.createElement('div');
+        searchIcon.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        `;
+        searchIcon.style.cssText = 'position:absolute; top:50%; left:12px; transform:translateY(-50%);';
+
+        searchWrapper.appendChild(searchIcon);
+        searchWrapper.appendChild(searchInput);
+
+        // Status filter
+        const statusFilter = document.createElement('select');
+        statusFilter.style.cssText = `
+        padding:10px 12px;
+        border-radius:8px;
+        border:1px solid #ddd;
+        font-size:14px;
+        outline:none;
+        background-color:white;
+        cursor:pointer;
+        `;
+
+        const statusOptions = [
+            { value: 'all', label: 'All Statuses' },
+            { value: 'ACHIEVED', label: 'Completed' },
+            { value: 'IN_PROGRESS', label: 'In Progress' },
+            { value: 'NOT_STARTED', label: 'Not Started' }
+        ];
+
+        statusOptions.forEach(option => {
+            const optionEl = document.createElement('option');
+            optionEl.value = option.value;
+            optionEl.textContent = option.label;
+            statusFilter.appendChild(optionEl);
+        });
+
+        // Card filter
+        const cardFilter = document.createElement('select');
+        cardFilter.style.cssText = `
+        padding:10px 12px;
+        border-radius:8px;
+        border:1px solid #ddd;
+        font-size:14px;
+        outline:none;
+        background-color:white;
+        cursor:pointer;
+        `;
+
+        // Get unique card endings
+        const cardNumbers = [...new Set(glb_benefit.map(benefit => benefit.cardEnding))];
+
+        const cardOptions = [
+            { value: 'all', label: 'All Cards' },
+            ...cardNumbers.map(card => ({ value: card, label: `Card ending ${card}` }))
+        ];
+
+        cardOptions.forEach(option => {
+            const optionEl = document.createElement('option');
+            optionEl.value = option.value;
+            optionEl.textContent = option.label;
+            cardFilter.appendChild(optionEl);
+        });
+
+        // Add event listeners for filtering
+        const applyFilters = () => {
+            const searchTerm = searchInput.value.toLowerCase();
+            const selectedStatus = statusFilter.value;
+            const selectedCard = cardFilter.value;
+
+            // Find all accordion items
+            const accordionItems = document.querySelectorAll('.accordion-item');
+
+            accordionItems.forEach(item => {
+                // Get title text for search
+                const titleText = item.querySelector('.accordion-title').textContent.toLowerCase();
+
+                // Get status information
+                const statusMarkers = Array.from(item.querySelectorAll('.mini-card'));
+                const hasStatus = selectedStatus === 'all' || statusMarkers.some(marker =>
+                    marker.getAttribute('data-status') === selectedStatus
+                );
+
+                // Get card information
+                const cardMarkers = Array.from(item.querySelectorAll('.card-ending'));
+                const hasCard = selectedCard === 'all' || cardMarkers.some(marker =>
+                    marker.textContent === selectedCard
+                );
+
+                // Determine visibility
+                const matchesSearch = searchTerm === '' || titleText.includes(searchTerm);
+                const isVisible = matchesSearch && hasStatus && hasCard;
+
+                // Apply visibility
+                item.style.display = isVisible ? 'block' : 'none';
+            });
+        };
+
+        searchInput.addEventListener('input', applyFilters);
+        statusFilter.addEventListener('change', applyFilters);
+        cardFilter.addEventListener('change', applyFilters);
+
+        // Add reset button
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset Filters';
+        resetButton.style.cssText = `
+        padding:10px 16px;
+        border-radius:8px;
+        border:none;
+        background-color:rgba(142, 142, 147, 0.1);
+        color:var(--ios-text-secondary);
+        font-size:14px;
+        cursor:pointer;
+        transition:all 0.2s ease;
+        `;
+
+        resetButton.addEventListener('mouseenter', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+        });
+
+        resetButton.addEventListener('mouseleave', () => {
+            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
+        });
+
+        resetButton.addEventListener('click', () => {
+            searchInput.value = '';
+            statusFilter.value = 'all';
+            cardFilter.value = 'all';
+            applyFilters();
+        });
+
+        // Assemble filter container
+        filterContainer.appendChild(searchWrapper);
+        filterContainer.appendChild(statusFilter);
+        filterContainer.appendChild(cardFilter);
+        filterContainer.appendChild(resetButton);
+
+        return filterContainer;
+    }
+
+    // Process benefits data with improved analytics
+    function benefits_processAndGroup(benefits) {
+        // Initialize counters
+        const statusCounts = {
+            total: 0,
+            achieved: 0,
+            inProgress: 0,
+            notStarted: 0
+        };
+
+        // Group benefits by benefitId and update statuses
+        const groupedBenefits = benefits.reduce((grouped, trackerObj) => {
+            const key = trackerObj.benefitId;
+
+            // Check for zero or negative progress
+            const spentAmount = parseFloat(trackerObj.tracker?.spentAmount) || 0;
+            if (spentAmount <= 0) {
+                trackerObj.status = "NOT_STARTED";
+            }
+
+            grouped[key] = grouped[key] || [];
+            grouped[key].push(trackerObj);
+
+            // Count statuses
+            statusCounts.total++;
+            if (trackerObj.status === 'ACHIEVED') {
+                statusCounts.achieved++;
+            } else if (trackerObj.status === 'IN_PROGRESS') {
+                statusCounts.inProgress++;
+            } else {
+                statusCounts.notStarted++;
+            }
+
             return grouped;
-        }
+        }, {});
 
-        function getGroupSortData(trackerGroup) {
-            const benefitSortMapping = {
-                "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit" },
-                "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit" },
-                "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit" },
-                "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit" },
-                "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit" },
-                "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)" },
-                "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit" },
-                "$100 resy credit": { order: 8, newName: "$100 Resy Credit" },
-                "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR" },
-                "digital entertainment": { order: 10, newName: "$20 Digital Entertainment" },
-                "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit" },
-                "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit" },
-                "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards" },
-                "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access" },
-                "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass" }
-            };
+        // Enhanced sorting with more benefit types
+        const sortedBenefitGroups = benefits_sortBenefits(groupedBenefits);
 
-            const firstTracker = trackerGroup[0];
+        return {
+            groupedBenefits,
+            sortedBenefitGroups,
+            statusCounts
+        };
+    }
+
+
+    // Enhanced sorting for benefit groups
+    function benefits_sortBenefits(groupedBenefits) {
+        // Expanded mapping of benefit IDs to display order and custom names
+        const benefitSortMapping = {
+            // Credits
+            "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit", category: "Travel Credits" },
+            "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit", category: "Travel Credits" },
+            "$400-hilton-aspire-resort-credit": { order: 3, newName: "$400 Hilton Aspire Resort Credit", category: "Hotel Credits" },
+            "$240 flexible business credit": { order: 4, newName: "$240 Flexible Business Credit", category: "Business Credits" },
+            "saks-platinum-tracker": { order: 5, newName: "$100 Saks Credit", category: "Shopping Credits" },
+            "$120 dining credit for gold card": { order: 6, newName: "$120 Dining Credit (Gold)", category: "Dining Credits" },
+            "$84 dunkin' credit": { order: 7, newName: "$84 Dunkin' Credit", category: "Dining Credits" },
+            "$100 resy credit": { order: 8, newName: "$100 Resy Credit", category: "Dining Credits" },
+            "hotel-credit-platinum-tracker": { order: 9, newName: "$200 FHR Credit", category: "Hotel Credits" },
+            "digital entertainment": { order: 10, newName: "$20 Digital Entertainment Credit", category: "Entertainment Credits" },
+            "$199 clear plus credit": { order: 11, newName: "$199 CLEAR Plus Credit", category: "Travel Credits" },
+            "walmart+ monthly membership credit": { order: 12, newName: "Walmart+ Membership Credit", category: "Shopping Credits" },
+
+            // Membership benefits
+            "earn free night rewards": { order: 13, newName: "Earn Free Night Rewards", category: "Hotel Benefits" },
+            "bd04b359-cc6b-4981-bd6f-afb9456eb9ea": { order: 14, newName: "Unlimited Delta Sky Club Access", category: "Airport Benefits" },
+            "delta-sky-club-visits-platinum": { order: 15, newName: "Delta Sky Club Access Pass", category: "Airport Benefits" },
+
+            // Additional common benefits
+            "uber-cash-platinum": { order: 16, newName: "$200 Uber Cash Credit", category: "Transportation Credits" },
+            "uber-cash-gold": { order: 17, newName: "$120 Uber Cash Credit", category: "Transportation Credits" },
+            "dell-credit-business-platinum": { order: 18, newName: "$400 Dell Credit", category: "Business Credits" },
+            "wireless-credit-business-platinum": { order: 19, newName: "Wireless Credit", category: "Business Credits" },
+            "equinox-credit-platinum": { order: 20, newName: "$300 Equinox Credit", category: "Lifestyle Credits" },
+            "marriott-property-credit": { order: 21, newName: "Marriott Property Credit", category: "Hotel Credits" },
+            "hilton-property-credit": { order: 22, newName: "Hilton Property Credit", category: "Hotel Credits" },
+            "nytimes-credit": { order: 23, newName: "NY Times Credit", category: "Digital Credits" },
+            "peacock-credit": { order: 24, newName: "Peacock Credit", category: "Digital Credits" },
+            "disney-bundle-credit": { order: 25, newName: "Disney Bundle Credit", category: "Digital Credits" }
+        };
+
+        // Create array of objects with enhanced metadata
+        const groupArray = Object.entries(groupedBenefits).map(([key, group]) => {
+            const firstTracker = group[0];
             const benefitIdKey = (firstTracker.benefitId || "").toLowerCase().trim();
             const benefitNameKey = (firstTracker.benefitName || "").toLowerCase().trim();
+
             const sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
+            const periodInfo = benefits_extractPeriod(firstTracker);
 
-            if (!sortData) {
-                return { order: Infinity, displayName: firstTracker.benefitName || "" };
-            }
-            return { order: sortData.order, displayName: sortData.newName || firstTracker.benefitName || "" };
-        }
+            return {
+                key,
+                trackers: group,
+                order: sortData?.order || Infinity,
+                displayName: sortData?.newName || firstTracker.benefitName || "",
+                category: sortData?.category || benefits_inferCategoryFromTitle(firstTracker),
+                periodType: periodInfo.periodType,
+                periodLabel: periodInfo.periodLabel
+            };
+        });
 
-        function sortBenefitGroups(groupedBenefits) {
-            const groupArray = Object.entries(groupedBenefits).map(([key, group]) => {
-                const sortInfo = getGroupSortData(group);
-                return { key, trackers: group, order: sortInfo.order, displayName: sortInfo.displayName };
-            });
-
-            groupArray.sort((a, b) => {
-                if (a.order !== b.order) return a.order - b.order;
-                return (a.displayName || "").localeCompare(b.displayName || "");
-            });
-            return groupArray;
-        }
-
-        function createStatusLegend(statusLegendConfig) {
-            const legend = document.createElement('div');
-            legend.className = 'status-legend';
-
-            Object.entries(statusLegendConfig).forEach(([status, { label, color }]) => {
-                const legendItem = document.createElement('div');
-                legendItem.className = 'legend-item';
-
-                const colorDot = document.createElement('div');
-                colorDot.className = 'legend-dot';
-                colorDot.style.backgroundColor = color;
-
-                const labelSpan = document.createElement('span');
-                labelSpan.className = 'legend-label';
-                labelSpan.textContent = label;
-
-                legendItem.appendChild(colorDot);
-                legendItem.appendChild(labelSpan);
-                legend.appendChild(legendItem);
-            });
-            return legend;
-        }
-
-        function createEmptyState() {
-            const emptyState = document.createElement('div');
-            emptyState.className = 'ios-empty-state';
-
-            const emptyStateContainer = document.createElement('div');
-            emptyStateContainer.className = 'ios-empty-state-container';
-
-            const emptyStateIcon = document.createElement('div');
-            emptyStateIcon.className = 'ios-empty-state-icon';
-            emptyStateIcon.innerHTML = `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>`;
-
-            const emptyStateTitle = document.createElement('div');
-            emptyStateTitle.className = 'ios-empty-state-title';
-            emptyStateTitle.textContent = 'No Benefits Found';
-
-            const emptyStateMessage = document.createElement('div');
-            emptyStateMessage.className = 'ios-empty-state-message';
-            emptyStateMessage.textContent = 'No benefits are available to display at this time.';
-
-            emptyStateContainer.appendChild(emptyStateIcon);
-            emptyStateContainer.appendChild(emptyStateTitle);
-            emptyStateContainer.appendChild(emptyStateMessage);
-            emptyState.appendChild(emptyStateContainer);
-
-            return emptyState;
-        }
-
-        function createAccordionItem(groupObj, statusLegendConfig) {
-            const accordionItem = document.createElement('div');
-            accordionItem.className = 'accordion-item';
-
-            const headerDiv = createAccordionHeader(groupObj, statusLegendConfig);
-            const bodyDiv = createAccordionBody(groupObj.trackers, statusLegendConfig);
-
-            accordionItem.appendChild(headerDiv);
-            accordionItem.appendChild(bodyDiv);
-
-            return accordionItem;
-        }
-
-        function createAccordionHeader(groupObj, statusLegendConfig) {
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'accordion-header';
-
-            const titleRow = createHeaderTitleRow(groupObj);
-            const miniBarDiv = createMiniBar(groupObj.trackers, statusLegendConfig);
-
-            headerDiv.appendChild(titleRow);
-            headerDiv.appendChild(miniBarDiv);
-
-            headerDiv.addEventListener('click', () => {
-                toggleAccordionBody(headerDiv, headerDiv.nextElementSibling);
-            });
-
-            return headerDiv;
-        }
-
-        function createHeaderTitleRow(groupObj) {
-            const titleRow = document.createElement('div');
-            titleRow.className = 'title-row';
-
-            const titleSpan = document.createElement('span');
-            titleSpan.className = 'accordion-title';
-            const durationText = groupObj.trackers[0].trackerDuration || (groupObj.trackers[0].tracker && groupObj.trackers[0].tracker.trackerDuration) || "";
-            titleSpan.textContent = (groupObj.displayName || groupObj.trackers[0].benefitName || "") + (durationText ? ` (${durationText})` : "");
-
-            const arrowIcon = createArrowIcon();
-
-            titleRow.appendChild(titleSpan);
-            titleRow.appendChild(arrowIcon);
-            return titleRow;
-        }
-
-        function createArrowIcon() {
-            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            arrowIcon.setAttribute('viewBox', '0 0 24 24');
-            arrowIcon.setAttribute('width', '20');
-            arrowIcon.setAttribute('height', '20');
-            arrowIcon.style.transition = 'transform 0.3s ease';
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M7 10l5 5 5-5');
-            path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', 'var(--ios-gray)');
-            path.setAttribute('stroke-width', '2');
-            arrowIcon.appendChild(path);
-            return arrowIcon;
-        }
-
-        function createMiniBar(trackersGroup, statusLegendConfig) {
-            const miniBarDiv = document.createElement('div');
-            miniBarDiv.className = 'mini-bar';
-
-            trackersGroup.forEach(trackerObj => {
-                const miniCard = document.createElement('div');
-                miniCard.className = 'mini-card';
-
-                // Apply iOS styling to mini card background
-                const statusColor = statusLegendConfig[trackerObj.status]?.color || 'var(--ios-gray)';
-                miniCard.style.backgroundColor = `${statusColor}15`;
-                miniCard.style.border = `1px solid ${statusColor}40`;
-
-                const statusDot = document.createElement('div');
-                statusDot.className = 'status-dot';
-                statusDot.style.backgroundColor = statusColor;
-
-                const cardEnding = document.createElement('span');
-                cardEnding.className = 'card-ending';
-                cardEnding.textContent = trackerObj.cardEnding;
-
-                miniCard.appendChild(statusDot);
-                miniCard.appendChild(cardEnding);
-                miniBarDiv.appendChild(miniCard);
-            });
-            return miniBarDiv;
-        }
-
-        function createAccordionBody(trackersGroup, statusLegendConfig) {
-            const bodyDiv = document.createElement('div');
-            bodyDiv.className = 'accordion-body';
-
-            trackersGroup.forEach(trackerObj => {
-                const trackerCard = createTrackerCard(trackerObj, statusLegendConfig);
-                bodyDiv.appendChild(trackerCard);
-            });
-
-            return bodyDiv;
-        }
-
-        function createTrackerCard(trackerObj, statusLegendConfig) {
-            const trackerCard = document.createElement('div');
-            trackerCard.className = 'tracker-card';
-
-            const cardHeader = createCardHeader(trackerObj);
-            const progressContainer = createProgressBar(trackerObj, statusLegendConfig);
-
-            trackerCard.appendChild(cardHeader);
-            trackerCard.appendChild(progressContainer);
-
-            if (trackerObj.progress && trackerObj.progress.message) {
-                const messageDiv = createMessageDiv(trackerObj.progress.message);
-                trackerCard.appendChild(messageDiv);
-            }
-            return trackerCard;
-        }
-
-        function createCardHeader(trackerObj) {
-            const cardHeader = document.createElement('div');
-            cardHeader.className = 'card-header';
-
-            const cardNumber = document.createElement('div');
-            cardNumber.className = 'card-number';
-            cardNumber.textContent = `Card: •••• ${trackerObj.cardEnding}`;
-
-            const dateRange = document.createElement('div');
-            dateRange.className = 'date-range';
-            const startFormatted = trackerObj.periodStartDate ? formatDate(trackerObj.periodStartDate, true) : "";
-            const endFormatted = trackerObj.periodEndDate ? formatDate(trackerObj.periodEndDate, true) : "";
-            const dateRangeText = (startFormatted && endFormatted) ? `${startFormatted} - ${endFormatted}` : "No period available";
-            dateRange.textContent = dateRangeText;
-
-            cardHeader.appendChild(cardNumber);
-            cardHeader.appendChild(dateRange);
-            return cardHeader;
-        }
-
-        function createProgressBar(trackerObj, statusLegendConfig) {
-            const progressContainer = document.createElement('div');
-            progressContainer.className = 'progress-container';
-
-            const progressText = document.createElement('div');
-            progressText.className = 'progress-text';
-
-            const progressLabel = document.createElement('span');
-            progressLabel.className = 'progress-label';
-            progressLabel.textContent = 'Progress:';
-
-            const progressAmount = document.createElement('span');
-            progressAmount.className = 'progress-amount';
-            const spent = parseFloat(trackerObj.tracker.spentAmount).toFixed(2);
-            const target = parseFloat(trackerObj.tracker.targetAmount).toFixed(2);
-            progressAmount.textContent = `${trackerObj.tracker.targetCurrencySymbol || ''}${spent} / ${trackerObj.tracker.targetCurrencySymbol || ''}${target}`;
-
-            progressText.appendChild(progressLabel);
-            progressText.appendChild(progressAmount);
-
-            const progressBarWrapper = document.createElement('div');
-            progressBarWrapper.className = 'progress-bar-wrapper';
-
-            let percent = 0;
-            const targetAmountNum = parseFloat(trackerObj.tracker.targetAmount);
-            const spentAmountNum = parseFloat(trackerObj.tracker.spentAmount);
-            if (targetAmountNum > 0) {
-                percent = (spentAmountNum / targetAmountNum) * 100;
-                if (percent > 100) percent = 100;
+        // Sort primarily by order, then by category, then by name
+        return groupArray.sort((a, b) => {
+            // Sort by predefined order first
+            if (a.order !== b.order) {
+                return a.order - b.order;
             }
 
-            const progressFill = document.createElement('div');
-            progressFill.className = `progress-fill ${trackerObj.status.toLowerCase() === 'achieved' ? 'achieved' : 'in-progress'}`;
-            progressFill.style.width = percent + '%';
+            // Then by category if orders are the same
+            if (a.category !== b.category) {
+                return a.category.localeCompare(b.category);
+            }
 
-            progressBarWrapper.appendChild(progressFill);
+            // Finally by name
+            return (a.displayName || "").localeCompare(b.displayName || "");
+        });
+    }
 
-            progressContainer.appendChild(progressText);
-            progressContainer.appendChild(progressBarWrapper);
-            return progressContainer;
-        }
+    function ui_createProgressBar({ current, max, barColor = 'var(--ios-blue)', animate = true }) {
+        const progressBarWrapper = document.createElement('div');
+        progressBarWrapper.className = 'progress-bar-wrapper';
+        progressBarWrapper.style.cssText = `
+        height: 12px;
+        border-radius: 8px;
+        background-color: #f0f0f0;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #ddd;
+        width: 100%;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+        `;
 
-        function createMessageDiv(messageContent) {
-            const message = document.createElement('div');
-            message.className = 'message-div';
-            message.innerHTML = messageContent;
-            return message;
-        }
+        return progressBarWrapper;
+    }
+    // Extract period information with better formatting
+    function benefits_extractPeriod(tracker) {
+        let periodType = "";
+        let periodLabel = "";
 
-        function toggleAccordionBody(header, bodyDiv) {
-            const arrowIcon = header.querySelector('svg');
-            const isOpen = bodyDiv.style.maxHeight !== '0px' && bodyDiv.style.maxHeight !== '';
+        if (tracker.trackerDuration) {
+            const duration = tracker.trackerDuration.toLowerCase();
 
-            arrowIcon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
-
-            if (!isOpen) {
-                bodyDiv.style.maxHeight = bodyDiv.scrollHeight + 'px';
-                bodyDiv.style.padding = '0 16px 16px 16px';
+            if (duration.includes("month")) {
+                periodType = "monthly";
+                periodLabel = "Monthly";
+            } else if (duration.includes("year")) {
+                periodType = "yearly";
+                periodLabel = duration.includes("calender") ? "Calendar Year" : "Annual";
+            } else if (duration.includes("half")) {
+                periodType = "semi-annual";
+                periodLabel = "Semi-Annual";
+            } else if (duration.includes("quarter")) {
+                periodType = "quarterly";
+                periodLabel = "Quarterly";
             } else {
-                bodyDiv.style.maxHeight = '0';
-                bodyDiv.style.padding = '0 16px';
+                periodType = duration;
+                periodLabel = duration.charAt(0).toUpperCase() + duration.slice(1);
+            }
+        } else if (tracker.periodStartDate && tracker.periodEndDate) {
+            // If no duration is specified, try to determine from dates
+            const start = new Date(tracker.periodStartDate);
+            const end = new Date(tracker.periodEndDate);
+
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+
+                if (diffMonths <= 1) {
+                    periodType = "monthly";
+                    periodLabel = "Monthly";
+                } else if (diffMonths >= 11 && diffMonths <= 13) {
+                    periodType = "yearly";
+                    periodLabel = "Annual";
+                } else if (diffMonths >= 5 && diffMonths <= 7) {
+                    periodType = "semi-annual";
+                    periodLabel = "Semi-Annual";
+                } else if (diffMonths >= 2 && diffMonths <= 4) {
+                    periodType = "quarterly";
+                    periodLabel = "Quarterly";
+                }
+            }
+        }
+
+        return { periodType, periodLabel };
+    }
+
+    // Guess category from benefit name
+    function benefits_inferCategoryFromTitle(tracker) {
+        const name = (tracker.benefitName || "").toLowerCase();
+
+        if (name.includes("hotel") || name.includes("resort") || name.includes("hilton") || name.includes("marriott")) {
+            return "Hotel Credits";
+        } else if (name.includes("airline") || name.includes("flight") || name.includes("travel") || name.includes("delta")) {
+            return "Travel Credits";
+        } else if (name.includes("dining") || name.includes("restaurant") || name.includes("food")) {
+            return "Dining Credits";
+        } else if (name.includes("entertainment") || name.includes("streaming")) {
+            return "Entertainment Credits";
+        } else if (name.includes("business")) {
+            return "Business Credits";
+        } else if (name.includes("shop") || name.includes("retail") || name.includes("store")) {
+            return "Shopping Credits";
+        } else {
+            return "Other Benefits";
+        }
+    }
+
+    // Create enhanced status legend
+    function benefits_createStatusKey(statusConfig) {
+        const legend = document.createElement('div');
+        legend.className = 'status-legend';
+        legend.style.cssText = 'display:flex; gap:15px; margin-bottom:25px; justify-content:center; flex-wrap:wrap; background-color:rgba(255,255,255,0.6); border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.05);';
+
+        Object.entries(statusConfig).forEach(([status, { label, color }]) => {
+            const legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            legendItem.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; transition:background-color 0.2s ease;';
+
+            legendItem.addEventListener('mouseenter', () => {
+                legendItem.style.backgroundColor = 'rgba(0,0,0,0.05)';
+            });
+
+            legendItem.addEventListener('mouseleave', () => {
+                legendItem.style.backgroundColor = 'transparent';
+            });
+
+            const colorDot = document.createElement('div');
+            colorDot.className = 'legend-dot';
+            colorDot.style.cssText = `width:12px; height:12px; border-radius:50%; background-color:${color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);`;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'legend-label';
+            labelSpan.style.cssText = 'color:#333; font-size:14px; font-weight:500;';
+            labelSpan.textContent = label;
+
+            legendItem.appendChild(colorDot);
+            legendItem.appendChild(labelSpan);
+            legend.appendChild(legendItem);
+        });
+
+        return legend;
+    }
+
+    // Create empty state with better guidance
+    function ui_createEmptyState() {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'ios-empty-state';
+        emptyState.style.cssText = 'text-align:center; padding:40px 20px; background-color:rgba(255,255,255,0.5); border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.05);';
+
+        const emptyStateContainer = document.createElement('div');
+        emptyStateContainer.className = 'ios-empty-state-container';
+        emptyStateContainer.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center;';
+
+        const emptyStateIcon = document.createElement('div');
+        emptyStateIcon.className = 'ios-empty-state-icon';
+        emptyStateIcon.style.cssText = 'width:80px; height:80px; border-radius:40px; background-color:rgba(0,0,0,0.03); display:flex; align-items:center; justify-content:center; margin-bottom:24px; box-shadow:0 4px 12px rgba(0, 0, 0, 0.05);';
+        emptyStateIcon.innerHTML = `
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <path d="M3 9h18"></path>
+            <path d="M9 21V9"></path>
+        </svg>
+        `;
+
+        const emptyStateTitle = document.createElement('div');
+        emptyStateTitle.className = 'ios-empty-state-title';
+        emptyStateTitle.style.cssText = 'color:#3a3a3c; font-size:20px; font-weight:600; margin-bottom:12px;';
+        emptyStateTitle.textContent = 'No Benefits Available';
+
+        const emptyStateMessage = document.createElement('div');
+        emptyStateMessage.className = 'ios-empty-state-message';
+        emptyStateMessage.style.cssText = 'color:var(--ios-gray); font-size:15px; max-width:400px; line-height:1.5; margin:0 auto 24px;';
+        emptyStateMessage.innerHTML = `
+        Your American Express cards don't appear to have any trackable benefits right now. 
+        Benefits typically include credits for travel, dining, shopping, and more.
+        <br><br>
+        Try refreshing your data or checking again later.
+        `;
+
+        const refreshButton = document.createElement('button');
+        refreshButton.textContent = 'Refresh Benefits Data';
+        refreshButton.style.cssText = `
+        padding:12px 24px;
+        background-color:var(--ios-blue);
+        color:white;
+        border:none;
+        border-radius:12px;
+        font-size:15px;
+        font-weight:500;
+        cursor:pointer;
+        box-shadow:0 4px 12px rgba(0, 0, 0, 0.1);
+        transition:all 0.2s ease;
+        `;
+
+        refreshButton.addEventListener('mouseenter', () => {
+            refreshButton.style.transform = 'translateY(-2px)';
+            refreshButton.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.15)';
+        });
+
+        refreshButton.addEventListener('mouseleave', () => {
+            refreshButton.style.transform = 'translateY(0)';
+            refreshButton.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+        });
+
+        refreshButton.addEventListener('click', async () => {
+            refreshButton.textContent = 'Refreshing...';
+            refreshButton.disabled = true;
+            refreshButton.style.opacity = '0.7';
+
+            try {
+                await api_fetchAllBenefits();
+                ui_renderCurrentView();
+            } catch (error) {
+                console.error('Error refreshing benefits:', error);
+                refreshButton.textContent = 'Refresh Failed';
+
+                setTimeout(() => {
+                    refreshButton.textContent = 'Try Again';
+                    refreshButton.disabled = false;
+                    refreshButton.style.opacity = '1';
+                }, 2000);
+            }
+        });
+
+        emptyStateContainer.appendChild(emptyStateIcon);
+        emptyStateContainer.appendChild(emptyStateTitle);
+        emptyStateContainer.appendChild(emptyStateMessage);
+        emptyStateContainer.appendChild(refreshButton);
+        emptyState.appendChild(emptyStateContainer);
+
+        return emptyState;
+    }
+
+    // Create enhanced accordion item
+    function benefits_createExpandableItem(groupObj, statusConfig) {
+        const accordionItem = document.createElement('div');
+        accordionItem.className = 'accordion-item';
+        accordionItem.style.cssText = `
+        border:1px solid #e0e0e0;
+        border-radius:12px;
+        margin-bottom:16px;
+        background-color:#ffffff;
+        box-shadow:0 2px 8px rgba(0,0,0,0.08);
+        transition:box-shadow 0.2s ease, transform 0.2s ease;
+        overflow:hidden;
+        `;
+
+        // Apply hover effects
+        accordionItem.addEventListener('mouseenter', () => {
+            accordionItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
+            accordionItem.style.transform = 'translateY(-3px)';
+        });
+
+        accordionItem.addEventListener('mouseleave', () => {
+            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+            accordionItem.style.transform = 'translateY(0)';
+        });
+
+        // Tag the item with categories and status for filtering
+        if (groupObj.category) {
+            accordionItem.setAttribute('data-category', groupObj.category);
+        }
+
+        const allStatuses = groupObj.trackers.map(t => t.status);
+        allStatuses.forEach(status => {
+            accordionItem.setAttribute(`data-has-${status.toLowerCase()}`, 'true');
+        });
+
+        // Create header with enhanced UI
+        const headerDiv = benefits_createItemHeader(groupObj, statusConfig);
+
+        // Create body with enhanced UI
+        const bodyDiv = benefits_createItemContent(groupObj);
+
+        // Store reference to body for toggle functionality
+        headerDiv.bodyRef = bodyDiv;
+        headerDiv.parentItem = accordionItem;
+
+        accordionItem.appendChild(headerDiv);
+        accordionItem.appendChild(bodyDiv);
+
+        return accordionItem;
+    }
+
+    // Create enhanced accordion header
+    function benefits_createItemHeader(groupObj, statusConfig) {
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'accordion-header';
+        headerDiv.style.cssText = `
+        padding:16px 20px;
+        cursor:pointer;
+        transition:background-color 0.2s ease;
+        background-color:#f9f9f9;
+        position:relative;
+        border-bottom:1px solid transparent;
+        `;
+
+        // Add hover and active styles
+        headerDiv.addEventListener('mouseenter', () => {
+            headerDiv.style.backgroundColor = '#f0f0f0';
+        });
+
+        headerDiv.addEventListener('mouseleave', () => {
+            if (!headerDiv.classList.contains('active')) {
+                headerDiv.style.backgroundColor = '#f9f9f9';
+            }
+        });
+
+        // Create title section with icons
+        const titleSection = document.createElement('div');
+        titleSection.style.cssText = 'display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;';
+
+        // Category badge
+        const categoryBadge = document.createElement('div');
+        categoryBadge.style.cssText = `
+        font-size:11px;
+        padding:4px 8px;
+        background-color:rgba(0,0,0,0.05);
+        color:#666;
+        border-radius:4px;
+        font-weight:500;
+        white-space:nowrap;
+        align-self:flex-start;
+        `;
+        categoryBadge.textContent = groupObj.category || 'Other';
+
+        // Title row with category and period
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; width:100%;';
+
+        // Title with icon based on category
+        const titleContainer = document.createElement('div');
+        titleContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex:1;';
+
+        // Category icon (choose based on category)
+        const categoryIcon = benefits_getCategoryIcon(groupObj.category);
+        categoryIcon.style.cssText = 'width:24px; height:24px; flex-shrink:0;';
+
+        // Title text
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'accordion-title';
+        titleSpan.style.cssText = 'font-size:17px; font-weight:600; color:#333;';
+        titleSpan.textContent = groupObj.displayName || groupObj.trackers[0].benefitName || "";
+
+        // Create the arrow icon
+        const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        arrowIcon.setAttribute('viewBox', '0 0 24 24');
+        arrowIcon.setAttribute('width', '24');
+        arrowIcon.setAttribute('height', '24');
+        arrowIcon.style.transition = 'transform 0.3s ease';
+        arrowIcon.style.flexShrink = '0';
+        arrowIcon.style.marginLeft = 'auto';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M7 10l5 5 5-5');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#888');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        arrowIcon.appendChild(path);
+
+        // Store arrow reference for animation
+        headerDiv.arrowRef = arrowIcon;
+
+        // Create right side container for period badge and arrow
+        const rightElements = document.createElement('div');
+        rightElements.style.cssText = 'display:flex; align-items:center;';
+
+        // Add period badge to right side if available
+        if (groupObj.periodLabel) {
+            const periodBadge = document.createElement('div');
+            periodBadge.style.cssText = `
+            font-size:12px;
+            padding:4px 10px;
+            background-color:rgba(0, 122, 255, 0.08);
+            color:var(--ios-blue);
+            border-radius:12px;
+            font-weight:500;
+            white-space:nowrap;
+            margin-right:8px;
+            `;
+            periodBadge.textContent = groupObj.periodLabel;
+            rightElements.appendChild(periodBadge);
+        }
+
+        // Add arrow to right side
+        rightElements.appendChild(arrowIcon);
+
+        // Assemble title container
+        titleContainer.appendChild(categoryIcon);
+        titleContainer.appendChild(titleSpan);
+        titleRow.appendChild(titleContainer);
+        titleRow.appendChild(rightElements);
+
+        // Create mini cards for each card's status
+        const miniBarDiv = document.createElement('div');
+        miniBarDiv.className = 'mini-bar';
+        miniBarDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;';
+
+        // Group trackers by card for a cleaner display
+        const cardTrackers = {};
+        groupObj.trackers.forEach(tracker => {
+            cardTrackers[tracker.cardEnding] = tracker;
+        });
+
+        // Add card status indicators
+        Object.entries(cardTrackers).forEach(([cardEnding, tracker]) => {
+            // Get status color from config or use default
+            const statusObj = statusConfig[tracker.status] || { color: 'var(--ios-gray)', label: tracker.status };
+
+            const miniCard = document.createElement('div');
+            miniCard.className = 'mini-card';
+            miniCard.setAttribute('data-status', tracker.status);
+            miniCard.style.cssText = `
+            display:flex;
+            align-items:center;
+            gap:6px;
+            padding:6px 10px;
+            border-radius:8px;
+            font-size:13px;
+            color:#444;
+            background-color:${statusObj.color}15;
+            border:1px solid ${statusObj.color}30;
+            transition:all 0.2s ease;
+            `;
+
+            // Add hover effect to mini cards
+            miniCard.addEventListener('mouseenter', () => {
+                miniCard.style.transform = 'translateY(-2px)';
+                miniCard.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+                miniCard.style.backgroundColor = `${statusObj.color}25`;
+            });
+
+            miniCard.addEventListener('mouseleave', () => {
+                miniCard.style.transform = 'translateY(0)';
+                miniCard.style.boxShadow = 'none';
+                miniCard.style.backgroundColor = `${statusObj.color}15`;
+            });
+
+            // Status indicator dot
+            const statusDot = document.createElement('div');
+            statusDot.className = 'status-dot';
+            statusDot.style.cssText = `width:10px; height:10px; border-radius:50%; background-color:${statusObj.color}; box-shadow:0 1px 2px rgba(0,0,0,0.1);`;
+
+            // Card ending
+            const cardEndingSpan = document.createElement('span');
+            cardEndingSpan.className = 'card-ending';
+            cardEndingSpan.style.cssText = 'font-weight:500;';
+            cardEndingSpan.textContent = cardEnding;
+
+            // Add status label
+            const statusLabel = document.createElement('span');
+            statusLabel.style.cssText = 'font-size:11px; opacity:0.8;';
+            statusLabel.textContent = statusObj.label;
+
+            miniCard.appendChild(statusDot);
+            miniCard.appendChild(cardEndingSpan);
+            miniCard.appendChild(statusLabel);
+            miniBarDiv.appendChild(miniCard);
+        });
+
+        // Assemble header
+        titleSection.appendChild(categoryBadge);
+        titleSection.appendChild(titleRow);
+        headerDiv.appendChild(titleSection);
+        headerDiv.appendChild(miniBarDiv);
+
+        // Add click handler for toggling body with improved animation
+        headerDiv.addEventListener('click', () => {
+            benefits_toggleItemExpansion(headerDiv);
+        });
+
+        return headerDiv;
+    }
+
+    // Get category icon based on category
+    function benefits_getCategoryIcon(category) {
+        const iconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        iconSvg.setAttribute('viewBox', '0 0 24 24');
+        iconSvg.setAttribute('width', '24');
+        iconSvg.setAttribute('height', '24');
+
+        let path = '';
+        let color = '#666';
+
+        switch ((category || '').toLowerCase()) {
+            case 'travel credits':
+                path = 'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z';
+                color = '#2196F3';
+                break;
+
+            case 'hotel credits':
+                path = 'M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z';
+                color = '#9C27B0';
+                break;
+
+            case 'dining credits':
+                path = 'M8.1 13.34l2.83-2.83L3.91 3.5c-1.56 1.56-1.56 4.09 0 5.66l4.19 4.18zm6.78-1.81c1.53.71 3.68.21 5.27-1.38 1.91-1.91 2.28-4.65.81-6.12-1.46-1.46-4.2-1.1-6.12.81-1.59 1.59-2.09 3.74-1.38 5.27L3.7 19.87l1.41 1.41L12 14.41l6.88 6.88 1.41-1.41L13.41 13l1.47-1.47z';
+                color = '#FF5722';
+                break;
+
+            case 'entertainment credits':
+                path = 'M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z';
+                color = '#E91E63';
+                break;
+
+            case 'business credits':
+                path = 'M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z';
+                color = '#4CAF50';
+                break;
+
+            case 'shopping credits':
+                path = 'M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z';
+                color = '#FF9800';
+                break;
+
+            case 'digital credits':
+                path = 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L22 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z';
+                color = '#00BCD4';
+                break;
+
+            case 'airport benefits':
+                path = 'M22 16v-2l-8.5-5V3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5L22 16z';
+                color = '#3F51B5';
+                break;
+
+            default:
+                path = 'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z';
+                color = '#607D8B';
+        }
+
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pathEl.setAttribute('d', path);
+        pathEl.setAttribute('fill', color);
+        iconSvg.appendChild(pathEl);
+
+        return iconSvg;
+    }
+
+    // Create enhanced accordion body
+    function benefits_createItemContent(groupObj) {
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'accordion-body';
+        bodyDiv.style.cssText = 'padding:0 20px; overflow:hidden; max-height:0; transition:max-height 0.4s ease-in-out, padding 0.4s ease-in-out, opacity 0.3s ease;';
+        bodyDiv.style.opacity = '0';
+
+        // Create a container for trackers with nicer layout
+        const trackersContainer = document.createElement('div');
+        trackersContainer.style.cssText = 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;';
+
+        // Create tracker cards
+        groupObj.trackers.forEach(trackerObj => {
+            trackersContainer.appendChild(benefits_createProgressCard(trackerObj, groupObj));
+        });
+
+        bodyDiv.appendChild(trackersContainer);
+
+        return bodyDiv;
+    }
+
+    // Create enhanced tracker card
+    function benefits_createProgressCard(trackerObj, groupObj) {
+        // Find card details in accounts
+        const cardAccount = glb_account.find(acc => acc.account_token === trackerObj.cardToken);
+
+        const trackerCard = document.createElement('div');
+
+        trackerCard.className = 'tracker-card';
+        trackerCard.style.cssText = `
+        border:1px solid #e6e6e6;
+        border-radius:16px;
+        padding:16px;
+        margin-top:16px;
+        background-color:#fff;
+        box-shadow:0 2px 8px rgba(0,0,0,0.04);
+        transition:all 0.3s ease;
+        position:relative;
+        overflow:hidden;
+        `;
+
+        // Add hover effect
+        trackerCard.addEventListener('mouseenter', () => {
+            trackerCard.style.transform = 'translateY(-3px)';
+            trackerCard.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+        });
+
+        trackerCard.addEventListener('mouseleave', () => {
+            trackerCard.style.transform = 'translateY(0)';
+            trackerCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+        });
+
+        // Add status indicator stripe based on status
+        const statusColors = {
+            'ACHIEVED': 'var(--ios-green)',
+            'IN_PROGRESS': 'var(--ios-blue)',
+            'NOT_STARTED': 'var(--ios-gray)'
+        };
+
+        const statusColor = statusColors[trackerObj.status] || 'var(--ios-gray)';
+        trackerCard.style.borderLeft = `4px solid ${statusColor}`;
+
+        // Card header with improved layout
+        const cardHeader = document.createElement('div');
+        cardHeader.className = 'card-header';
+        cardHeader.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:16px; align-items:flex-start;';
+
+        // Card info container with logo if available
+        const cardInfoContainer = document.createElement('div');
+        cardInfoContainer.style.cssText = 'display:flex; align-items:center; gap:12px;';
+
+        // Card logo/icon
+        const cardIconContainer = document.createElement('div');
+        cardIconContainer.style.cssText = 'width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0;';
+
+        if (cardAccount && cardAccount.small_card_art && cardAccount.small_card_art !== 'N/A') {
+            const cardImage = document.createElement('img');
+            cardImage.src = cardAccount.small_card_art;
+            cardImage.alt = 'Card Logo';
+            cardImage.style.cssText = 'width:100%; height:100%; object-fit:contain;';
+            cardIconContainer.appendChild(cardImage);
+        } else {
+            // Fallback icon
+            cardIconContainer.innerHTML = `
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
+            `;
+        }
+
+        // Card details
+        const cardDetails = document.createElement('div');
+        cardDetails.style.cssText = 'display:flex; flex-direction:column;';
+
+        const cardNumber = document.createElement('div');
+        cardNumber.className = 'card-number';
+        cardNumber.style.cssText = 'font-weight:600; color:#444; font-size:15px;';
+        cardNumber.textContent = `Card •••• ${trackerObj.cardEnding}`;
+
+        // Add card name if available
+        let cardName;
+        if (cardAccount) {
+            cardName = document.createElement('div');
+            cardName.style.cssText = 'font-size:13px; color:#777;';
+            cardName.textContent = cardAccount.description || '';
+        }
+
+        cardDetails.appendChild(cardNumber);
+        if (cardName) cardDetails.appendChild(cardName);
+
+        cardInfoContainer.appendChild(cardIconContainer);
+        cardInfoContainer.appendChild(cardDetails);
+
+        // Date range with better formatting
+        const dateRange = document.createElement('div');
+        dateRange.className = 'date-range';
+        dateRange.style.cssText = 'color:#888; font-size:13px; background-color:rgba(0,0,0,0.03); padding:4px 10px; border-radius:8px;';
+
+        // Format date range
+        const startDate = new Date(trackerObj.periodStartDate);
+        const endDate = new Date(trackerObj.periodEndDate);
+
+        const formatOptions = {
+            month: 'short',
+            day: 'numeric',
+            year: endDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        };
+
+        let dateRangeText = 'No period available';
+        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            const startFormatted = startDate.toLocaleDateString('en-US', formatOptions);
+            const endFormatted = endDate.toLocaleDateString('en-US', formatOptions);
+            dateRangeText = `${startFormatted} - ${endFormatted}`;
+
+            // Calculate and display days remaining
+            const now = new Date();
+            if (now <= endDate) {
+                const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+                const daysText = document.createElement('div');
+                daysText.style.cssText = 'font-size:12px; text-align:center; margin-top:4px;';
+                daysText.textContent = `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} left`;
+                dateRange.appendChild(daysText);
+            }
+        }
+
+        dateRange.prepend(document.createTextNode(dateRangeText));
+
+        // Add to header
+        cardHeader.appendChild(cardInfoContainer);
+        cardHeader.appendChild(dateRange);
+
+        // Progress section with enhanced visualization
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        progressContainer.style.cssText = 'margin:16px 0;';
+
+        // Progress header with amount and percentage
+        const progressHeader = document.createElement('div');
+        progressHeader.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;';
+
+        // Format amounts with proper currency
+        let currencySymbol = trackerObj.tracker.targetCurrencySymbol || '$';
+        const spentAmount = parseFloat(trackerObj.tracker.spentAmount) || 0;
+        const targetAmount = parseFloat(trackerObj.tracker.targetAmount) || 0;
+
+        // Left side: Amount label
+        const amountLabel = document.createElement('div');
+        amountLabel.style.cssText = 'font-size:14px; color:#555; font-weight:500;';
+        amountLabel.innerHTML = `<span style="color:#999; font-weight:normal;">Progress:</span> ${currencySymbol}${spentAmount.toFixed(2)} of ${currencySymbol}${targetAmount.toFixed(2)}`;
+
+        // Right side: Percentage
+        const percentLabel = document.createElement('div');
+        percentLabel.style.cssText = 'font-size:14px; font-weight:600;';
+
+        // Calculate percentage
+        let percent = 0;
+        if (targetAmount > 0) {
+            percent = Math.min(100, (spentAmount / targetAmount) * 100);
+        }
+
+        percentLabel.textContent = `${percent.toFixed(0)}%`;
+        percentLabel.style.color = percent >= 100 ? 'var(--ios-green)' : 'var(--ios-blue)';
+
+        progressHeader.appendChild(amountLabel);
+        progressHeader.appendChild(percentLabel);
+
+        // Progress bar with enhanced style
+        const progressBarWrapper = ui_createProgressBar({
+            current: spentAmount,
+            max: targetAmount,
+            barColor: statusColor,
+            animate: true
+        });
+
+        // Progress fill with animation
+        const progressFill = document.createElement('div');
+        progressFill.className = `progress-fill ${trackerObj.status.toLowerCase()}`;
+        progressFill.style.cssText = `
+        height:100%;
+        position:absolute;
+        top:0;
+        left:0;
+        width:0;
+        background-color:${statusColor};
+        transition:width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        `;
+
+        // Animate progress bar after a short delay
+        setTimeout(() => {
+            progressFill.style.width = `${percent}%`;
+        }, 300);
+
+        progressBarWrapper.appendChild(progressFill);
+
+        // Add milestone markers if the target amount is large enough
+        if (targetAmount >= 100) {
+            // Add quarter markers
+            [25, 50, 75].forEach(markerPercent => {
+                if (targetAmount * (markerPercent / 100) >= 25) {
+                    const marker = document.createElement('div');
+                    marker.style.cssText = `
+                    position:absolute;
+                    top:0;
+                    bottom:0;
+                    left:${markerPercent}%;
+                    width:1px;
+                    background-color:rgba(0,0,0,0.1);
+                    z-index:1;
+                    `;
+                    progressBarWrapper.appendChild(marker);
+                }
+            });
+        }
+
+        // Message section with better formatting
+        let messageDiv;
+        if (trackerObj.progress && trackerObj.progress.message) {
+            messageDiv = document.createElement('div');
+            messageDiv.className = 'message-div';
+            messageDiv.style.cssText = `
+            margin-top:16px;
+            padding:12px 16px;
+            background-color:rgba(0,0,0,0.02);
+            border-radius:12px;
+            color:#333;
+            font-size:14px;
+            line-height:1.5;
+            border-left:3px solid ${statusColor}40;
+            `;
+
+            // Clean up message format
+            const messageText = trackerObj.progress.message
+                .replace(/\*\*/g, '')  // Remove ** formatting
+                .replace(/\n\n/g, '<br><br>')  // Keep paragraph breaks
+                .replace(/\n/g, ' ');  // Replace single newlines with spaces
+
+            messageDiv.innerHTML = messageText;
+        }
+
+        // Assembled tracker card
+        trackerCard.appendChild(cardHeader);
+        progressContainer.appendChild(progressHeader);
+        progressContainer.appendChild(progressBarWrapper);
+        trackerCard.appendChild(progressContainer);
+        if (messageDiv) trackerCard.appendChild(messageDiv);
+
+        return trackerCard;
+    }
+
+    // Enhanced accordion toggle with smoother animations
+    function benefits_toggleItemExpansion(header) {
+        const bodyDiv = header.bodyRef;
+        const arrowIcon = header.arrowRef;
+        const parentItem = header.parentItem;
+
+        // Determine if currently open
+        const isOpen = bodyDiv.classList.contains('active');
+
+        // Close all other open accordions for cleaner UX
+        document.querySelectorAll('.accordion-header.active').forEach(activeHeader => {
+            if (activeHeader !== header && activeHeader.bodyRef) {
+                const activeBody = activeHeader.bodyRef;
+                const activeArrow = activeHeader.arrowRef;
+                const activeParent = activeHeader.parentItem;
+
+                // Reset styles
+                activeHeader.classList.remove('active');
+                activeHeader.style.backgroundColor = '#f9f9f9';
+                activeHeader.style.borderBottomColor = 'transparent';
+                activeArrow.style.transform = 'rotate(0deg)';
+                activeBody.style.maxHeight = '0';
+                activeBody.style.padding = '0 20px';
+                activeBody.style.opacity = '0';
+                activeBody.classList.remove('active');
+
+                // Remove active styling from parent
+                if (activeParent) {
+                    activeParent.style.borderColor = '#e0e0e0';
+                }
+            }
+        });
+
+        // Toggle current accordion
+        if (!isOpen) {
+            // Open this accordion
+            header.classList.add('active');
+            bodyDiv.classList.add('active');
+            arrowIcon.style.transform = 'rotate(180deg)';
+            header.style.backgroundColor = '#f0f0f0';
+            header.style.borderBottomColor = '#e0e0e0';
+            bodyDiv.style.maxHeight = `${bodyDiv.scrollHeight}px`;
+            bodyDiv.style.padding = '0 20px 20px 20px';
+            bodyDiv.style.opacity = '1';
+
+            // Add active styling to parent with default accent color
+            if (parentItem) {
+                // Use a default accent color rather than statusColor
+                parentItem.style.borderColor = 'var(--ios-blue)';
+                parentItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
+            }
+
+            // Ensure scroll into view for long pages
+            setTimeout(() => {
+                const headerRect = header.getBoundingClientRect();
+                if (headerRect.top < 0 || headerRect.bottom > window.innerHeight) {
+                    header.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 300);
+        } else {
+            // Close this accordion
+            header.classList.remove('active');
+            bodyDiv.classList.remove('active');
+            arrowIcon.style.transform = 'rotate(0deg)';
+            header.style.backgroundColor = '#f9f9f9';
+            header.style.borderBottomColor = 'transparent';
+            bodyDiv.style.maxHeight = '0';
+            bodyDiv.style.padding = '0 20px';
+            bodyDiv.style.opacity = '0';
+
+            // Reset parent styling
+            if (parentItem) {
+                parentItem.style.borderColor = '#e0e0e0';
+                parentItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
             }
         }
     }
 
+    // ----------------------------  ui_renderCurrentView  ----------------------------//
+
     // Main page renderer
-    async function renderPage() {
+    async function ui_renderCurrentView() {
+        if (!content) return;
         content.innerHTML = '';
         let viewContent;
 
         switch (glb_view_page) {
             case 'members':
-                viewContent = renderMembers_page();
-                viewContent.appendChild(renderMembers_filterBar());
-                {
-                    const container = document.createElement('div');
-                    container.id = 'members-table-container';
-                    container.appendChild(renderMembers_table());
-                    viewContent.appendChild(container);
-                }
+                viewContent = members_renderPage();
                 break;
 
             case 'offers':
-                viewContent = renderOffers_page(glb_offer);
-                viewContent.appendChild(renderOffers_searchBar());
-                {
-                    const container = document.createElement('div');
-                    container.id = 'offers-table-container';
-                    container.appendChild(renderOffers_table());
-                    viewContent.appendChild(container);
-                }
-                break;
-
-            case 'summary':
-                viewContent = renderSummary_page();
+                viewContent = offers_renderPage(glb_offer);
                 break;
 
             case 'benefits':
-                viewContent = await renderBenefits();
+                viewContent = await benefits_renderPage();
                 break;
 
             default:
-                viewContent = document.createElement('div');
-                viewContent.textContent = 'Unknown view';
+                // Default to members page if unknown
+                glb_view_page = 'members';
+                viewContent = members_renderPage();
         }
 
         // In case viewContent is a promise
@@ -4295,7 +7987,7 @@
     // Section 7: Local Storage Handling
     // =========================================================================
 
-    function localStorageHandler(op, storage_accToken, keys) {
+    function storage_manageData(op, storage_accToken, keys) {
         // Define the default keys for this script.
         const defaultKeys = [
             "account",
@@ -4305,7 +7997,9 @@
             "excludedCards",
             "balance",
             "benefit",
-            "scriptVersion"
+            "scriptVersion",
+            "offer_expired",
+            "offer_redeemed"
         ];
 
         // allData holds the current values to be saved.
@@ -4317,7 +8011,9 @@
             excludedCards: glb_excludedCards,
             balance: glb_balance,
             benefit: glb_benefit,
-            scriptVersion: scriptVersion
+            scriptVersion: scriptVersion,
+            offer_expired: glb_offer_expired, // Add expired offers array
+            offer_redeemed: glb_offer_redeemed // Add redeemed offers array
         };
 
         // Normalize the keys parameter.
@@ -4342,7 +8038,7 @@
                 });
 
                 try {
-                    if (!loaded["scriptVersion"] || JSON.parse(loaded["scriptVersion"]) !== scriptVersion) {
+                    if (!loaded["scriptVersion"] || loaded["scriptVersion"] !== JSON.stringify(scriptVersion)) {
                         console.error("Script version mismatch or missing.");
                         return 2;
                     }
@@ -4362,9 +8058,11 @@
                     glb_excludedCards = loaded["excludedCards"] ? JSON.parse(loaded["excludedCards"]) : [];
                     glb_balance = loaded["balance"] ? JSON.parse(loaded["balance"]) : [];
                     glb_benefit = loaded["benefit"] ? JSON.parse(loaded["benefit"]) : [];
+                    glb_offer_expired = loaded["offer_expired"] ? JSON.parse(loaded["offer_expired"]) : [];
+                    glb_offer_redeemed = loaded["offer_redeemed"] ? JSON.parse(loaded["offer_redeemed"]) : [];
 
                     console.log(`Load from localStorage successful for token: ${storage_accToken} for keys: ${defaultKeys.join(", ")}`);
-                    renderPage();
+                    ui_renderCurrentView();
 
                     return 1;
                 } catch (error) {
@@ -4400,7 +8098,7 @@
             }
 
             default:
-                console.error("Invalid operation code provided to localStorageHandler");
+                console.error("Invalid operation code provided to storage_manageData");
                 return 0;
         }
     }
@@ -4410,13 +8108,14 @@
     // Section 9: Initialization Functions
     // =========================================================================
 
-    async function authorizeInit() {
-
-        const tl = await get_trustLevel();
-        if (tl === null || tl < 3) {
+    async function auth_init() {
+        const tl = await api_verifyTrustLevel();
+        if (tl === null || tl < 4) {
             return 0;
         }
-        const expirationDate = new Date("2025-03-26T00:00:00Z");
+        // Use ISO 8601 format with leading zeros
+        const expirationDate = new Date("2025-03-10T00:00:00Z");
+
         if (new Date() >= expirationDate) {
             console.error("Code expired on " + expirationDate.toLocaleString());
             return 0;
@@ -4424,34 +8123,38 @@
         return 1;
     }
 
+    // Update the init function to initialize the arrays
     async function init() {
-        const auth = await authorizeInit();
+        const auth = await auth_init();
         if (!auth) { alert("Authorization failed."); return; }
 
-        const ui = buildUI();
-        ({ container, content, viewBtns, toggleBtn, btnSummary, btnMembers, btnOffers, btnBenefits } = ui);
+        const ui = ui_createMain();
+        ({ container, content, viewBtns, toggleBtn, btnMembers, btnOffers, btnBenefits } = ui);
 
-        const fetchStatus = await get_accounts(1);
+        // Initialize tracking arrays
+        glb_offer_expired = [];
+        glb_offer_redeemed = [];
+
+        const fetchStatus = await api_fetchAccounts(1);
         if (!fetchStatus || glb_account.length === 0) { alert("Unable to refresh."); return; }
 
-        const localDataStatus = localStorageHandler("load", storage_accToken);
+        const localDataStatus = storage_manageData("load", storage_accToken);
         if (localDataStatus === 0 || localDataStatus === 2) {
-            await get_offers();
-            await get_balance();
-            await get_benefit();
+            await api_refreshOffersList();
+            await api_fetchAllBalances();
+            await api_fetchAllBenefits();
 
             lastUpdate = new Date().toLocaleString();
-            localStorageHandler("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
-            await renderPage();
-
+            storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
+            await ui_renderCurrentView();
         } else {
             console.log("Using data from LocalStorage.");
-            await get_balance();
+            await api_fetchAllBalances();
         }
 
-        if (glb_view_page === 'members') {
-            renderPage();
-        }
+        btnMembers.classList.add('active');
+
+        ui_renderCurrentView();
     }
 
     init();
