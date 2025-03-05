@@ -42,26 +42,62 @@
         }
         
         :root {
-            /* Color Variables */
+            /* Base colors */
             --ios-blue: #007AFF;
             --ios-dark-blue: #0062CC;
-            --ios-background: rgba(255, 255, 255, 0.8);
-            --ios-secondary-bg: rgba(249, 249, 251, 0.6);
-            --ios-border: rgba(230, 230, 230, 0.7);
-            --ios-text-primary: #1c1c1e;
-            --ios-text-secondary: #2c2c2e;
-            --ios-radius: 18px;
-            --ios-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
-            --ios-font: 'AmexFont', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            --ios-header-bg: linear-gradient(to right, rgba(245, 245, 247, 0.9), rgba(235, 235, 242, 0.85));
-            
             --ios-green: rgb(32, 169, 69);
             --ios-orange: rgb(215, 129, 0);
             --ios-red: rgb(215, 49, 38);
             --ios-gray: rgb(142, 142, 147);
+            
+            /* Background colors */
+            --ios-background: rgba(255, 255, 255, 0.8);
+            --ios-secondary-bg: rgba(249, 249, 251, 0.6);
             --ios-light-gray: rgba(142, 142, 147, 0.1);
+            
+            /* Text colors */
+            --ios-text-primary: #1c1c1e;
+            --ios-text-secondary: #2c2c2e;
+            
+            /* Common properties */
+            --ios-border: rgba(230, 230, 230, 0.7);
+            --ios-radius: 18px;
+            --ios-table-border-radius: 8px;
+            --ios-font: 'AmexFont', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            
+            /* Gradients */
             --ios-title-gradient: linear-gradient(45deg, #4CAF50, #2196F3);
             --ios-button-gradient: linear-gradient(45deg, rgb(84,99,86), rgb(27,66,29));
+            --ios-header-bg: linear-gradient(to right, rgba(245, 245, 247, 0.9), rgba(235, 235, 242, 0.85));
+            
+            /* Shadows */
+            --ios-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.06);
+            --ios-shadow-md: 0 5px 16px rgba(0, 0, 0, 0.1);
+            --ios-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+            
+            /* Animation timings */
+            --ios-anim-fast: 0.2s;
+            --ios-anim-medium: 0.3s;
+            --ios-anim-slow: 0.5s;
+            
+            /* Status colors */
+            --ios-status-active-bg: rgba(52, 199, 89, 0.15);
+            --ios-status-pending-bg: rgba(255, 149, 0, 0.15);
+            --ios-status-inactive-bg: rgba(255, 59, 48, 0.15);
+            
+            /* Table styles */
+            --ios-table-cell-padding: 10px 14px;
+            --ios-table-row-hover: rgba(0, 0, 0, 0.04);
+            --ios-table-header-font-size: 12px;
+            --ios-table-cell-font-size: 13px;
+            
+            /* Highlight colors */
+            --ios-highlight-bg: rgba(255, 204, 0, 0.2);
+            --ios-highlight-border: rgba(255, 204, 0, 0.8);
+            --ios-highlight-hover: rgba(255, 204, 0, 0.25);
+            
+            /* Empty state */
+            --ios-empty-padding: 60px 20px;
         }
         
         /* Main Container */
@@ -173,198 +209,98 @@
             max-height: calc(80vh - 64px);
         }
         
-        /* Table Styles */
-        .ios-table {
+        /* Common Table Styles */
+        .ios-table{
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 15px;
             font-family: var(--ios-font);
-            margin: 16px 0;
-            border-radius: var(--ios-radius);
+            border-radius: var(--ios-table-border-radius);
             overflow: hidden;
             background-color: var(--ios-background);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            box-shadow: var(--ios-shadow);
+            box-shadow: var(--ios-shadow-sm);
             border: 1px solid var(--ios-border);
         }
         
-        /* Header styles */
-        .ios-table-head {
+        .ios-table-head{
             background: var(--ios-header-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             position: sticky;
             top: 0;
             z-index: 10;
-            width: 100%;
         }
         
-        .ios-table th {
-            padding: 16px 14px;
-            text-align: center;
+        .ios-table th{
+            padding: var(--ios-table-cell-padding);
             font-weight: 600;
             color: var(--ios-text-primary);
             border-bottom: 1px solid rgba(60, 60, 67, 0.12);
-            letter-spacing: -0.01em;
-            vertical-align: middle;
+            text-align: left;
         }
         
-        .ios-table th.sortable {
+        .ios-table th.sortable{
             cursor: pointer;
             position: relative;
-            padding-right: 32px;
+            padding-right: 28px;
         }
         
-        .ios-table th.sortable:hover {
-            background-color: rgba(0, 0, 0, 0.02);
+        .ios-table tr{
+            transition: background-color 0.2s ease;
         }
         
-        /* Sort button styles */
-        .ios-sort-button {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 22px;
-            height: 22px;
-            border-radius: 11px;
-            background: transparent;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        /* Row and cell styles */
-        .ios-table tr {
-            position: relative;
-        }
-        
-        .ios-table tr:nth-child(even) {
+        .ios-table tr:nth-child(even){
             background-color: var(--ios-secondary-bg);
         }
         
-        .ios-table tr:hover {
-            background-color: rgba(242, 242, 247, 0.85);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-            z-index: 5;
+        .ios-table tr:hover{
+            background-color: var(--ios-table-row-hover);
         }
         
-        .ios-table td {
-            padding: 16px 14px;
-            text-align: center;
+        .ios-table td{
+            padding: var(--ios-table-cell-padding);
             color: var(--ios-text-secondary);
             border-bottom: 1px solid rgba(60, 60, 67, 0.04);
             vertical-align: middle;
-            display: table-cell;
-            height: 100%;
-        }
-        
-        .ios-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        /* Currency formatting */
-        .ios-currency {
-            font-variant-numeric: tabular-nums;
-            font-weight: normal;
-            letter-spacing: -0.01em;
-            text-align: center;
-            display: block;
         }
         
         /* Status pills */
-        .ios-status {
+        .ios-status{
+            display: inline-block;
             padding: 5px 10px;
             border-radius: 16px;
             font-size: 13px;
             font-weight: 500;
-            display: inline-block;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            margin: 0 auto;
         }
         
-        .ios-status.active, .ios-status.success {
-            background-color: rgba(52, 199, 89, 0.15);
+        .ios-status.active, .ios-status.success{
+            background-color: var(--ios-status-active-bg);
             color: var(--ios-green);
             border: 1px solid rgba(52, 199, 89, 0.25);
         }
         
         .ios-status.pending {
-            background-color: rgba(255, 149, 0, 0.15);
+            background-color: var(--ios-status-pending-bg);
             color: var(--ios-orange);
             border: 1px solid rgba(255, 149, 0, 0.25);
         }
         
         .ios-status.inactive, .ios-status.failed, .ios-status.canceled {
-            background-color: rgba(255, 59, 48, 0.15);
+            background-color: var(--ios-status-inactive-bg);
             color: var(--ios-red);
             border: 1px solid rgba(255, 59, 48, 0.25);
         }
-        
-        /* Highlight for search results */
-        .ios-highlight-row {
-            background-color: rgba(255, 204, 0, 0.2) !important;
-            border-left: 4px solid rgba(255, 204, 0, 0.8) !important;
-        }
-        .ios-highlight-row:hover {
-            background-color: rgba(255, 204, 0, 0.25) !important;
-        }
+              
         /* Empty state */
-        .ios-empty-state {
-            padding: 60px 20px;
+        .ios-empty-state{
+            padding: var(--ios-empty-padding);
             text-align: center;
         }
         
-        .ios-empty-state-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .ios-empty-state-icon {
-            width: 64px;
-            height: 64px;
-            border-radius: 32px;
-            background-color: var(--ios-light-gray);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 16px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-        
-        .ios-empty-state-title {
-            color: #3a3a3c;
-            font-size: 17px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-        
-        .ios-empty-state-message {
-            color: var(--ios-gray);
-            opacity: 0.9;
-            font-size: 15px;
-            max-width: 260px;
-            line-height: 1.4;
-        }
-        
-        .ios-empty-button {
-            margin-top: 20px;
-            background-color: var(--ios-blue);
-            color: white;
-            border: none;
-            border-radius: 18px;
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-        }
-        
-        /* iOS Search Component */
+        /* Search input */
         .ios-search-container {
             position: relative;
             box-sizing: border-box;
@@ -389,549 +325,37 @@
             box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.08);
         }
         
-        .ios-search-icon {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            opacity: 0.6;
-            color: var(--ios-blue);
-            pointer-events: none;
-        }
-        
-        .ios-search-input:focus + .ios-search-icon {
-            opacity: 0.8;
-        }
-        
-        /* Filter Card */
-        .filter-card {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .filter-label {
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        
-        .filter-select {
-            padding: 8px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-        
-        /* iOS Action Buttons */
-        .ios-button {
-            padding: 10px 24px;
-            height: 42px;
-            max-height: 42px;
-            border: none;
-            border-radius: 12px;
-            background: var(--ios-blue);
-            color: white;
-            font-weight: 600;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-            overflow: hidden;
-        }
-        
-        .ios-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
-            opacity: 0.95;
-        }
-        
-        .ios-button:active {
-            transform: scale(0.98);
-        }
-        
-        .ios-button.green {
-            background: var(--ios-green);
-        }
-        
-        /* Summary Page Styles */
-        .summary-container {
-            padding: 24px;
-            background: rgba(250, 250, 250, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
-            font-family: var(--ios-font);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(209, 213, 219, 0.3);
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        .summary-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-        }
-        
-        .summary-title {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            color: #1c1c1e;
-            letter-spacing: -0.5px;
-        }
-        
-        .update-badge {
-            background: rgba(0, 122, 255, 0.1);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            color: #007AFF;
-            font-weight: 500;
-            min-width: 250px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid rgba(0, 122, 255, 0.2);
-        }
-        
-        .refresh-status {
-            font-size: 14px;
-            color: #8e8e93;
-            font-weight: 500;
-            margin-right: 16px;
-            min-width: 150px;
-            max-height: 42px;
-            line-height: 42px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            text-align: right;
-        }
-        
-        .stats-container {
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-        
-        .stats-row {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            margin-bottom: 20px;
-        }
-        
-        @media (max-width: 1200px) {
-            .stats-row {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-        
-        @media (max-width: 600px) {
-            .stats-row {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .stat-item {
-            background: rgba(255, 255, 255, 0.8);
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-            text-align: center;
-            flex: 1;
-            min-width: 160px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .stat-item:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-        }
-        
-        .stat-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-        
-        .icon-container {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-        }
-        
-        .stat-label {
-            font-size: 14px;
-            color: #8e8e93;
-            font-weight: 500;
-        }
-        
-        /* Button container */
-        .button-container {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            margin-top: 16px;
-            flex-wrap: wrap;
-            gap: 10px;
-            max-height: 60px;
-            overflow: visible;
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: center;
-            max-height: 50px;
-            height: 50px;
-        }
-        
-        /* Offer Modal Styles */
-        .offer-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(4px);
-            z-index: 10000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .offer-popup {
-            background: #fff;
-            border-radius: 12px;
-            padding: 24px;
-            width: 90%;
-            max-width: 440px;
-            max-height: 90vh;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            position: relative;
-        }
-        
-        .offer-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .offer-title {
-            margin: 0;
-            font-size: 1.2rem;
-            font-weight: 600;
-            background: linear-gradient(45deg, #2c3e50, #4CAF50);
-            -webkit-background-clip: text;
-            color: transparent;
-        }
-        
-        .close-button {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: #666;
-            cursor: pointer;
-            padding: 4px;
-            transition: all 0.2s ease;
-        }
-        
-        .close-button:hover {
-            color: #ff4444;
-        }
-        
-        .enroll-all-button {
-            width: 100%;
-            margin: 0 0 20px 0;
-            background: var(--ios-button-gradient);
-            color: white;
-            border-radius: 8px;
-            font-weight: 500;
-            border: none;
-            padding: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: center;
-        }
-        
-        .card-section {
-            margin-bottom: 24px;
-        }
-        
-        .section-title {
-            margin: 0 0 12px 0;
-            font-size: 0.95rem;
-        }
-        
-        .section-title.enrolled {
-            color: #4CAF50;
-        }
-        
-        .section-title.eligible {
-            color: #2196F3;
-        }
-        
-        .card-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 8px;
-        }
-        
-        .card-item {
-            padding: 8px;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 0.85rem;
-            transition: all 0.2s ease;
-        }
-        
-        .card-item.enrolled {
-            background-color: #e8f5e9;
-        }
-        
-        .card-item.eligible {
-            background-color: #e3f2fd;
-            cursor: pointer;
-        }
-        
-        .card-item.eligible:hover {
-            transform: translateY(-2px);
-        }
-        
-        /* Benefits Section Styles */
-        .benefits-container {
-            padding: 20px 16px;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background-color: rgba(255, 255, 255, 0.04);
-            border-radius: 12px;
-            max-width: 800px;
-            margin: 0 auto;
-            color: #333;
-        }
-        
-        .status-legend {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .legend-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-        
-        .legend-label {
-            color: #757575;
-            font-size: 14px;
-        }
-        
-        .accordion-item {
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            transition: box-shadow 0.2s ease, transform 0.2s ease;
-        }
-        
-        .accordion-item:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
-        }
-        
-        .accordion-header {
-            padding: 16px;
-            cursor: pointer;
-            transition: background-color 0.2s ease;
-            background-color: #f9f9f9;
-        }
-        
-        .accordion-header:hover {
-            background-color: #f0f0f0;
-        }
-        
-        .title-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .accordion-title {
-            font-size: 17px;
-            font-weight: 500;
-            color: #3a4e63;
-        }
-        
-        .mini-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 12px;
-        }
-        
-        .mini-card {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            font-size: 14px;
-            color: #444;
-        }
-        
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-        
-        .card-ending {
-            font-weight: 500;
-        }
-        
-        .accordion-body {
-            padding: 0 16px;
-            overflow: hidden;
-            max-height: 0;
-            transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
-        }
-        
-        .tracker-card {
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            padding: 16px;
-            margin: 12px 0;
-            background-color: #fff;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-            transition: background-color 0.3s ease;
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
-        }
-        
-        .card-number {
-            font-weight: 500;
-            color: #666;
-        }
-        
-        .date-range {
-            color: #888;
-            font-size: 14px;
-        }
-        
-        .progress-container {
-            margin-bottom: 12px;
-        }
-        
-        .progress-text {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        
-        .progress-label {
-            color: #777;
-        }
-        
-        .progress-amount {
-            color: #000;
-        }
-        
-        .progress-bar-wrapper {
-            height: 12px;
-            border-radius: 8px;
-            background-color: #f0f0f0;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid #ddd;
-            width: 100%;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
-        }
-        
-        .progress-fill {
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            transition: width 0.3s ease;
-        }
-        
-        .progress-fill.achieved {
-            background-color: #8fbc8f;
-        }
-        
-        .progress-fill.in-progress {
-            background-color: #87cefa;
-        }
-        
-        .message-div {
-            margin-top: 12px;
-            padding: 12px;
-            background: #f9f9f9;
-            border-radius: 8px;
-            color: #222;
-            font-size: 14px;
-        }
-        
-        /* Media queries for responsive design */
+        /* Animation keyframes */
+        @keyframes fadeIn { 
+            0% { opacity: 0; } 
+            100% { opacity: 1; }
+        }
+        
+        @keyframes slideIn { 
+            0% { transform: translateY(20px); opacity: 0; } 
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes bounce { 
+            0%, 100% { transform: scale(1); } 
+            50% { transform: scale(1.05); }
+        }
+        
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); }
+        }   
+
+        @keyframes iosBounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.3); }
+    }
+
+        .ios-sort-animation {
+        animation: iosBounce 0.3s ease;
+    }
+        
+        /* Responsive design */
         @media (max-width: 768px) {
             .amaxoffer-container {
                 width: 95%;
@@ -940,12 +364,7 @@
             
             .summary-header,
             .button-container {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .update-badge {
-                margin-top: 10px;
+                flex-direction: column; align-items: stretch;
             }
         }
         `;
@@ -1023,6 +442,115 @@
             truncate: 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;',
         },
 
+        modal: {
+            overlay: ` position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10001; display: flex; justify-content: center; align-items: center; transition: opacity 0.3s ease; `,
+            container: ` background-color: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); width: 90%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; transform: translateY(40px) scale(0.95); opacity: 0; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); `,
+            header: ` padding: 20px; border-bottom: 1px solid rgba(0,0,0,0.08); position: relative; display: flex; justify-content: space-between; align-items: center; `,
+            title: ` margin: 0; font-size: 1.3rem; font-weight: 600; color: var(--ios-text-primary); `,
+            closeButton: ` background: rgba(0,0,0,0.05); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; position: absolute; top: 16px; right: 16px; transition: all 0.2s ease; color: #666; z-index: 5; `,
+            content: ` padding: 20px; overflow-y: auto; flex: 1; `,
+            tabContainer: ` display: flex; border-bottom: 1px solid rgba(0,0,0,0.1); padding: 0 20px; background-color: #f8f8f8; `,
+            tab: ` padding: 12px 20px; background: none; border: none; border-bottom: 3px solid transparent; font-size: 15px; font-weight: 500; color: #555; cursor: pointer; transition: all 0.2s ease; margin-right: 8px; `,
+            tabActive: ` border-bottom-color: var(--ios-blue); color: var(--ios-blue); `
+        },
+
+        // Card list styles
+        cardList: {
+            container: ` display: flex; flex-direction: column; gap: 24px; margin-bottom: 16px;  `,
+            sectionHeader: ` display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;  `,
+            sectionTitle: ` margin: 0; font-size: 16px; font-weight: 600;  `,
+            cardCount: ` font-size: 14px; color: var(--ios-gray);  `,
+            grid: ` display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;  `,
+            emptyMessage: ` grid-column: 1 / -1; padding: 16px; text-align: center; background-color: rgba(0,0,0,0.02); border-radius: 10px; color: var(--ios-gray); font-size: 14px;  `,
+            item: ` background-color: white; border-radius: 12px; border: 1px solid rgba(0,0,0,0.08); padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: all 0.2s ease;  `
+        },
+
+        // Badge styles (expanded)
+        badges: {
+            // Existing styles...
+            statusPill: {
+                eligible: ` border-radius: 16px; background-color: rgba(0, 122, 255, 0.1); color: var(--ios-blue); border: 1px solid rgba(0, 122, 255, 0.2); padding: 5px 12px; font-weight: 600;     font-size: 13px;  display: inline-flex;  align-items: center;  gap: 4px; `, enrolled: `  border-radius: 16px;  background-color: rgba(52, 199, 89, 0.1);  color: var(--ios-green);  border: 1px solid rgba(52, 199, 89, 0.2);  padding: 5px 12px;  font-weight: 600;  font-size: 13px;  display: inline-flex;  align-items: center;  gap: 4px; `
+            }
+        },
+        glassMorphism: {
+            card: ` background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: var(--ios-radius); border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);  `,
+            modal: ` background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 20px 80px rgba(0, 0, 0, 0.2);  `,
+            navbar: ` background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid rgba(230, 230, 230, 0.5);  `
+        },
+
+        // Beautiful gradient styles
+        gradients: {
+            primary: 'linear-gradient(135deg, #4CAF50, #2196F3)',
+            success: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+            warning: 'linear-gradient(135deg, #FF9800, #FFC107)',
+            danger: 'linear-gradient(135deg, #F44336, #FF5722)',
+            blue: 'linear-gradient(135deg, #2196F3, #03A9F4)',
+            purple: 'linear-gradient(135deg, #9C27B0, #673AB7)',
+            dark: 'linear-gradient(135deg, #424242, #212121)'
+        },
+
+        // Refined animations
+        animations: {
+            fadeInUp: 'animation: fadeInUp 0.3s ease forwards;',
+            fadeInDown: 'animation: fadeInDown 0.3s ease forwards;',
+            scaleIn: 'animation: scaleIn 0.3s ease forwards;',
+            pulse: 'animation: pulse 2s infinite;'
+        },
+
+        // Enhanced shadow styles
+        shadows: {
+            sm: 'box-shadow: 0 2px 6px rgba(0,0,0,0.05);',
+            md: 'box-shadow: 0 5px 15px rgba(0,0,0,0.08);',
+            lg: 'box-shadow: 0 10px 25px rgba(0,0,0,0.12);',
+            xl: 'box-shadow: 0 15px 35px rgba(0,0,0,0.18);'
+        },
+
+        // Beautiful hover effects
+        hoverEffects: {
+            lift: ` transition: transform 0.2s ease, box-shadow 0.2s ease; &:hover {  transform: translateY(-4px);  box-shadow: 0 8px 20px rgba(0,0,0,0.1); }  `,
+            glow: ` transition: box-shadow 0.2s ease; &:hover {  box-shadow: 0 0 16px rgba(0, 122, 255, 0.5); }  `,
+            scale: ` transition: transform 0.2s ease; &:hover { transform: scale(1.05); }  `
+        },
+
+        cards: {
+            stats: ` background-color: white; border-radius: 16px; padding: 16px 20px; min-width: 140px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: flex; flex-direction: column; align-items: center; transition: transform 0.2s ease;  `,
+            offer: ` background-color: white; border-radius: 12px;  border: 1px solid rgba(0,0,0,0.08); padding: 16px; transition: all 0.2s ease; display: flex; gap: 14px;  `,
+            benefit: ` border: 1px solid #e6e6e6; border-radius: 16px; padding: 16px; margin-top: 16px; background-color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: all 0.3s ease; position: relative; overflow: hidden;  `
+        },
+
+        // Progress components
+        progress: {
+            container: `margin: 16px 0;`,
+            bar: ` height: 12px; border-radius: 8px; background-color: #f0f0f0; position: relative; overflow: hidden; border: 1px solid #ddd; width: 100%; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);  `,
+            fill: ` height: 100%; position: absolute; top: 0; left: 0; transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);  `
+        },
+
+        // Accordion components
+        accordion: {
+            item: ` border: 1px solid #e0e0e0; border-radius: 12px; margin-bottom: 16px; background-color: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: box-shadow 0.2s ease, transform 0.2s ease; overflow: hidden;  `,
+            header: ` padding: 16px 20px; cursor: pointer; transition: background-color 0.2s ease; background-color: #f9f9f9; position: relative; border-bottom: 1px solid transparent;  `,
+            body: ` padding: 0 20px; overflow: hidden; max-height: 0; transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out, opacity 0.3s ease; opacity: 0;  `
+        },
+
+        // Status mapping
+        status: {
+            achieved: { color: 'var(--ios-green)', bgColor: 'rgba(52, 199, 89, 0.15)', borderColor: 'rgba(52, 199, 89, 0.25)' },
+            inProgress: { color: 'var(--ios-blue)', bgColor: 'rgba(0, 122, 255, 0.15)', borderColor: 'rgba(0, 122, 255, 0.25)' },
+            notStarted: { color: 'var(--ios-gray)', bgColor: 'rgba(142, 142, 147, 0.15)', borderColor: 'rgba(142, 142, 147, 0.25)' },
+            active: { color: 'var(--ios-green)', bgColor: 'rgba(52, 199, 89, 0.15)', borderColor: 'rgba(52, 199, 89, 0.25)' },
+            pending: { color: 'var(--ios-orange)', bgColor: 'rgba(255, 149, 0, 0.15)', borderColor: 'rgba(255, 149, 0, 0.25)' },
+            canceled: { color: 'var(--ios-red)', bgColor: 'rgba(255, 59, 48, 0.15)', borderColor: 'rgba(255, 59, 48, 0.25)' }
+        },
+
+        // Enhanced table cells
+        tableCells: {
+            index: `font-family: var(--ios-font); font-size: 13px;`,
+            card: `font-weight: 500; color: #1c1c1e; font-size: 14px; padding: 4px 8px; border-radius: 6px; background-color: rgba(0,0,0,0.03); display: inline-block;`,
+            name: `max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; font-size: 13px;`,
+            money: `font-variant-numeric: tabular-nums; font-weight: 600; text-align: right;`,
+            description: `font-size: 13px; color: var(--ios-text-secondary); max-width: 220px; max-height: 60px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; line-height: 1.3;`
+        },
+
         // Page layout shortcuts
         pageContainer: 'display:flex; flex-direction:column; gap:20px; padding:20px; max-width:100%; margin:0 auto; font-family:var(--ios-font); transition:all 0.3s ease;',
         cardContainer: 'background:var(--ios-background); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); border:1px solid var(--ios-border);',
@@ -1038,8 +566,9 @@
     const API_USCF1 = "https://www.uscardforum.com/session/current.json";
     const API_USCF2 = "https://www.uscardforum.com/u/";
     const API_balance = "https://global.americanexpress.com/api/servicing/v1/financials/balances?extended_details=deferred,non_deferred,pay_in_full,pay_over_time,early_pay";
-    const API_balancePending = "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending";
+    const API_pendingBalance = "https://global.americanexpress.com/api/servicing/v1/financials/transaction_summary?status=pending";
     const API_benefit = "https://functions.americanexpress.com/ReadBestLoyaltyBenefitsTrackers.v1";
+
 
     // =========================================================================
     // Section 2: Global State Variables
@@ -1161,8 +690,7 @@
 
         const btn = ui_createElement('button', {
             props: {
-                innerHTML: content,
-                disabled
+                innerHTML: content, disabled
             },
             styleString,
             events: {
@@ -1190,49 +718,61 @@
             message = 'Try adjusting your search or filters',
             buttonText = 'Reset Filters',
             iconSvg = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
-            callback = handleoffers_resetAllFilters
+            callback = () => { }
         } = options;
 
-        container.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; text-align:center; background-color:rgba(0,0,0,0.02); border-radius:16px; margin:20px 0;';
+        return ui_createElement('div', {
+            styleString: `
+                display:flex; flex-direction:column; align-items:center; 
+                justify-content:center; padding:80px 20px; text-align:center; 
+                background-color:rgba(0,0,0,0.02); border-radius:16px; 
+                margin:20px 0;
+            `,
+            children: [
+                // Icon
+                ui_createElement('div', {
+                    styleString: 'margin-bottom:24px; width:100px; height:100px; display:flex; align-items:center; justify-content:center;',
+                    props: {
+                        innerHTML: `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">${iconSvg}</svg>`
+                    }
+                }),
 
-        // Illustration
-        const illustration = document.createElement('div');
-        illustration.style.cssText = 'margin-bottom:24px; width:100px; height:100px; display:flex; align-items:center; justify-content:center;';
-        illustration.innerHTML = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">${iconSvg}</svg>`;
+                // Title
+                ui_createElement('div', {
+                    text: title,
+                    styleString: 'font-size:18px; font-weight:600; margin-bottom:12px; color:#1c1c1e;'
+                }),
 
-        // Message elements
-        const titleElement = document.createElement('div');
-        titleElement.style.cssText = 'font-size:18px; font-weight:600; margin-bottom:12px; color:#1c1c1e;';
-        titleElement.textContent = title;
+                // Message
+                ui_createElement('div', {
+                    text: message,
+                    styleString: 'font-size:14px; color:var(--ios-gray); max-width:400px; margin:0 auto 24px;'
+                }),
 
-        const subtitleElement = document.createElement('div');
-        subtitleElement.style.cssText = 'font-size:14px; color:var(--ios-gray); max-width:400px; margin:0 auto 24px;';
-        subtitleElement.textContent = message;
-
-        // Reset button
-        const resetButton = document.createElement('button');
-        resetButton.textContent = buttonText;
-        resetButton.style.cssText = 'padding:10px 20px; background-color:var(--ios-blue); color:white; border:none; border-radius:10px; font-size:14px; font-weight:500; cursor:pointer; box-shadow:0 2px 8px rgba(0, 122, 255, 0.3); transition:all 0.2s ease;';
-
-        resetButton.addEventListener('mouseenter', () => {
-            resetButton.style.transform = 'translateY(-2px)';
-            resetButton.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
+                // Button
+                ui_createElement('button', {
+                    text: buttonText,
+                    styleString: `
+                        padding:10px 20px; background-color:var(--ios-blue); 
+                        color:white; border:none; border-radius:10px; 
+                        font-size:14px; font-weight:500; cursor:pointer; 
+                        box-shadow:0 2px 8px rgba(0, 122, 255, 0.3); 
+                        transition:all 0.2s ease;
+                    `,
+                    events: {
+                        mouseenter: e => {
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
+                        },
+                        mouseleave: e => {
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+                        },
+                        click: callback
+                    }
+                })
+            ]
         });
-
-        resetButton.addEventListener('mouseleave', () => {
-            resetButton.style.transform = 'translateY(0)';
-            resetButton.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-        });
-
-        resetButton.addEventListener('click', callback);
-
-        // Assemble empty state
-        container.appendChild(illustration);
-        container.appendChild(titleElement);
-        container.appendChild(subtitleElement);
-        container.appendChild(resetButton);
-
-        return container;
     }
 
     function ui_createFilterBar(options = {}) {
@@ -1366,535 +906,437 @@
         return badge;
     }
 
-    function ui_createCard(config = {}) {
+    function ui_createModal(config = {}) {
         const {
+            id = 'modal-overlay',
+            width = '800px',
             title = '',
-            content = [],
-            footer = null,
-            customStyle = '',
-            hover = true
+            onClose = () => { }
         } = config;
 
-        const card = ui_createElement('div', {
-            styleString: `
-                ${UI_STYLES.containers.card}
-                ${customStyle}
-            `,
-            events: hover ? {
-                mouseenter: (e) => {
-                    e.target.style.transform = 'translateY(-3px)';
-                    e.target.style.boxShadow = UI_STYLES.utils.shadowHover;
-                },
-                mouseleave: (e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = UI_STYLES.utils.shadow;
-                }
-            } : {}
+        // Remove existing modal with the same ID
+        const existing = document.getElementById(id);
+        if (existing) existing.remove();
+
+        // Create overlay
+        const overlay = ui_createElement('div', {
+            props: { id },
+            styleString: UI_STYLES.modal.overlay
         });
 
-        // Add title if provided
+        // Create modal container
+        const modal = ui_createElement('div', {
+            styleString: UI_STYLES.modal.container + `max-width: ${width};`
+        });
+
+        // Create header with title and close button
+        const header = ui_createElement('div', {
+            styleString: UI_STYLES.modal.header
+        });
+
         if (title) {
             const titleEl = ui_createElement('h3', {
                 text: title,
-                styleString: UI_STYLES.text.title
+                styleString: UI_STYLES.modal.title
             });
-            card.appendChild(titleEl);
+            header.appendChild(titleEl);
         }
 
-        // Add content
-        content.forEach(item => {
-            if (item) card.appendChild(item);
-        });
-
-        // Add footer if provided
-        if (footer) {
-            const footerEl = ui_createElement('div', {
-                styleString: 'margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.08);',
-                children: Array.isArray(footer) ? footer : [footer]
-            });
-            card.appendChild(footerEl);
-        }
-
-        return card;
-    }
-
-    function ui_createToggleSwitch(options = {}) {
-        const {
-            isChecked = false,
-            onChange = () => { },
-            color = 'var(--ios-blue)',
-            size = 'medium',
-            label = '',
-            labelPosition = 'right'
-        } = options;
-
-        // Determine toggle size
-        const sizes = {
-            small: { width: '30px', height: '18px', knobSize: '14px' },
-            medium: { width: '36px', height: '22px', knobSize: '18px' },
-            large: { width: '44px', height: '26px', knobSize: '22px' }
-        };
-
-        const { width, height, knobSize } = sizes[size] || sizes.medium;
-
-        const toggleContainer = ui_createElement('div', {
-            styleString: 'display:flex; align-items:center; gap:8px;'
-        });
-
-        // Create the toggle
-        const toggle = ui_createElement('div', {
-            styleString: `
-                display:inline-block;
-                position:relative;
-                width:${width};
-                height:${height};
-                border-radius:${parseInt(height) / 2}px;
-                cursor:pointer;
-                transition:background-color 0.3s ease;
-                box-shadow:0 1px 3px rgba(0,0,0,0.1) inset;
-                background-color:${isChecked ? color : '#e9e9ea'};
-            `,
+        // Close button
+        const closeBtn = ui_createElement('button', {
+            props: {
+                innerHTML: `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+                `
+            },
+            styleString: UI_STYLES.modal.closeButton,
             events: {
-                click: () => {
-                    const newState = !isChecked;
-                    toggle.style.backgroundColor = newState ? color : '#e9e9ea';
-                    knob.style.left = newState ? `calc(100% - ${parseInt(knobSize) + 2}px)` : '2px';
-
-                    // Add animation effect
-                    knob.animate([
-                        { transform: 'scale(0.9)' },
-                        { transform: 'scale(1.1)' },
-                        { transform: 'scale(1)' }
-                    ], { duration: 300, easing: 'ease-out' });
-
-                    onChange(newState);
+                mouseenter: (e) => {
+                    e.target.style.backgroundColor = 'rgba(0,0,0,0.1)';
+                    e.target.style.color = '#333';
                 },
-                mouseenter: () => knob.style.transform = 'scale(1.05)',
-                mouseleave: () => knob.style.transform = 'scale(1)',
-                mousedown: () => knob.style.transform = 'scale(0.95)',
-                mouseup: () => knob.style.transform = 'scale(1.05)'
+                mouseleave: (e) => {
+                    e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                    e.target.style.color = '#666';
+                },
+                click: () => {
+                    // Fade out animation
+                    modal.style.transform = 'translateY(40px) scale(0.95)';
+                    modal.style.opacity = '0';
+                    overlay.style.opacity = '0';
+
+                    // Remove after animation completes
+                    setTimeout(() => {
+                        overlay.remove();
+                        onClose();
+                    }, 300);
+                }
             }
         });
 
-        // Create the knob
-        const knob = ui_createElement('div', {
-            styleString: `
-                position:absolute;
-                width:${knobSize};
-                height:${knobSize};
-                border-radius:50%;
-                background-color:#ffffff;
-                box-shadow:0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
-                top:2px;
-                left:${isChecked ? `calc(100% - ${parseInt(knobSize) + 2}px)` : '2px'};
-                transition:left 0.3s ease, transform 0.1s ease;
-            `
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        // Create content container
+        const content = ui_createElement('div', {
+            styleString: UI_STYLES.modal.content
         });
 
-        toggle.appendChild(knob);
+        modal.appendChild(content);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
 
-        // Add label if provided
-        if (label) {
-            const labelEl = ui_createElement('span', {
-                text: label,
-                styleString: UI_STYLES.text.label
-            });
+        // Animate in
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'translateY(0) scale(1)';
+            modal.style.opacity = '1';
+        }, 10);
 
-            if (labelPosition === 'left') {
-                toggleContainer.appendChild(labelEl);
-                toggleContainer.appendChild(toggle);
-            } else {
-                toggleContainer.appendChild(toggle);
-                toggleContainer.appendChild(labelEl);
-            }
-        } else {
-            toggleContainer.appendChild(toggle);
-        }
-
-        return toggleContainer;
-    }
-
-    // Reusable action button creator
-    function createResetBtn(text, icon, onClick, bgColor = 'var(--ios-blue)', textColor = 'white') {
-        return ui_createBtn_v2({
-            label: text,
-            icon: icon,
-            onClick: onClick,
-            bgColor: bgColor,
-            textColor: textColor,
-            type: bgColor === 'rgba(142, 142, 147, 0.1)' ? 'secondary' : 'primary'
-        });
+        return {
+            overlay,
+            modal,
+            header,
+            content,
+            closeBtn
+        };
     }
 
     // Core table renderer with iOS styling and smaller text
     function ui_renderDataTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
-        // Create main table element with clean styling
+        // Create main table with explicit styling using CSS variables
         const tableElement = document.createElement('table');
         tableElement.className = 'ios-table';
-        tableElement.style.fontSize = '13px';
-        tableElement.style.borderCollapse = 'separate';
-        tableElement.style.borderSpacing = '0';
-        tableElement.style.width = '100%';
-        tableElement.style.backgroundColor = '#ffffff';
-        tableElement.style.overflow = 'hidden';
-        tableElement.style.boxShadow = 'none';
+        tableElement.style.cssText = `
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: var(--ios-table-cell-font-size);
+            color: var(--ios-text-secondary);
+            border-radius: var(--ios-table-border-radius);
+            overflow: hidden;
+            box-shadow: var(--ios-shadow-sm);
+            border: var(--ios-border-light);
+            background-color: var(--ios-background);
+            display: table;
+        `;
 
-        // Create and append header
-        const thead = createTableHeader(headers, colWidths, sortHandler, sortableKeys);
-        tableElement.appendChild(thead);
+        // Create header
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+        thead.style.cssText = `
+            background: var(--ios-header-bg);
+            border-bottom: var(--ios-border-light);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        `;
 
-        // Create and append body
-        const tbody = createTableBody(headers, colWidths, items, cellRenderer);
-        tableElement.appendChild(tbody);
+        const headerRow = document.createElement('tr');
 
-        return tableElement;
-
-        // Helper function: Create table header
-        function createTableHeader(headers, colWidths, sortHandler, sortableKeys) {
-            const thead = document.createElement('thead');
-            thead.className = 'ios-table-head';
-            thead.style.position = 'sticky';
-            thead.style.top = '0';
-            thead.style.zIndex = '2';
-            thead.style.background = '#f5f5f7';
-            thead.style.borderBottom = '1px solid rgba(60, 60, 67, 0.2)';
-            thead.style.backdropFilter = 'none';
-            thead.style.webkitBackdropFilter = 'none';
-
-            const headerRow = document.createElement('tr');
-
-            headers.forEach(headerItem => {
-                const th = createHeaderCell(headerItem, colWidths, sortHandler, sortableKeys);
-                headerRow.appendChild(th);
-            });
-
-            thead.appendChild(headerRow);
-            return thead;
-        }
-
-        // Helper function: Create header cell with sort functionality
-        function createHeaderCell(headerItem, colWidths, sortHandler, sortableKeys) {
+        headers.forEach(headerItem => {
             const th = document.createElement('th');
             th.textContent = headerItem.label;
-
-            // Base styling
-            th.style.fontSize = '13px';
-            th.style.padding = '12px 14px';
-            th.style.fontWeight = '600';
-            th.style.color = 'var(--ios-text-primary)';
-            th.style.letterSpacing = '-0.01em';
-            th.style.textAlign = 'center';
-            th.style.borderBottom = '1px solid rgba(60, 60, 67, 0.12)';
-            th.style.verticalAlign = 'middle';
-            th.style.backgroundColor = '#f5f5f7';
+            th.style.cssText = `
+                padding: var(--ios-table-cell-padding);
+                font-size: var(--ios-table-header-font-size);
+                font-weight: 600;
+                color: var(--ios-text-secondary);
+                text-align: left;
+                border-right: var(--ios-border-light);  `;
 
             // Apply column width if specified
-            if (colWidths[headerItem.key]) {
+            if (colWidths && colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
             }
 
-            // Add sort functionality if sortable
+            // Add sort functionality
             if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
-                makeCellSortable(th, headerItem.key, sortHandler);
-            }
+                th.className = 'sortable';
+                th.setAttribute('data-sort-key', headerItem.key);
+                th.style.position = 'relative';
+                th.style.paddingRight = '28px';
+                th.style.cursor = 'pointer';
 
-            return th;
-        }
+                // Create sort button
+                const sortButton = document.createElement('div');
+                sortButton.className = 'ios-sort-button';
+                sortButton.style.cssText = `
+                    position: absolute;
+                    right: 8px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
 
-        // Helper function: Add sort functionality to header cell
-        function makeCellSortable(th, key, sortHandler) {
-            th.className = 'sortable';
-            th.setAttribute('data-sort-key', key);
-            th.style.paddingRight = '22px';
-            th.style.position = 'relative';
-            th.style.cursor = 'pointer';
-            th.style.transition = 'background-color 0.2s ease';
+                // Create sort indicator with SVG
+                const sortIcon = document.createElement('div');
+                sortIcon.className = 'ios-sort-indicator';
+                sortIcon.style.cssText = `
+                    width: 8px;
+                    height: 8px;
+                    transition: all var(--ios-anim-fast) ease;
+                    opacity: 0.4;
+                `;
 
-            // Hover effect
-            th.addEventListener('mouseenter', () => {
-                th.style.backgroundColor = 'rgba(245, 245, 247, 0.9)';
-            });
+                // Set current sort state
+                const isActive = window.glb_memberSortState?.key === headerItem.key ||
+                    window.glb_offerSortState?.key === headerItem.key;
+                const direction = isActive ?
+                    (window.glb_memberSortState?.key === headerItem.key ?
+                        window.glb_memberSortState.direction :
+                        window.glb_offerSortState?.direction) :
+                    1;
 
-            th.addEventListener('mouseleave', () => {
-                th.style.backgroundColor = '#f5f5f7';
-            });
-
-            // Create sort button
-            const sortButton = document.createElement('div');
-            sortButton.className = 'ios-sort-button';
-            sortButton.style.position = 'absolute';
-            sortButton.style.right = '4px';
-            sortButton.style.top = '50%';
-            sortButton.style.transform = 'translateY(-50%)';
-            sortButton.style.width = '18px';
-            sortButton.style.height = '18px';
-            sortButton.style.borderRadius = '9px';
-            sortButton.style.display = 'flex';
-            sortButton.style.alignItems = 'center';
-            sortButton.style.justifyContent = 'center';
-
-            // Sort icon
-            const sortIcon = document.createElement('span');
-            sortIcon.textContent = '•';
-            sortIcon.style.color = 'var(--ios-blue)';
-            sortIcon.style.fontSize = '12px';
-
-            // Check current sort state
-            if (window.glb_memberSortState?.key === key) {
-                sortIcon.textContent = window.glb_memberSortState.direction === 1 ? '↑' : '↓';
-            } else if (window.glb_offerSortState?.key === key) {
-                sortIcon.textContent = window.glb_offerSortState.direction === 1 ? '↑' : '↓';
-            }
-
-            sortButton.appendChild(sortIcon);
-            th.appendChild(sortButton);
-
-            // Handle click to sort
-            th.addEventListener('click', () => {
-                sortHandler(key);
-
-                // Reset all sort indicators
-                th.closest('tr').querySelectorAll('th').forEach(header => {
-                    const icon = header.querySelector('.ios-sort-button span');
-                    if (icon) icon.textContent = '•';
-                });
-
-                // Update this column's indicator
-                // We need to delay to ensure the sort state has been updated
-                setTimeout(() => {
-                    const direction = (window.glb_memberSortState?.key === key)
-                        ? window.glb_memberSortState.direction
-                        : window.glb_offerSortState?.direction;
-
-                    sortIcon.textContent = direction === 1 ? '↑' : '↓';
-                }, 0);
-            });
-        }
-
-        // Helper function: Create table body with rows
-        function createTableBody(headers, colWidths, items, cellRenderer) {
-            const tbody = document.createElement('tbody');
-
-            // Show empty state if no items
-            if (!items || items.length === 0) {
-                appendEmptyState(tbody, headers.length);
-                return tbody;
-            }
-
-            // Create rows for each item
-            items.forEach((item, idx) => {
-                const row = createTableRow(item, headers, colWidths, cellRenderer);
-                tbody.appendChild(row);
-            });
-
-            return tbody;
-        }
-
-        // Helper function: Create a single table row
-        function createTableRow(item, headers, colWidths, cellRenderer) {
-            const row = document.createElement('tr');
-            row.style.transition = 'background-color 0.2s ease';
-
-            // Check for highlighting more explicitly with debugging
-            const shouldHighlight = shouldHighlightItem(item);
-
-            if (shouldHighlight) {
-                // Make the highlight more pronounced
-                row.classList.add('ios-highlight-row');
-                row.style.backgroundColor = 'rgba(255, 204, 0, 0.2) !important';
-                row.style.borderLeft = '4px solid rgba(255, 204, 0, 0.8)';
-            }
-
-            // Alternate row styling - only apply if not highlighted
-            if (!shouldHighlight && item._index % 2 === 1) {
-                row.style.backgroundColor = 'var(--ios-secondary-bg)';
-            }
-
-            // Hover effect that preserves highlighting
-            row.addEventListener('mouseenter', () => {
-                if (!shouldHighlight) {
-                    row.style.backgroundColor = 'rgba(242, 242, 247, 0.85)';
-                }
-            });
-
-            row.addEventListener('mouseleave', () => {
-                if (!shouldHighlight) {
-                    if (item._index % 2 === 1) {
-                        row.style.backgroundColor = 'var(--ios-secondary-bg)';
-                    } else {
-                        row.style.backgroundColor = '';
-                    }
+                if (isActive) {
+                    sortIcon.classList.add('active');
+                    sortIcon.style.opacity = '1';
+                    sortIcon.classList.add(direction === 1 ? 'asc' : 'desc');
+                    sortIcon.innerHTML = direction === 1 ?
+                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
+                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
                 } else {
-                    row.style.backgroundColor = 'rgba(255, 204, 0, 0.2) !important';
+                    sortIcon.innerHTML =
+                        `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
+                            <path d="M4 1v6M1 4h6"/>
+                        </svg>`;
                 }
-            });
 
-            // Create cells for each header
-            headers.forEach(headerItem => {
-                const td = createTableCell(item, headerItem, colWidths, cellRenderer);
-                row.appendChild(td);
-            });
+                sortButton.appendChild(sortIcon);
+                th.appendChild(sortButton);
 
-            return row;
-        }
-        // Helper function: Create table cell with content
-        function createTableCell(item, headerItem, colWidths, cellRenderer) {
-            const td = document.createElement('td');
-            td.style.fontSize = '13px';
-            td.style.padding = '10px 14px';
-            td.style.textAlign = 'center';
-            td.style.borderBottom = '1px solid rgba(60, 60, 67, 0.04)';
-            td.style.verticalAlign = 'middle';
+                // Handle click for sorting
+                th.addEventListener('click', () => {
+                    sortHandler(headerItem.key);
 
-            // Apply column width if specified
-            if (colWidths[headerItem.key]) {
-                td.style.width = colWidths[headerItem.key];
-                td.style.maxWidth = colWidths[headerItem.key];
-                td.style.whiteSpace = 'normal';
-                td.style.wordWrap = 'break-word';
+                    // Reset all indicators
+                    th.closest('tr').querySelectorAll('.ios-sort-indicator').forEach(icon => {
+                        icon.classList.remove('active', 'asc', 'desc');
+                        icon.style.opacity = '0.4';
+                        icon.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
+                            <path d="M4 1v6M1 4h6"/>
+                        </svg>`;
+                    });
+
+                    // Update with animation
+                    setTimeout(() => {
+                        const updatedDirection = (window.glb_memberSortState?.key === headerItem.key)
+                            ? window.glb_memberSortState.direction
+                            : window.glb_offerSortState?.direction;
+
+                        sortIcon.classList.add('active');
+                        sortIcon.style.opacity = '1';
+                        sortIcon.classList.add(updatedDirection === 1 ? 'asc' : 'desc');
+                        sortIcon.innerHTML = updatedDirection === 1 ?
+                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
+                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
+
+                        // Add animation class
+                        sortIcon.classList.add('ios-sort-animation');
+                        setTimeout(() => sortIcon.classList.remove('ios-sort-animation'), 300);
+                    }, 0);
+                });
             }
 
-            // Use cellRenderer to get content
-            const content = cellRenderer(item, headerItem);
+            headerRow.appendChild(th);
+        });
 
-            // Handle different types of content
-            if (content instanceof Node) {
-                handleNodeContent(td, content);
-            } else if (typeof content === 'string') {
-                handleStringContent(td, content);
-            } else {
-                td.textContent = content || '';
-            }
+        thead.appendChild(headerRow);
+        tableElement.appendChild(thead);
 
-            return td;
-        }
+        // Create body
+        const tbody = document.createElement('tbody');
 
-        // Helper function: Handle Node content
-        function handleNodeContent(td, content) {
-            // Center images
-            if (content.tagName === 'IMG') {
-                content.style.display = 'block';
-                content.style.margin = '0 auto';
-            }
-            // Center controls
-            else if (content.tagName === 'BUTTON' || content.tagName === 'INPUT') {
-                content.style.margin = '0 auto';
-                content.style.display = 'block';
-                content.style.fontSize = '12px'; // Smaller text
-            }
-
-            td.appendChild(content);
-        }
-
-        // Helper function: Handle string content
-        function handleStringContent(td, content) {
-            // Format currency
-            if (/^\$?\d+(\.\d{2})?$/.test(content)) {
-                const span = document.createElement('span');
-                span.className = 'ios-currency';
-                span.textContent = content;
-                span.style.fontSize = '13px';
-                td.appendChild(span);
-            }
-            // Handle status-like text
-            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
-                const statusSpan = document.createElement('span');
-                statusSpan.className = `ios-status ${content.toLowerCase()}`;
-                statusSpan.textContent = content;
-                statusSpan.style.fontSize = '12px';
-                td.appendChild(statusSpan);
-            }
-            // Regular text content
-            else {
-                td.textContent = content || '';
-            }
-        }
-
-        // Helper function: Append empty state message
-        function appendEmptyState(tbody, colSpan) {
+        // Handle empty state
+        // Handle empty state
+        if (!items || items.length === 0) {
             const emptyRow = document.createElement('tr');
             const emptyCell = document.createElement('td');
-            emptyCell.colSpan = colSpan;
+            emptyCell.colSpan = headers.length;
             emptyCell.className = 'ios-empty-state';
+            emptyCell.style.cssText = `
+                padding: var(--ios-empty-padding);
+                text-align: center;
+                color: var(--ios-gray);`;
 
-            const container = document.createElement('div');
-            ui_createEmptyState(container, {
-                callback: handleoffers_resetAllFilters
-            });
+            const emptyStateDiv = document.createElement('div');
+            emptyStateDiv.className = 'ios-empty-state-container';
+            emptyStateDiv.innerHTML = `
+                <div class="ios-empty-state-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="ios-empty-state-title">No Items Found</div>
+                <div class="ios-empty-state-message">Try adjusting your search or filters</div>`;
 
-            emptyCell.appendChild(container);
+            emptyCell.appendChild(emptyStateDiv);
             emptyRow.appendChild(emptyCell);
             tbody.appendChild(emptyRow);
+        } else {
+            // Create rows
+            items.forEach((item, idx) => {
+                const row = document.createElement('tr');
+                row.style.cssText = `transition: background-color var(--ios-anim-fast) ease;`;
+
+                if (idx % 2 === 1) {
+                    row.style.backgroundColor = 'var(--ios-secondary-bg)';
+                }
+
+                // Check for highlighting
+                if (glb_view_page === "members") {
+                    const shouldHighlight = shouldHighlightItem(item);
+                    if (shouldHighlight) {
+                        row.classList.add('ios-highlight-row');
+                        row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                        row.style.borderLeft = '3px solid var(--ios-highlight-border)';
+                        row.dataset.highlighted = 'true';
+                    }
+                }
+                row.addEventListener('mouseenter', () => {
+                    if (row.dataset.highlighted === 'true') {
+                        row.style.backgroundColor = 'var(--ios-highlight-hover)';
+                    } else {
+                        row.style.backgroundColor = 'var(--ios-table-row-hover)';
+                    }
+                });
+
+                row.addEventListener('mouseleave', () => {
+                    if (row.dataset.highlighted === 'true') {
+                        row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                    } else {
+                        row.style.backgroundColor = idx % 2 === 1 ? 'var(--ios-secondary-bg)' : '';
+                    }
+                });
+
+                // Create cells
+                headers.forEach(headerItem => {
+                    const td = document.createElement('td');
+                    td.style.cssText = `
+                        padding: var(--ios-table-cell-padding);
+                        border-bottom: var(--ios-border-light);
+                        vertical-align: middle;
+                    `;
+
+                    // Apply column width if specified
+                    if (colWidths && colWidths[headerItem.key]) {
+                        td.style.width = colWidths[headerItem.key];
+                        td.style.maxWidth = colWidths[headerItem.key];
+                    }
+
+                    try {
+                        // Get content using cell renderer
+                        const content = cellRenderer(item, headerItem);
+
+                        // Handle different types of content
+                        if (content instanceof Node) {
+                            td.appendChild(content);
+                        } else if (typeof content === 'string') {
+                            // Format currency
+                            if (/^\$?\d+(\.\d{2})?$/.test(content)) {
+                                const span = document.createElement('span');
+                                span.className = 'ios-currency';
+                                span.style.cssText = `
+                                    font-variant-numeric: tabular-nums;
+                                    font-weight: 500;
+                                    text-align: right;
+                                `;
+                                span.textContent = content;
+                                td.appendChild(span);
+                            }
+                            // Format status indicators
+                            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
+                                const statusSpan = document.createElement('span');
+                                statusSpan.className = `ios-status ${content.toLowerCase()}`;
+                                statusSpan.textContent = content;
+
+                                let statusStyle = '';
+                                if (['active', 'success'].includes(content.toLowerCase())) {
+                                    statusStyle = `
+                                        background-color: var(--ios-status-active-bg);
+                                        color: var(--ios-green);
+                                        border: 1px solid rgba(52, 199, 89, 0.25);
+                                    `;
+                                } else if (content.toLowerCase() === 'pending') {
+                                    statusStyle = `
+                                        background-color: var(--ios-status-pending-bg);
+                                        color: var(--ios-orange);
+                                        border: 1px solid rgba(255, 149, 0, 0.25);
+                                    `;
+                                } else {
+                                    statusStyle = `
+                                        background-color: var(--ios-status-inactive-bg);
+                                        color: var(--ios-red);
+                                        border: 1px solid rgba(255, 59, 48, 0.25);
+                                    `;
+                                }
+
+                                statusSpan.style.cssText = `
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    padding: 4px 10px;
+                                    border-radius: 12px;
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                    ${statusStyle}
+                                `;
+                                td.appendChild(statusSpan);
+                            }
+                            // Regular text content
+                            else {
+                                td.textContent = content || '';
+                            }
+                        } else {
+                            td.textContent = content || '';
+                        }
+                    } catch (error) {
+                        console.error('Error rendering cell:', error);
+                        td.textContent = 'Error';
+                    }
+
+                    row.appendChild(td);
+                });
+
+                tbody.appendChild(row);
+            });
         }
 
-        // Helper function: Reset filters
-        function handleoffers_resetAllFilters() {
-            if (typeof window.glb_filters !== 'undefined') {
-                // Reset all relevant filters
-                if (window.glb_filters.memberMerchantSearch) {
-                    window.glb_filters.memberMerchantSearch = '';
-                }
+        tableElement.appendChild(tbody);
+        return tableElement;
 
-                if (window.glb_filters.offerMerchantSearch) {
-                    window.glb_filters.offerMerchantSearch = '';
-                }
-
-                if (window.glb_filters.offerCardEnding) {
-                    window.glb_filters.offerCardEnding = '';
-                }
-
-                if (window.glb_filters.offerFav) {
-                    window.glb_filters.offerFav = false;
-                }
-
-                if (window.glb_filters.memberStatus !== 'Active') {
-                    window.glb_filters.memberStatus = 'Active';
-                }
-
-                if (window.glb_filters.memberCardtype !== 'all') {
-                    window.glb_filters.memberCardtype = 'all';
-                }
-
-                // Refresh the view
-                if (typeof window.ui_renderCurrentView === 'function') {
-                    window.ui_renderCurrentView();
-                }
-            }
-        }
-
-        // Helper function: Determine whether to highlight item
+        // Helper: Determine highlighting based on search
         function shouldHighlightItem(item) {
-            // For accounts tab - check for merchant search match
-            if (item.cardEnding && glb_filters.memberMerchantSearch) {
+            if (glb_filters?.memberMerchantSearch) {
                 const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
-
-                // Don't proceed if search term is empty
                 if (!searchTerm) return false;
 
-                // First check direct card property matches
+                // Check direct matches
                 const accountMatches =
-                    item.cardEnding.toLowerCase().includes(searchTerm) ||
+                    item.account_token.toLowerCase().includes(searchTerm) ||
                     (item.embossed_name && item.embossed_name.toLowerCase().includes(searchTerm)) ||
                     (item.description && item.description.toLowerCase().includes(searchTerm));
 
                 if (accountMatches) return true;
 
-                // Check if any offers match this account and search term
-                const matchingOffers = glb_offer.filter(offer => {
+                // Check related offers
+                const matchingOffers = glb_offer?.filter(offer => {
                     const nameMatch = offer.name.toLowerCase().includes(searchTerm);
-
-                    // Important fix: Check account_token, not cardEnding
-                    const isEligible = Array.isArray(offer.eligibleCards) &&
-                        offer.eligibleCards.includes(item.account_token);
-                    const isEnrolled = Array.isArray(offer.enrolledCards) &&
-                        offer.enrolledCards.includes(item.account_token);
-
+                    const isEligible = Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(item.account_token);
+                    const isEnrolled = Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(item.account_token);
                     return nameMatch && (isEligible || isEnrolled);
                 });
 
-                return matchingOffers.length > 0;
+                return matchingOffers && matchingOffers.length > 0;
             }
-
             return false;
         }
     }
@@ -2346,15 +1788,9 @@
         } else {
             // If we're in grid view, update the display container
             const displayContainer = document.getElementById('offers-display-container');
-            if (displayContainer) {
-                displayContainer.innerHTML = "";
-                const displayMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
-                if (displayMode === 'grid') {
-                    displayContainer.appendChild(offers_renderGridView());
-                } else {
-                    displayContainer.appendChild(offers_renderTableView());
-                }
-            }
+            displayContainer.innerHTML = "";
+            displayContainer.appendChild(offers_renderTableView());
+
         }
     }
 
@@ -2471,26 +1907,6 @@
         };
     }
 
-    // Helper to darken a color
-    function util_darkenColor(color) {
-        if (color.startsWith('var(')) return color;
-        if (color.startsWith('rgba(')) {
-            // For rgba, just return a slightly more opaque version
-            return color.replace(/rgba\(([^,]+,[^,]+,[^,]+),\s*([^)]+)\)/, (_, rgb, alpha) =>
-                `rgba(${rgb}, ${Math.min(parseFloat(alpha) + 0.1, 1)})`);
-        }
-        // For hex colors (simplified approach)
-        if (color.startsWith('#')) {
-            const hex = color.slice(1);
-            const num = parseInt(hex, 16);
-            const r = (num >> 16) * 0.8;
-            const g = ((num >> 8) & 0xFF) * 0.8;
-            const b = (num & 0xFF) * 0.8;
-            return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-        }
-        return color; // Return original if we can't easily darken it
-    }
-
 
 
     // =========================================================================
@@ -2565,8 +1981,11 @@
             if (!readonly) {
                 storage_manageData("set", storage_accToken, ["account"]);
             }
+
             return true;
         }
+
+        SmartRenderer.markChanged('members');
         return false;
     }
 
@@ -2750,6 +2169,8 @@
 
         storage_manageData("set", storage_accToken, ["account", "offer", "offer_expired", "offer_redeemed"]);
 
+        SmartRenderer.markChanged('offers');
+
         return changeStats;
     }
 
@@ -2884,7 +2305,7 @@
         }
         try {
             const balancesUrl = API_balance;
-            const pTransactionUrl = API_balancePending;
+            const pTransactionUrl = API_pendingBalance;
 
             const [balancesResponse, pTransactionResponse] = await Promise.all([
                 fetch(balancesUrl, {
@@ -3059,6 +2480,8 @@
             glb_benefit = newTrackers;
             storage_manageData("set", storage_accToken, "benefit");
         }
+
+        SmartRenderer.markChanged('benefits')
 
     }
 
@@ -3418,19 +2841,42 @@
 
     // Streamlined filter bar with enhanced search
     function members_renderFilterBar() {
-        return ui_createFilterBar({
-            searchPlaceholder: 'Search offers...',
-            onSearch: (value) => {
-                glb_filters.memberMerchantSearch = value.toLowerCase();
-                ui_renderCurrentView();
-            },
-            resetCallback: () => {
-                glb_filters.memberStatus = 'Active';
-                glb_filters.memberCardtype = 'all';
-                glb_filters.memberMerchantSearch = '';
-                ui_renderCurrentView();
+        const filtersCard = document.createElement('div');
+        filtersCard.style.cssText = UI_STYLES.containers.card + ' margin-bottom:8px;';
+
+        const searchContainer = document.createElement('div');
+        searchContainer.style.cssText = 'display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;';
+
+        // Create reactive search with direct update callback
+        const searchFilter = createReactiveFilter(searchContainer, {
+            searchPlaceholder: 'Search members or offers...',
+            initialValue: glb_filters.memberMerchantSearch || '',
+            onFilterChange: (value) => {
+                // Force immediate table update with highlighting
+                const tableContainer = document.getElementById('members-table-container');
+                if (tableContainer) {
+                    tableContainer.innerHTML = "";
+                    tableContainer.appendChild(members_renderTable());
+                }
             }
         });
+
+        // Add reset button
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset Filters';
+        resetButton.style.cssText = 'padding:10px 16px; border:none; border-radius:8px; background:rgba(0,0,0,0.05); cursor:pointer;';
+        resetButton.addEventListener('click', () => {
+            searchFilter.setValue('');
+            glb_filters.memberMerchantSearch = '';
+            glb_filters.memberStatus = 'Active';
+            glb_filters.memberCardtype = 'all';
+            ui_renderCurrentView(true);
+        });
+
+        searchContainer.appendChild(resetButton);
+        filtersCard.appendChild(searchContainer);
+
+        return filtersCard;
     }
 
     // Optimized members table renderer
@@ -3438,7 +2884,7 @@
         const headers = [
             { label: "Index", key: "cardIndex" },
             { label: "Logo", key: "small_card_art" },
-            { label: "Card Ending", key: "cardEnding" },
+            { label: "Ending", key: "cardEnding" },
             { label: "User Name", key: "embossed_name" },
             { label: "Type", key: "relationship" },
             { label: "Opened", key: "account_setup_date" },
@@ -3469,57 +2915,61 @@
             return statusMatch && typeMatch;
         });
 
-        // Define cell rendering with organized handlers for each column type
+        // Cell renderer with organized handlers for each column type
         const cellRenderer = (item, headerItem) => {
             const key = headerItem.key;
-            const handlers = {
+
+            // Cell rendering methods organized by column type
+            const renderers = {
                 small_card_art: () => {
                     if (item.small_card_art && item.small_card_art !== 'N/A') {
-                        const imgContainer = document.createElement('div');
-                        imgContainer.style.cssText = 'display:flex; justify-content:center; align-items:center; height:40px;';
-
-                        const img = document.createElement('img');
-                        img.src = item.small_card_art;
-                        img.alt = "Card Logo";
-                        img.style.cssText = 'max-width:40px; max-height:40px; border-radius:4px; transition:transform 0.2s ease;';
-
-                        imgContainer.addEventListener('mouseenter', () => img.style.transform = 'scale(1.15)');
-                        imgContainer.addEventListener('mouseleave', () => img.style.transform = 'scale(1)');
-
-                        imgContainer.appendChild(img);
-                        return imgContainer;
+                        return ui_createElement('div', {
+                            styleString: 'display:flex; justify-content:center; align-items:center; height:40px;',
+                            children: [
+                                ui_createElement('img', {
+                                    props: { src: item.small_card_art, alt: "Card Logo" },
+                                    styleString: 'max-width:40px; max-height:40px; border-radius:4px; transition:transform 0.2s ease;',
+                                    events: {
+                                        mouseenter: e => e.target.style.transform = 'scale(1.15)',
+                                        mouseleave: e => e.target.style.transform = 'scale(1)'
+                                    }
+                                })
+                            ]
+                        });
                     }
                     return 'N/A';
                 },
 
                 cardIndex: () => {
                     const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
-                    const indexSpan = document.createElement('span');
-                    indexSpan.style.fontFamily = 'var(--ios-font)';
-                    indexSpan.style.fontSize = '13px';
-                    indexSpan.innerHTML = subIndex ?
-                        `<strong>${mainIndex}</strong>-${subIndex}` :
-                        `<strong>${mainIndex}</strong>`;
-                    return indexSpan;
+                    return ui_createElement('span', {
+                        styleString: UI_STYLES.tableCells.index,
+                        props: {
+                            innerHTML: subIndex ?
+                                `<strong>${mainIndex}</strong>-${subIndex}` :
+                                `<strong>${mainIndex}</strong>`
+                        }
+                    });
                 },
 
                 cardEnding: () => {
-                    const cardNum = document.createElement('div');
-                    cardNum.style.cssText = 'font-weight:500; color:#1c1c1e; font-size:14px; padding:4px 8px; border-radius:6px; background-color:rgba(0,0,0,0.03); display:inline-block;';
-                    cardNum.textContent = item[key];
-                    return cardNum;
+                    return ui_createElement('div', {
+                        text: item[key],
+                        styleString: UI_STYLES.tableCells.card
+                    });
                 },
 
                 embossed_name: () => {
-                    const nameDiv = document.createElement('div');
-                    nameDiv.style.cssText = 'max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500; font-size:13px;';
-                    nameDiv.textContent = item[key];
-                    nameDiv.title = item[key];
-                    return nameDiv;
+                    return ui_createElement('div', {
+                        text: item[key],
+                        styleString: UI_STYLES.tableCells.name,
+                        props: { title: item[key] }
+                    });
                 },
 
                 account_setup_date: () => {
-                    return (item[key] && item[key] !== 'N/A') ? util_formatDate(item[key]) : 'N/A';
+                    return (item[key] && item[key] !== 'N/A') ?
+                        util_formatDate(item[key]) : 'N/A';
                 },
 
                 eligibleOffers: () => createOfferBadge(item[key], 'eligible', item.account_token),
@@ -3528,37 +2978,41 @@
                 relationship: () => {
                     if (item.relationship === "SUPP") {
                         const parentCardNum = members_getParentCardNumber(item);
-                        const relationBadge = document.createElement('div');
-                        relationBadge.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:2px;';
-
-                        const typeLabel = document.createElement('span');
-                        typeLabel.textContent = 'SUPP';
-                        typeLabel.style.cssText = 'font-size:12px; color:var(--ios-blue); font-weight:600;';
-
-                        const parentLabel = document.createElement('span');
-                        parentLabel.textContent = `→ ${parentCardNum}`;
-                        parentLabel.style.cssText = 'font-size:11px; color:var(--ios-gray);';
-
-                        relationBadge.appendChild(typeLabel);
-                        relationBadge.appendChild(parentLabel);
-                        return relationBadge;
+                        return ui_createElement('div', {
+                            styleString: 'display:flex; flex-direction:column; align-items:center; gap:2px;',
+                            children: [
+                                ui_createElement('span', {
+                                    text: 'SUPP',
+                                    styleString: 'font-size:12px; color:var(--ios-blue); font-weight:600;'
+                                }),
+                                ui_createElement('span', {
+                                    text: `→ ${parentCardNum}`,
+                                    styleString: 'font-size:11px; color:var(--ios-gray);'
+                                })
+                            ]
+                        });
                     }
 
-                    const typeBadge = document.createElement('span');
-                    typeBadge.textContent = 'BASIC';
-                    typeBadge.style.cssText = 'font-size:12px; font-weight:600; color:var(--ios-green);';
-                    return typeBadge;
+                    return ui_createElement('span', {
+                        text: 'BASIC',
+                        styleString: 'font-size:12px; font-weight:600; color:var(--ios-green);'
+                    });
                 },
 
                 account_status: () => {
-                    const statusBadge = document.createElement('span');
-                    statusBadge.textContent = item[key];
-                    statusBadge.style.cssText = `
-                    display:inline-block; padding:4px 10px; border-radius:12px; font-size:12px; 
-                    font-weight:600; text-transform:capitalize;
-                    ${getStatusStyle(item[key].toLowerCase())}
-                    `;
-                    return statusBadge;
+                    const status = item[key].toLowerCase();
+                    const statusStyle = UI_STYLES.status[status] || UI_STYLES.status.pending;
+
+                    return ui_createElement('span', {
+                        text: item[key],
+                        styleString: `
+                            display:inline-block; padding:4px 10px; border-radius:12px; 
+                            font-size:12px; font-weight:600; text-transform:capitalize;
+                            background-color:${statusStyle.bgColor}; 
+                            color:${statusStyle.color}; 
+                            border:1px solid ${statusStyle.borderColor};
+                        `
+                    });
                 },
 
                 pending: () => createFinancialValue(item, 'debits_credits_payments_total_amount'),
@@ -3570,64 +3024,60 @@
             };
 
             // Use the appropriate handler or default
-            return handlers[key] ? handlers[key]() : (util_cleanValue(item[key]) || '');
+            return renderers[key] ? renderers[key]() : (util_cleanValue(item[key]) || '');
         };
 
         // Helper function for offer badges
         function createOfferBadge(count, type, accountToken) {
             const parsedCount = parseInt(count || 0);
-            const container = document.createElement('div');
-            container.style.cssText = 'height:32px; display:flex; align-items:center; justify-content:center;';
+            const container = ui_createElement('div', {
+                styleString: 'height:32px; display:flex; align-items:center; justify-content:center;'
+            });
 
             if (parsedCount > 0) {
                 const isEligible = type === 'eligible';
-                const btn = document.createElement('button');
-
-                // Use appropriate colors and icons based on type
-                const bgColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                const textColor = isEligible ? 'var(--ios-blue)' : 'var(--ios-green)';
-                const borderColor = isEligible ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)';
+                const statusStyle = isEligible ? UI_STYLES.status.inProgress : UI_STYLES.status.active;
                 const icon = isEligible ?
-                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${textColor}" style="margin-right:4px"><path d="M9.5 16.5v-9l7 4.5-7 4.5z"/></svg>` :
-                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${textColor}" style="margin-right:4px"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>`;
+                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9.5 16.5v-9l7 4.5-7 4.5z"/></svg>` :
+                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>`;
 
-                btn.className = isEligible ? 'eligible-badge' : 'enrolled-badge';
-                btn.style.cssText = `
-                border-radius:16px; background-color:${bgColor}; color:${textColor}; 
-                border:1px solid ${borderColor}; padding:5px 12px; font-weight:600; 
-                font-size:13px; cursor:pointer; transition:all 0.2s ease; display:flex; 
-                align-items:center; justify-content:center; min-width:40px;
-                `;
-                btn.innerHTML = icon + parsedCount;
-
-                // Add hover effects
-                btn.addEventListener('mouseover', () => {
-                    btn.style.transform = 'scale(1.05) translateY(-2px)';
-                    btn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                    btn.style.backgroundColor = isEligible ? 'rgba(0, 122, 255, 0.15)' : 'rgba(52, 199, 89, 0.15)';
+                return ui_createElement('button', {
+                    className: isEligible ? 'eligible-badge' : 'enrolled-badge',
+                    props: { innerHTML: icon + parsedCount },
+                    styleString: `
+                        border-radius:16px; 
+                        background-color:${statusStyle.bgColor}; 
+                        color:${statusStyle.color}; 
+                        border:1px solid ${statusStyle.borderColor}; 
+                        padding:5px 12px; 
+                        font-weight:600; 
+                        font-size:13px; 
+                        cursor:pointer; 
+                        transition:all 0.2s ease; 
+                        display:flex; 
+                        align-items:center; 
+                        justify-content:center; 
+                        min-width:40px;
+                    `,
+                    events: {
+                        mouseover: e => {
+                            e.target.style.transform = 'scale(1.05) translateY(-2px)';
+                            e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                        },
+                        mouseout: e => {
+                            e.target.style.transform = 'scale(1) translateY(0)';
+                            e.target.style.boxShadow = 'none';
+                        },
+                        click: e => members_popCard(accountToken, type)
+                    }
                 });
-
-                btn.addEventListener('mouseout', () => {
-                    btn.style.transform = 'scale(1) translateY(0)';
-                    btn.style.boxShadow = 'none';
-                    btn.style.backgroundColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                });
-
-                // Click handler for showing offers popup - use accountToken here, not cardEnding
-                btn.addEventListener('click', () => {
-                    members_showCardOffers(accountToken, type);
-                });
-
-                container.appendChild(btn);
-            } else {
-                // Zero count indicator
-                const zeroSpan = document.createElement('span');
-                zeroSpan.textContent = '0';
-                zeroSpan.style.cssText = 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6;';
-                container.appendChild(zeroSpan);
             }
 
-            return container;
+            // Zero count indicator
+            return ui_createElement('span', {
+                text: '0',
+                styleString: 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6;'
+            });
         }
 
         // Helper function for financial values
@@ -3638,138 +3088,94 @@
                     const sanitizedValue = util_cleanValue(value);
                     const numValue = parseFloat(sanitizedValue);
 
-                    const amountDiv = document.createElement('div');
-                    amountDiv.style.cssText = `
-                    font-variant-numeric:tabular-nums; font-family:var(--ios-font); 
-                    font-weight:${numValue > 0 ? '600' : '400'}; 
-                    color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
-                    `;
-
-                    // Format with dollar sign and commas
-                    amountDiv.textContent = numValue.toLocaleString('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        minimumFractionDigits: 2
+                    return ui_createElement('div', {
+                        styleString: `
+                            ${UI_STYLES.tableCells.money}
+                            font-weight:${numValue > 0 ? '600' : '400'}; 
+                            color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
+                        `,
+                        text: numValue.toLocaleString('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                            minimumFractionDigits: 2
+                        })
                     });
-
-                    return amountDiv;
                 }
 
                 // Loading spinner for data being fetched
-                return createLoadingSpinner();
+                return ui_createElement('div', {
+                    className: 'loading-spinner',
+                    styleString: 'width:16px; height:16px; border:2px solid rgba(0, 122, 255, 0.2); border-top:2px solid var(--ios-blue); border-radius:50%; margin:0 auto; animation:spin 1s linear infinite;'
+                });
             }
-
-            return ""; // Empty cell for non-BASIC cards
+            return "";
         }
 
         // Helper function for toggle switches
         function createToggleSwitch(account, type) {
-
             const isChecked = type === 'priority'
                 ? glb_priorityCards.includes(account.account_token)
                 : glb_excludedCards.includes(account.account_token);
 
-            const toggleContainer = document.createElement('div');
-            toggleContainer.style.cssText = 'display:flex; justify-content:center; align-items:center;';
+            const color = type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)';
 
-            // Create the toggle
-            const toggle = document.createElement('div');
-            toggle.style.cssText = `
-            display:inline-block; position:relative; width:36px; height:22px; 
-            border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
-            box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
-            background-color:${isChecked ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)') : '#e9e9ea'};
-            `;
+            return ui_createElement('div', {
+                styleString: 'display:flex; justify-content:center; align-items:center;',
+                children: [
+                    ui_createElement('div', {
+                        styleString: `
+                            display:inline-block; position:relative; width:36px; height:22px; 
+                            border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
+                            box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
+                            background-color:${isChecked ? color : '#e9e9ea'};
+                        `,
+                        children: [
+                            ui_createElement('div', {
+                                styleString: `
+                                    position:absolute; width:18px; height:18px; border-radius:9px; 
+                                    background-color:#ffffff; box-shadow:0 1px 3px rgba(0, 0, 0, 0.15); 
+                                    top:2px; left:${isChecked ? '16px' : '2px'}; transition:left 0.3s ease;
+                                `
+                            })
+                        ],
+                        props: {
+                            title: type === 'priority' ? 'Priority Card (Enroll First)' : 'Exclude Card (Skip Enrollment)'
+                        },
+                        events: {
+                            click: e => {
+                                const newState = !isChecked;
+                                const toggle = e.currentTarget;
+                                const knob = toggle.firstChild;
 
-            // Create the toggle knob
-            const knob = document.createElement('div');
-            knob.style.cssText = `
-            position:absolute; width:18px; height:18px; border-radius:9px; 
-            background-color:#ffffff; box-shadow:0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1); 
-            top:2px; left:${isChecked ? '16px' : '2px'}; transition:left 0.3s ease, transform 0.1s ease;
-            `;
+                                // Update visual state
+                                knob.style.left = newState ? '16px' : '2px';
+                                toggle.style.backgroundColor = newState ? color : '#e9e9ea';
 
-            // Add interactions
-            toggle.addEventListener('mouseenter', () => knob.style.transform = 'scale(1.05)');
-            toggle.addEventListener('mouseleave', () => knob.style.transform = 'scale(1)');
-            toggle.addEventListener('mousedown', () => knob.style.transform = 'scale(0.95)');
-            toggle.addEventListener('mouseup', () => knob.style.transform = 'scale(1.05)');
-
-            // Add click handler
-            toggle.addEventListener('click', () => {
-                const newState = !isChecked;
-
-                // Update the visual state
-                knob.style.left = newState ? '16px' : '2px';
-                toggle.style.backgroundColor = newState
-                    ? (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)')
-                    : '#e9e9ea';
-
-                // Add animation effect
-                knob.animate([
-                    { transform: 'scale(0.9)' },
-                    { transform: 'scale(1.1)' },
-                    { transform: 'scale(1)' }
-                ], { duration: 300, easing: 'ease-out' });
-
-                // Update data state using account token
-                if (type === 'priority') {
-                    if (newState) {
-                        if (!glb_priorityCards.includes(account.account_token)) {
-                            glb_priorityCards.push(account.account_token);
+                                // Update data state
+                                if (type === 'priority') {
+                                    if (newState) {
+                                        if (!glb_priorityCards.includes(account.account_token)) {
+                                            glb_priorityCards.push(account.account_token);
+                                        }
+                                    } else {
+                                        glb_priorityCards = glb_priorityCards.filter(token => token !== account.account_token);
+                                    }
+                                    storage_manageData("set", storage_accToken, ["priorityCards"]);
+                                } else {
+                                    if (newState) {
+                                        if (!glb_excludedCards.includes(account.account_token)) {
+                                            glb_excludedCards.push(account.account_token);
+                                        }
+                                    } else {
+                                        glb_excludedCards = glb_excludedCards.filter(token => token !== account.account_token);
+                                    }
+                                    storage_manageData("set", storage_accToken, ["excludedCards"]);
+                                }
+                            }
                         }
-                    } else {
-                        glb_priorityCards = glb_priorityCards.filter(token => token !== account.account_token);
-                    }
-                    storage_manageData("set", storage_accToken, ["priorityCards"]);
-                } else {
-                    if (newState) {
-                        if (!glb_excludedCards.includes(account.account_token)) {
-                            glb_excludedCards.push(account.account_token);
-                        }
-                    } else {
-                        glb_excludedCards = glb_excludedCards.filter(token => token !== account.account_token);
-                    }
-                    storage_manageData("set", storage_accToken, ["excludedCards"]);
-                }
+                    })
+                ]
             });
-
-            // Set tooltip
-            toggle.title = type === 'priority' ? 'Priority Card (Enroll First)' : 'Exclude Card (Skip Enrollment)';
-
-            // Assemble toggle
-            toggle.appendChild(knob);
-            toggleContainer.appendChild(toggle);
-
-            return toggleContainer;
-        }
-
-        // Helper for status styles
-        function getStatusStyle(status) {
-            if (status === 'active') {
-                return 'background-color:rgba(52, 199, 89, 0.15); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25);';
-            } else if (status === 'canceled') {
-                return 'background-color:rgba(255, 59, 48, 0.15); color:var(--ios-red); border:1px solid rgba(255, 59, 48, 0.25);';
-            } else {
-                return 'background-color:rgba(255, 149, 0, 0.15); color:var(--ios-orange); border:1px solid rgba(255, 149, 0, 0.25);';
-            }
-        }
-
-        // Helper for loading spinner
-        function createLoadingSpinner() {
-            const loadingSpinner = document.createElement('div');
-            loadingSpinner.className = 'loading-spinner';
-            loadingSpinner.style.cssText = 'width:16px; height:16px; border:2px solid rgba(0, 122, 255, 0.2); border-top:2px solid var(--ios-blue); border-radius:50%; margin:0 auto; animation:spin 1s linear infinite;';
-
-            // Add CSS animation if needed
-            if (!document.querySelector('style#spinner-animation')) {
-                const style = document.createElement('style');
-                style.id = 'spinner-animation';
-                style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-                document.head.appendChild(style);
-            }
-
-            return loadingSpinner;
         }
 
         // Define sortable columns
@@ -3780,612 +3186,329 @@
         ];
 
         // Create and return the table
-        const tableElement = ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
-        return tableElement;
+        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
     }
 
     // Enhanced render for the offer-on-card popup
-    function members_showCardOffers(accountToken, offerType) {
-        const existingOverlay = document.getElementById('offer-details-overlay');
-        if (existingOverlay) existingOverlay.remove();
-
+    function members_popCard(accountToken, offerType) {
         const account = glb_account.find(acc => acc.account_token === accountToken);
-        const displayNumber = account.cardEnding;
+        if (!account) return;
 
-        // Create the overlay with enhanced blur effect
-        const overlay = document.createElement('div');
-        overlay.id = 'offer-details-overlay';
-        overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0,0,0,0.4);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        z-index: 10001;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        transition: opacity 0.3s ease;
-        `;
-
-        // Modern popup container with enhanced styling
-        const popup = document.createElement('div');
-        popup.style.cssText = `
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 24px;
-        width: 90%;
-        max-width: 680px;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
-        position: relative;
-        transform: translateY(20px);
-        opacity: 0;
-        transition: transform 0.3s ease, opacity 0.3s ease;
-        `;
-
-        // Card details section
-        const cardDetailsSection = document.createElement('div');
-        cardDetailsSection.style.marginBottom = '20px';
-
-        if (account) {
-            // Card info header
-            const cardInfo = document.createElement('div');
-            cardInfo.style.display = 'flex';
-            cardInfo.style.alignItems = 'center';
-            cardInfo.style.gap = '16px';
-            cardInfo.style.marginBottom = '16px';
-
-            // Card logo if available
-            if (account.small_card_art && account.small_card_art !== 'N/A') {
-                const cardLogo = document.createElement('img');
-                cardLogo.src = account.small_card_art;
-                cardLogo.alt = 'Card Logo';
-                cardLogo.style.width = '60px';
-                cardLogo.style.height = '60px';
-                cardLogo.style.borderRadius = '8px';
-                cardLogo.style.objectFit = 'contain';
-                cardInfo.appendChild(cardLogo);
-            }
-
-            // Card details text
-            const cardText = document.createElement('div');
-            cardText.style.flex = '1';
-
-            const cardTitle = document.createElement('div');
-            cardTitle.textContent = account.description || 'Card';
-            cardTitle.style.fontSize = '18px';
-            cardTitle.style.fontWeight = '600';
-            cardTitle.style.marginBottom = '4px';
-
-            const cardNumber = document.createElement('div');
-            cardNumber.textContent = `${displayNumber} - ${account.embossed_name || ''}`;
-            cardNumber.style.fontSize = '15px';
-            cardNumber.style.color = '#666';
-
-            cardText.appendChild(cardTitle);
-            cardText.appendChild(cardNumber);
-            cardInfo.appendChild(cardText);
-
-            cardDetailsSection.appendChild(cardInfo);
-        }
-
-        overlay.appendChild(popup);
-
-        // Header section
-        const topRow = document.createElement('div');
-        topRow.style.cssText = `
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #eee;
-    `;
-
-        // Title with badge indicating offer type
-        const headerTitle = document.createElement('div');
-        headerTitle.style.display = 'flex';
-        headerTitle.style.alignItems = 'center';
-        headerTitle.style.gap = '10px';
-
-        const titleLabel = document.createElement('h3');
-        titleLabel.textContent = 'Card Offers';
-        titleLabel.style.cssText = `
-    margin: 0;
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #1c1c1e;
-    `;
-
-        const offerTypeBadge = document.createElement('span');
-        offerTypeBadge.textContent = offerType === 'eligible' ? 'Eligible' : 'Enrolled';
-        offerTypeBadge.style.fontSize = '13px';
-        offerTypeBadge.style.fontWeight = '600';
-        offerTypeBadge.style.padding = '4px 10px';
-        offerTypeBadge.style.borderRadius = '12px';
-
-        if (offerType === 'eligible') {
-            offerTypeBadge.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-            offerTypeBadge.style.color = 'var(--ios-blue)';
-            offerTypeBadge.style.border = '1px solid rgba(0, 122, 255, 0.2)';
-        } else {
-            offerTypeBadge.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-            offerTypeBadge.style.color = 'var(--ios-green)';
-            offerTypeBadge.style.border = '1px solid rgba(52, 199, 89, 0.2)';
-        }
-
-        headerTitle.appendChild(titleLabel);
-        headerTitle.appendChild(offerTypeBadge);
-
-        // Close button with enhanced styling
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '&times;';
-        closeBtn.style.cssText = `
-    background: rgba(0,0,0,0.05);
-    border: none;
-    font-size: 1.5rem;
-    color: #666;
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-    `;
-
-        closeBtn.addEventListener('mouseover', () => {
-            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.1)';
-            closeBtn.style.color = '#ff4444';
+        const { overlay, content, closeBtn } = ui_createModal({
+            id: 'card-offers-modal',
+            width: '680px',
+            title: 'Card Offers',
+            onClose: () => { }
         });
 
-        closeBtn.addEventListener('mouseout', () => {
-            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            closeBtn.style.color = '#666';
+        // Add offer type badge to header
+        content.parentNode.appendChild(ui_createBadge({
+            value: offerType === 'eligible' ? 'Eligible' : 'Enrolled',
+            color: offerType === 'eligible' ? 'var(--ios-blue)' : 'var(--ios-green)',
+            customStyle: 'position:absolute; top:20px; right:50px;'
+        }));
+
+        // Add card info section
+        content.appendChild(createCardInfoSection(account));
+
+        // Get relevant offers
+        const relevantOffers = getOffersForCard(account, offerType);
+
+        // Content area
+        const contentArea = ui_createElement('div', {
+            styleString: UI_STYLES.text.body
         });
 
-        closeBtn.addEventListener('click', () => {
-            // Fade out animation
-            popup.style.transform = 'translateY(20px)';
-            popup.style.opacity = '0';
-            overlay.style.opacity = '0';
-
-            // Remove after animation completes
-            setTimeout(() => {
-                overlay.remove();
-            }, 300);
-        });
-
-        topRow.appendChild(headerTitle);
-        topRow.appendChild(closeBtn);
-
-        // Content Area
-        const contentDiv = document.createElement('div');
-        contentDiv.style.cssText = `
-    font-size: 14px;
-    line-height: 1.6;
-    `;
-
-        // Determine relevant offers based on offerType and account token
-        let relevantOffers = [];
-        if (offerType === 'eligible') {
-            relevantOffers = glb_offer.filter(offer =>
-                Array.isArray(offer.eligibleCards) &&
-                offer.eligibleCards.includes(accountToken)
-            );
-        } else if (offerType === 'enrolled') {
-            relevantOffers = glb_offer.filter(offer =>
-                Array.isArray(offer.enrolledCards) &&
-                offer.enrolledCards.includes(accountToken)
-            );
-        }
-
-        // Actions section (only for eligible offers)
+        // Add "Enroll All" button for eligible offers
         if (offerType === 'eligible' && relevantOffers.length > 0) {
-            const actionsSection = document.createElement('div');
-            actionsSection.style.marginBottom = '20px';
-
-            const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.textContent = 'Enroll All Offers';
-            enrollAllBtn.style.width = '100%';
-            enrollAllBtn.style.padding = '12px';
-            enrollAllBtn.style.borderRadius = '12px';
-            enrollAllBtn.style.border = 'none';
-            enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
-            enrollAllBtn.style.color = '#fff';
-            enrollAllBtn.style.fontSize = '15px';
-            enrollAllBtn.style.fontWeight = '600';
-            enrollAllBtn.style.cursor = 'pointer';
-            enrollAllBtn.style.display = 'flex';
-            enrollAllBtn.style.alignItems = 'center';
-            enrollAllBtn.style.justifyContent = 'center';
-            enrollAllBtn.style.gap = '8px';
-            enrollAllBtn.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-            enrollAllBtn.style.transition = 'all 0.2s ease';
-
-            // Add icon to button
-            enrollAllBtn.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/>
-        </svg>
-        Enroll All Offers
-        `;
-
-            enrollAllBtn.addEventListener('mouseover', () => {
-                enrollAllBtn.style.backgroundColor = '#0062CC';
-                enrollAllBtn.style.transform = 'translateY(-2px)';
-                enrollAllBtn.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
-            });
-
-            enrollAllBtn.addEventListener('mouseout', () => {
-                enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
-                enrollAllBtn.style.transform = 'translateY(0)';
-                enrollAllBtn.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-            });
-
-            enrollAllBtn.addEventListener('click', async () => {
-                // Change button to loading state
-                const originalText = enrollAllBtn.innerHTML;
-                enrollAllBtn.innerHTML = `
-            <div class="loading-spinner" style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>
-            Enrolling...
-            `;
-                enrollAllBtn.disabled = true;
-                enrollAllBtn.style.opacity = '0.8';
-
-                // Call batch enrollment function for this card
-                try {
-                    await api_batchEnrollOffers(null, accountToken);
-
-                    // Update button to success state
-                    enrollAllBtn.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                </svg>
-                Enrolled Successfully
-                `;
-                    enrollAllBtn.style.backgroundColor = 'var(--ios-green)';
-
-                    // Close and refresh after delay
-                    setTimeout(() => {
-                        closeBtn.click();
-                        ui_renderCurrentView();
-                    }, 1500);
-                } catch (err) {
-                    // Show error state
-                    enrollAllBtn.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                Error: Try Again
-                `;
-                    enrollAllBtn.style.backgroundColor = 'var(--ios-red)';
-
-                    // Reset after delay
-                    setTimeout(() => {
-                        enrollAllBtn.innerHTML = originalText;
-                        enrollAllBtn.disabled = false;
-                        enrollAllBtn.style.opacity = '1';
-                        enrollAllBtn.style.backgroundColor = 'var(--ios-blue)';
-                    }, 2000);
-
-                    console.error('Enrollment error:', err);
-                }
-            });
-
-            actionsSection.appendChild(enrollAllBtn);
-            contentDiv.appendChild(actionsSection);
+            contentArea.appendChild(createEnrollAllButton(accountToken));
         }
 
-        // Offers list with styled cards
-        const offersList = document.createElement('div');
-        offersList.style.display = 'flex';
-        offersList.style.flexDirection = 'column';
-        offersList.style.gap = '12px';
+        // Create offers list
+        const offersList = ui_createElement('div', {
+            styleString: 'display:flex; flex-direction:column; gap:12px;'
+        });
 
         if (relevantOffers.length === 0) {
-            const emptyState = document.createElement('div');
-            emptyState.style.textAlign = 'center';
-            emptyState.style.padding = '30px 20px';
-            emptyState.style.backgroundColor = 'rgba(0,0,0,0.02)';
-            emptyState.style.borderRadius = '12px';
-
-            const emptyIcon = document.createElement('div');
-            emptyIcon.innerHTML = `
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="8" y1="12" x2="16" y2="12"></line>
-            </svg>
-            `;
-            emptyIcon.style.marginBottom = '16px';
-
-            const emptyText = document.createElement('div');
-            emptyText.textContent = `No ${offerType} offers found for this card.`;
-            emptyText.style.fontSize = '15px';
-            emptyText.style.color = '#666';
-
-            emptyState.appendChild(emptyIcon);
-            emptyState.appendChild(emptyText);
-            offersList.appendChild(emptyState);
+            offersList.appendChild(createEmptyOffersMessage(offerType));
         } else {
-            // Sort offers by name
-            relevantOffers.sort((a, b) => a.name.localeCompare(b.name));
-
-            relevantOffers.forEach(offer => {
-                const offerCard = document.createElement('div');
-                offerCard.style.padding = '14px';
-                offerCard.style.borderRadius = '12px';
-                offerCard.style.border = '1px solid rgba(0,0,0,0.08)';
-                offerCard.style.display = 'flex';
-                offerCard.style.gap = '14px';
-                offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white';
-                offerCard.style.transition = 'all 0.2s ease';
-
-                offerCard.addEventListener('mouseenter', () => {
-                    offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.02)';
-                    offerCard.style.transform = 'translateY(-2px)';
-                    offerCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+            // Create offer cards
+            relevantOffers
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(offer => {
+                    offersList.appendChild(createOfferCard(offer, accountToken, offerType));
                 });
+        }
 
-                offerCard.addEventListener('mouseleave', () => {
-                    offerCard.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white';
-                    offerCard.style.transform = 'translateY(0)';
-                    offerCard.style.boxShadow = 'none';
-                });
+        contentArea.appendChild(offersList);
+        content.appendChild(contentArea);
 
-                // Offer logo
-                if (offer.logo && offer.logo !== 'N/A') {
-                    const logoContainer = document.createElement('div');
-                    logoContainer.style.width = '48px';
-                    logoContainer.style.height = '48px';
-                    logoContainer.style.display = 'flex';
-                    logoContainer.style.alignItems = 'center';
-                    logoContainer.style.justifyContent = 'center';
-                    logoContainer.style.flexShrink = '0';
+        // Functions for card components
+        function createCardInfoSection(account) {
+            return ui_createElement('div', {
+                styleString: `${UI_STYLES.containers.flexRow} margin-bottom:16px;`,
+                children: [
+                    // Card logo if available
+                    account.small_card_art && account.small_card_art !== 'N/A' ?
+                        ui_createElement('img', {
+                            props: { src: account.small_card_art, alt: 'Card Logo' },
+                            styleString: 'width:60px; height:60px; border-radius:8px; object-fit:contain;'
+                        }) : null,
 
-                    const logo = document.createElement('img');
-                    logo.src = offer.logo;
-                    logo.alt = offer.name;
-                    logo.style.maxWidth = '100%';
-                    logo.style.maxHeight = '100%';
-                    logo.style.borderRadius = '6px';
+                    // Card details
+                    ui_createElement('div', {
+                        styleString: 'flex:1;',
+                        children: [
+                            ui_createElement('div', {
+                                text: account.description || 'Card',
+                                styleString: UI_STYLES.text.subtitle
+                            }),
+                            ui_createElement('div', {
+                                text: `${account.cardEnding} - ${account.embossed_name || ''}`,
+                                styleString: 'font-size:15px; color:#666;'
+                            })
+                        ]
+                    })
+                ].filter(Boolean)
+            });
+        }
 
-                    logoContainer.appendChild(logo);
-                    offerCard.appendChild(logoContainer);
+        function getOffersForCard(account, type) {
+            return type === 'eligible'
+                ? glb_offer.filter(offer => Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(account.account_token))
+                : glb_offer.filter(offer => Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(account.account_token));
+        }
+
+        function createEnrollAllButton(accountToken) {
+            return ui_createBtn_v2({
+                label: 'Enroll All Offers',
+                icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>',
+                type: 'primary',
+                fullWidth: true,
+                size: 'large',
+                customStyle: 'margin-bottom:20px;',
+                onClick: async (e) => {
+                    const btn = e.currentTarget;
+                    btn.innerHTML = '<div class="loading-spinner" style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>Enrolling...';
+                    btn.disabled = true;
+                    btn.style.opacity = '0.8';
+
+                    try {
+                        await api_batchEnrollOffers(null, accountToken);
+
+                        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>Enrolled Successfully';
+                        btn.style.backgroundColor = 'var(--ios-green)';
+
+                        setTimeout(() => {
+                            closeBtn.click();
+                            ui_renderCurrentView();
+                        }, 1500);
+                    } catch (err) {
+                        console.error('Error enrolling all:', err);
+
+                        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>Error: Try Again';
+                        btn.style.backgroundColor = 'var(--ios-red)';
+
+                        setTimeout(() => {
+                            btn.disabled = false;
+                            btn.style.opacity = '1';
+                            btn.style.backgroundColor = 'var(--ios-blue)';
+                            btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>Enroll All Offers';
+                        }, 2000);
+                    }
                 }
+            });
+        }
 
-                // Offer content
-                const offerContent = document.createElement('div');
-                offerContent.style.flex = '1';
-                offerContent.style.minWidth = '0'; // Important for text truncation
+        function createEmptyOffersMessage(type) {
+            return ui_createElement('div', {
+                styleString: 'text-align:center; padding:30px 20px; background-color:rgba(0,0,0,0.02); border-radius:12px;',
+                children: [
+                    ui_createElement('div', {
+                        props: { innerHTML: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line></svg>' },
+                        styleString: 'margin-bottom:16px;'
+                    }),
+                    ui_createElement('div', {
+                        text: `No ${type} offers found for this card.`,
+                        styleString: 'font-size:15px; color:#666;'
+                    })
+                ]
+            });
+        }
 
-                // Offer name with favorite indicator
-                const nameRow = document.createElement('div');
-                nameRow.style.display = 'flex';
-                nameRow.style.alignItems = 'center';
-                nameRow.style.gap = '6px';
-                nameRow.style.marginBottom = '4px';
+        function createOfferCard(offer, accountToken, offerType) {
+            return ui_createElement('div', {
+                styleString: `${UI_STYLES.cards.offer} background-color:${offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white'};`,
+                events: {
+                    mouseenter: e => {
+                        e.target.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.02)';
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = UI_STYLES.utils.shadow;
+                    },
+                    mouseleave: e => {
+                        e.target.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.05)' : 'white';
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                    }
+                },
+                children: [
+                    // Logo
+                    offer.logo && offer.logo !== 'N/A' ? ui_createElement('div', {
+                        styleString: 'width:48px; height:48px; display:flex; align-items:center; justify-content:center; flex-shrink:0;',
+                        children: [
+                            ui_createElement('img', {
+                                props: { src: offer.logo, alt: offer.name },
+                                styleString: 'max-width:100%; max-height:100%; border-radius:6px;'
+                            })
+                        ]
+                    }) : null,
 
-                if (offer.favorite) {
-                    const starIcon = document.createElement('span');
-                    starIcon.textContent = '★';
-                    starIcon.style.color = '#ff9500';
-                    starIcon.style.fontSize = '14px';
-                    nameRow.appendChild(starIcon);
-                }
+                    // Offer content
+                    ui_createElement('div', {
+                        styleString: 'flex:1; min-width:0;',
+                        children: [
+                            // Title with favorite indicator
+                            ui_createElement('div', {
+                                styleString: `${UI_STYLES.containers.flexRow} gap:6px; margin-bottom:4px;`,
+                                children: [
+                                    offer.favorite ? ui_createElement('span', {
+                                        text: '★',
+                                        styleString: 'color:#ff9500; font-size:14px;'
+                                    }) : null,
+                                    ui_createElement('div', {
+                                        text: offer.name,
+                                        styleString: `${UI_STYLES.text.value} ${UI_STYLES.utils.truncate}`
+                                    })
+                                ].filter(Boolean)
+                            }),
 
-                const offerName = document.createElement('div');
-                offerName.textContent = offer.name;
-                offerName.style.fontWeight = '600';
-                offerName.style.fontSize = '15px';
-                offerName.style.whiteSpace = 'nowrap';
-                offerName.style.overflow = 'hidden';
-                offerName.style.textOverflow = 'ellipsis';
-                nameRow.appendChild(offerName);
+                            // Description
+                            ui_createElement('div', {
+                                text: shortenDescription(offer.short_description),
+                                styleString: 'font-size:13px; color:#666; line-height:1.4; margin-bottom:8px;',
+                                props: { title: offer.short_description }
+                            }),
 
-                // Offer details
-                const offerDetails = document.createElement('div');
-                offerDetails.style.fontSize = '13px';
-                offerDetails.style.color = '#666';
-                offerDetails.style.lineHeight = '1.4';
-                offerDetails.style.marginBottom = '8px';
+                            // Metric badges
+                            ui_createElement('div', {
+                                styleString: `${UI_STYLES.containers.flexRow} flex-wrap:wrap; gap:8px;`,
+                                children: [
+                                    ui_createBadge({ label: 'Spend', value: offer.threshold, color: 'var(--ios-gray)' }),
+                                    ui_createBadge({ label: 'Reward', value: offer.reward, color: 'var(--ios-green)' }),
+                                    ui_createBadge({ label: 'Rate', value: offer.percentage, color: 'var(--ios-blue)' }),
+                                    ui_createBadge({ label: 'Expires', value: util_formatDate(offer.expiry_date), color: 'var(--ios-orange)' })
+                                ].filter(Boolean)
+                            })
+                        ]
+                    }),
 
-                // Format description - truncate if too long
-                const description = offer.short_description;
-                if (description && description.length > 100) {
-                    offerDetails.textContent = description.substring(0, 100) + '...';
-                    offerDetails.title = description; // Show full text on hover
-                } else {
-                    offerDetails.textContent = description || 'No description available';
-                }
+                    // Enroll button for eligible offers
+                    offerType === 'eligible' ? createEnrollButton(offer, accountToken) : null
+                ].filter(Boolean)
+            });
+        }
 
-                // Offer metrics
-                const metricsRow = document.createElement('div');
-                metricsRow.style.display = 'flex';
-                metricsRow.style.gap = '8px';
-                metricsRow.style.flexWrap = 'wrap';
+        function shortenDescription(desc) {
+            if (!desc) return 'No description available';
+            return desc.length > 100 ? desc.substring(0, 100) + '...' : desc;
+        }
 
-                // Helper to create a metric badge
-                function createBadge(label, value, color = 'rgba(0,0,0,0.7)') {
-                    return ui_createBadge({
-                        label: label,
-                        value: value,
-                        color: color,
-                        size: 'medium'
-                    });
-                }
-
-                // Add metrics if available
-                const thresholdBadge = createBadge('Spend', offer.threshold, '#1c1c1e');
-                const rewardBadge = createBadge('Reward', offer.reward, 'var(--ios-green)');
-                const percentBadge = createBadge('Rate', offer.percentage, 'var(--ios-blue)');
-                const expiryBadge = createBadge('Expires', util_formatDate(offer.expiry_date), 'var(--ios-orange)');
-
-                if (thresholdBadge) metricsRow.appendChild(thresholdBadge);
-                if (rewardBadge) metricsRow.appendChild(rewardBadge);
-                if (percentBadge) metricsRow.appendChild(percentBadge);
-                if (expiryBadge) metricsRow.appendChild(expiryBadge);
-
-                // Assemble offer content
-                offerContent.appendChild(nameRow);
-                offerContent.appendChild(offerDetails);
-                offerContent.appendChild(metricsRow);
-                offerCard.appendChild(offerContent);
-
-                // Action button - only for eligible offers
-                if (offerType === 'eligible') {
-                    const enrollButton = document.createElement('button');
-                    enrollButton.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                    </svg>
-                    `;
-                    enrollButton.title = 'Enroll in this offer';
-                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                    enrollButton.style.color = 'var(--ios-blue)';
-                    enrollButton.style.border = 'none';
-                    enrollButton.style.borderRadius = '50%';
-                    enrollButton.style.width = '36px';
-                    enrollButton.style.height = '36px';
-                    enrollButton.style.display = 'flex';
-                    enrollButton.style.alignItems = 'center';
-                    enrollButton.style.justifyContent = 'center';
-                    enrollButton.style.cursor = 'pointer';
-                    enrollButton.style.alignSelf = 'center';
-                    enrollButton.style.transition = 'all 0.2s ease';
-                    enrollButton.style.flexShrink = '0';
-
-                    enrollButton.addEventListener('mouseenter', () => {
-                        enrollButton.style.backgroundColor = 'var(--ios-blue)';
-                        enrollButton.style.color = 'white';
-                        enrollButton.style.transform = 'scale(1.1)';
-                    });
-
-                    enrollButton.addEventListener('mouseleave', () => {
-                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                        enrollButton.style.color = 'var(--ios-blue)';
-                        enrollButton.style.transform = 'scale(1)';
-                    });
-
-                    enrollButton.addEventListener('click', async (e) => {
+        function createEnrollButton(offer, accountToken) {
+            return ui_createElement('button', {
+                props: {
+                    innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>',
+                    title: 'Enroll in this offer'
+                },
+                styleString: `
+                    background-color: rgba(0, 122, 255, 0.1);
+                    color: var(--ios-blue);
+                    border: none;
+                    border-radius: 50%;
+                    width: 36px;
+                    height: 36px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    align-self: center;
+                    flex-shrink: 0;
+                    ${UI_STYLES.utils.transition}
+                `,
+                events: {
+                    mouseenter: e => {
+                        e.target.style.backgroundColor = 'var(--ios-blue)';
+                        e.target.style.color = 'white';
+                        e.target.style.transform = 'scale(1.1)';
+                    },
+                    mouseleave: e => {
+                        e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                        e.target.style.color = 'var(--ios-blue)';
+                        e.target.style.transform = 'scale(1)';
+                    },
+                    click: async e => {
                         e.stopPropagation();
+                        const btn = e.currentTarget;
+                        const originalHTML = btn.innerHTML;
 
-                        enrollButton.innerHTML = `<div class="loading-spinner" style="width:14px;height:14px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>`;
-                        enrollButton.style.pointerEvents = 'none';
+                        btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>';
+                        btn.style.pointerEvents = 'none';
 
                         try {
                             const res = await api_enrollInOffer(accountToken, offer.offerId);
 
                             if (res.result) {
-                                // Enrollment successful
-                                enrollButton.innerHTML = `
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                </svg>
-                                `;
-                                enrollButton.style.backgroundColor = 'var(--ios-green)';
-                                enrollButton.style.color = 'white';
-
-                                // Update offer data
-                                const idx = offer.eligibleCards.indexOf(accountToken);
-                                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                                if (!offer.enrolledCards.includes(accountToken)) {
-                                    offer.enrolledCards.push(accountToken);
-                                }
-
-                                // Animate the card away after success
-                                offerCard.style.transform = 'translateX(100%)';
-                                offerCard.style.opacity = '0';
-
-                                // Remove after animation
-                                setTimeout(() => {
-                                    offerCard.remove();
-
-                                    // If no more offers, refresh the entire popup
-                                    if (offersList.childElementCount === 0) {
-                                        members_showCardOffers(accountToken, offerType);
-                                    }
-                                }, 500);
+                                handleEnrollSuccess(btn, offer, accountToken);
                             } else {
-                                // Enrollment failed
-                                enrollButton.innerHTML = `
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                                </svg>
-                                `;
-                                enrollButton.style.backgroundColor = 'var(--ios-red)';
-                                enrollButton.style.color = 'white';
-
-                                // Reset after delay
-                                setTimeout(() => {
-                                    enrollButton.innerHTML = `
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                    </svg>
-                                    `;
-                                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                                    enrollButton.style.color = 'var(--ios-blue)';
-                                    enrollButton.style.pointerEvents = 'auto';
-                                }, 2000);
+                                handleEnrollFailure(btn, originalHTML);
                             }
-                        } catch (err) {
-                            console.error('Error enrolling offer:', err);
-
-                            // Show error state
-                            enrollButton.innerHTML = `
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="15" y1="9" x2="9" y2="15"></line>
-                                <line x1="9" y1="9" x2="15" y2="15"></line>
-                            </svg>
-                            `;
-                            enrollButton.style.backgroundColor = 'var(--ios-red)';
-                            enrollButton.style.color = 'white';
-
-                            // Reset after delay
-                            setTimeout(() => {
-                                enrollButton.innerHTML = `
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                </svg>
-                                `;
-                                enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                                enrollButton.style.color = 'var(--ios-blue)';
-                                enrollButton.style.pointerEvents = 'auto';
-                            }, 2000);
+                        } catch (error) {
+                            console.error('Error enrolling offer:', error);
+                            handleEnrollFailure(btn, originalHTML);
                         }
-                    });
-
-                    offerCard.appendChild(enrollButton);
+                    }
                 }
-
-                offersList.appendChild(offerCard);
             });
         }
 
-        contentDiv.appendChild(offersList);
+        function handleEnrollSuccess(btn, offer, accountToken) {
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>';
+            btn.style.backgroundColor = 'var(--ios-green)';
+            btn.style.color = 'white';
 
-        popup.appendChild(topRow);
-        popup.appendChild(cardDetailsSection);
-        popup.appendChild(contentDiv);
-        document.body.appendChild(overlay);
+            // Update offer data
+            const idx = offer.eligibleCards.indexOf(accountToken);
+            if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+            if (!offer.enrolledCards.includes(accountToken)) offer.enrolledCards.push(accountToken);
 
-        // Animate in
-        setTimeout(() => {
-            popup.style.transform = 'translateY(0)';
-            popup.style.opacity = '1';
-        }, 10);
+            // Animate card away
+            const offerCard = btn.closest('div');
+            if (offerCard) {
+                offerCard.style.transition = 'transform 0.5s ease, opacity 0.5s ease';
+                offerCard.style.transform = 'translateX(100%)';
+                offerCard.style.opacity = '0';
+
+                setTimeout(() => {
+                    offerCard.remove();
+                    // Refresh the view if no offers remain
+                    if (offersList.childElementCount === 0) {
+                        members_popCard(accountToken, offerType);
+                    }
+                }, 500);
+            }
+        }
+
+        function handleEnrollFailure(btn, originalHTML) {
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+            btn.style.backgroundColor = 'var(--ios-red)';
+            btn.style.color = 'white';
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                btn.style.color = 'var(--ios-blue)';
+                btn.style.pointerEvents = 'auto';
+            }, 2000);
+        }
     }
 
     // Enhanced offers_renderPage with better structure
@@ -4410,10 +3533,7 @@
 
         const displayContainer = document.createElement('div');
         displayContainer.id = 'offers-display-container';
-
-        // Initialize with current offers view
-        const displayMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
-        displayContainer.appendChild(displayMode === 'grid' ? offers_renderGridView() : offers_renderTableView());
+        displayContainer.appendChild(offers_renderTableView());
 
         // Tab click handlers
         currentTab.addEventListener('click', () => {
@@ -4423,7 +3543,7 @@
             historyTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(displayMode === 'grid' ? offers_renderGridView() : offers_renderTableView());
+            displayContainer.appendChild(offers_renderTableView());
         });
 
         historyTab.addEventListener('click', () => {
@@ -4439,7 +3559,7 @@
         tabContainer.appendChild(currentTab);
         tabContainer.appendChild(historyTab);
         containerDiv.appendChild(tabContainer);
-        containerDiv.appendChild(offers_renderSearchBar());
+        containerDiv.appendChild(offers_renderControlBar());
         containerDiv.appendChild(displayContainer);
 
         return containerDiv;
@@ -4765,32 +3885,14 @@
         };
     }
 
-    // Enhanced search bar with better organization
-    function offers_renderSearchBar() {
+    // control bar with better organization
+    function offers_renderControlBar() {
         const filterCard = document.createElement('div');
-        filterCard.style.cssText = 'background:var(--ios-background); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; padding:16px 20px; box-shadow:0 4px 12px rgba(0,0,0,0.08); display:flex; gap:16px; flex-wrap:wrap; width:100%; box-sizing:border-box; border:1px solid var(--ios-border); margin-bottom:8px; align-items:center;';
+        filterCard.style.cssText = UI_STYLES.containers.card + ' display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px; align-items:center;';
 
-        // Create left container with view toggle and enroll button
-        const filterContainer = offers_Container_filter();
-        filterCard.appendChild(filterContainer);
-
-        // Create right container with search and reset
-        const searchContainer = offers_Container_search();
-        filterCard.appendChild(searchContainer);
-
-        return filterCard;
-    }
-
-    // Create left filter container with controls
-    function offers_Container_filter() {
-        const filterContainer = document.createElement('div');
-        filterContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:12px; flex:1; align-items:center;';
-
-        // Add view mode toggle
-        const viewModeToggle = createViewModeToggle();
-        filterContainer.appendChild(viewModeToggle);
-
-        // Add Enroll All button
+        // Create left container for enroll button
+        const container_EnrollAllBtn = document.createElement('div');
+        container_EnrollAllBtn.style.cssText = 'display:flex; flex-wrap:wrap; gap:12px; flex:1; align-items:center;';
         const enrollAllBtn = ui_createBtn_v2({
             label: 'Enroll All Offers',
             icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>',
@@ -4807,226 +3909,113 @@
             fullWidth: true,
             maxWidth: '200px'
         });
+        container_EnrollAllBtn.appendChild(enrollAllBtn);
+        filterCard.appendChild(container_EnrollAllBtn);
 
-        filterContainer.appendChild(enrollAllBtn);
-        return filterContainer;
-    }
-
-    // Create view mode toggle
-    function createViewModeToggle() {
-        const currentMode = localStorage.getItem('amaxoffer_offers_display') || 'table';
-
-        const toggleContainer = document.createElement('div');
-        toggleContainer.style.cssText = 'display:flex; border-radius:10px; overflow:hidden; border:1px solid var(--ios-border); background-color:rgba(250, 250, 250, 0.5);';
-
-        // Table view button
-        const tableBtn = document.createElement('button');
-        tableBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z"/>
-        </svg>
-        `;
-        tableBtn.style.cssText = `padding:8px 12px; border:none; background-color:${currentMode === 'table' ? 'rgba(0, 122, 255, 0.1)' : 'transparent'}; color:${currentMode === 'table' ? 'var(--ios-blue)' : 'var(--ios-text-secondary)'}; cursor:pointer; transition:all 0.2s ease;`;
-
-        // Grid view button
-        const gridBtn = document.createElement('button');
-        gridBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 3v8h8V3H3zm0 18h8v-8H3v8zm10 0h8v-8h-8v8zm8-18h-8v8h8V3z"/>
-        </svg>
-        `;
-        gridBtn.style.cssText = `padding:8px 12px; border:none; background-color:${currentMode === 'grid' ? 'rgba(0, 122, 255, 0.1)' : 'transparent'}; color:${currentMode === 'grid' ? 'var(--ios-blue)' : 'var(--ios-text-secondary)'}; cursor:pointer; transition:all 0.2s ease;`;
-
-        // Add event listeners
-        tableBtn.addEventListener('click', () => updateViewMode('table', tableBtn, gridBtn));
-        gridBtn.addEventListener('click', () => updateViewMode('grid', gridBtn, tableBtn));
-
-        // Add hover effects
-        const hoverEffect = (btn, mode) => {
-            btn.addEventListener('mouseenter', () => {
-                if (currentMode !== mode) {
-                    btn.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
-                }
-            });
-            btn.addEventListener('mouseleave', () => {
-                if (currentMode !== mode) {
-                    btn.style.backgroundColor = 'transparent';
-                }
-            });
-        };
-
-        hoverEffect(tableBtn, 'table');
-        hoverEffect(gridBtn, 'grid');
-
-        toggleContainer.appendChild(tableBtn);
-        toggleContainer.appendChild(gridBtn);
-        return toggleContainer;
-    }
-
-    // Update view mode
-    function updateViewMode(mode, activeBtn, inactiveBtn) {
-        localStorage.setItem('amaxoffer_offers_display', mode);
-
-        // Update button styles
-        activeBtn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-        activeBtn.style.color = 'var(--ios-blue)';
-        inactiveBtn.style.backgroundColor = 'transparent';
-        inactiveBtn.style.color = 'var(--ios-text-secondary)';
-
-        // Update the display
-        const container = document.getElementById('offers-display-container');
-        if (container) {
-            container.innerHTML = '';
-            container.appendChild(mode === 'grid' ? offers_renderGridView() : offers_renderTableView());
-        }
-    }
-
-    // Create search container
-    function offers_Container_search() {
+        // Create right container with search controls
         const searchContainer = document.createElement('div');
         searchContainer.style.cssText = 'display:flex; gap:12px; align-items:center; flex-wrap:wrap; flex:1; justify-content:flex-end;';
 
-        // Merchant search
+        // Add merchant search with reactive updates
         const merchantSearchContainer = document.createElement('div');
-        merchantSearchContainer.style.cssText = 'position:relative; box-sizing:border-box; min-width:180px; max-width:300px; flex:1; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;';
+        merchantSearchContainer.style.cssText = 'flex:1; min-width:180px; max-width:300px;';
 
-        const merchantInput = document.createElement('input');
-        merchantInput.className = 'ios-search-input';
-        merchantInput.type = 'text';
-        merchantInput.placeholder = 'Search merchants...';
-        merchantInput.value = glb_filters.offerMerchantSearch || '';
-        merchantInput.style.cssText = 'width:100%; padding:10px 32px 10px 12px; border-radius:10px; border:1px solid #e0e0e0; background-color:rgba(250, 250, 250, 0.8); font-size:14px; font-family:var(--ios-font);';
+        const reactiveSearch = createReactiveFilter(merchantSearchContainer, {
+            searchPlaceholder: 'Search merchants...',
+            initialValue: glb_filters.offerMerchantSearch || '',
+            onFilterChange: (value) => {
+                // Update filter and invalidate cache
+                glb_filters.offerMerchantSearch = value;
+                MemoizedOffers.invalidateCache();
 
-        const merchantSearchIcon = document.createElement('div');
-        merchantSearchIcon.className = 'ios-search-icon';
-        merchantSearchIcon.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:0.6; color:var(--ios-blue); pointer-events:none;';
-        merchantSearchIcon.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
-        </svg>
-        `;
-
-        merchantInput.addEventListener('input', util_debounce(() => {
-            glb_filters.offerMerchantSearch = merchantInput.value.toLowerCase();
-            ui_renderCurrentView();
-        }, 300));
-
-        merchantSearchContainer.appendChild(merchantInput);
-        merchantSearchContainer.appendChild(merchantSearchIcon);
+                // Force immediate table update
+                const container = document.getElementById('offers-table-container') ||
+                    document.getElementById('offers-display-container');
+                if (container) {
+                    container.innerHTML = '';
+                    container.appendChild(offers_renderTableView());
+                }
+            }
+        });
         searchContainer.appendChild(merchantSearchContainer);
 
-        // Card ending search
+        // Card ending filter (add reactive behavior here too)
         const cardSearchContainer = document.createElement('div');
-        cardSearchContainer.style.cssText = 'position:relative; box-sizing:border-box; min-width:150px; max-width:200px; flex:0.7; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;';
+        cardSearchContainer.style.cssText = 'position:relative; min-width:150px; max-width:200px; flex:0.7;';
 
-        const cardInput = document.createElement('input');
-        cardInput.className = 'ios-search-input';
-        cardInput.type = 'text';
-        cardInput.placeholder = 'Card ending...';
-        cardInput.value = glb_filters.offerCardEnding || '';
-        cardInput.style.cssText = 'width:100%; padding:10px 32px 10px 12px; border-radius:10px; border:1px solid #e0e0e0; background-color:rgba(250, 250, 250, 0.8); font-size:14px; font-family:var(--ios-font);';
+        const cardFilter = createReactiveFilter(cardSearchContainer, {
+            searchPlaceholder: 'Card ending...',
+            initialValue: glb_filters.offerCardEnding || '',
+            onFilterChange: (value) => {
+                glb_filters.offerCardEnding = value;
+                MemoizedOffers.invalidateCache();
 
-        const cardSearchIcon = document.createElement('div');
-        cardSearchIcon.className = 'ios-search-icon';
-        cardSearchIcon.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); opacity:0.6; color:var(--ios-blue); pointer-events:none;';
-        cardSearchIcon.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="5" width="20" height="14" rx="2"/>
-            <line x1="2" y1="10" x2="22" y2="10"/>
-        </svg>
-        `;
-
-        cardInput.addEventListener('input', util_debounce(() => {
-            glb_filters.offerCardEnding = cardInput.value;
-            ui_renderCurrentView();
-        }, 300));
-
-        cardSearchContainer.appendChild(cardInput);
-        cardSearchContainer.appendChild(cardSearchIcon);
+                const container = document.getElementById('offers-table-container') ||
+                    document.getElementById('offers-display-container');
+                if (container) {
+                    container.innerHTML = '';
+                    container.appendChild(offers_renderTableView());
+                }
+            }
+        });
         searchContainer.appendChild(cardSearchContainer);
 
         // Reset button
-        const resetButton = document.createElement('button');
-        resetButton.textContent = 'Reset Filters';
-        resetButton.style.cssText = 'padding:10px 16px; border-radius:10px; border:none; background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s ease; display:flex; align-items:center; gap:8px;';
-
-        const resetIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        resetIcon.setAttribute('width', '16');
-        resetIcon.setAttribute('height', '16');
-        resetIcon.setAttribute('viewBox', '0 0 24 24');
-        resetIcon.setAttribute('fill', 'none');
-        resetIcon.setAttribute('stroke', 'currentColor');
-        resetIcon.setAttribute('stroke-width', '2');
-        resetIcon.setAttribute('stroke-linecap', 'round');
-        resetIcon.setAttribute('stroke-linejoin', 'round');
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M3 12h18M3 6h18M3 18h18');
-        resetIcon.appendChild(path);
-        resetButton.prepend(resetIcon);
-
-        resetButton.addEventListener('mouseenter', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
+        const resetButton = ui_createBtn_v2({
+            label: 'Reset Filters',
+            type: 'secondary',
+            onClick: () => {
+                // Reset all filter inputs
+                reactiveSearch.setValue('');
+                cardFilter.setValue('');
+                offers_resetAllFilters();
+                MemoizedOffers.invalidateCache();
+                ui_renderCurrentView(true);
+            }
         });
-
-        resetButton.addEventListener('mouseleave', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        });
-
-        resetButton.addEventListener('click', () => {
-            // Reset all filters
-            merchantInput.value = '';
-            cardInput.value = '';
-            offers_resetAllFilters();
-            ui_renderCurrentView();
-        });
-
         searchContainer.appendChild(resetButton);
-        return searchContainer;
+
+        filterCard.appendChild(searchContainer);
+        return filterCard;
     }
 
-
     // Optimized filter offers
-    function offers_filterOffersList() {
-        return glb_offer.filter(o => {
-            // Check favorite filter
-            if (glb_filters.offerFav && !o.favorite) return false;
+    function offers_filterOffersList1() {
 
-            // Check merchant search
-            if (glb_filters.offerMerchantSearch && !o.name.toLowerCase().includes(glb_filters.offerMerchantSearch)) return false;
+        return glb_offer.filter(offer => {
 
-            // Check card ending filter
+            if (glb_filters.offerFav && !offer.favorite) return false;
+            if (glb_filters.offerMerchantSearch) {
+                const searchTerm = glb_filters.offerMerchantSearch.toLowerCase();
+                if (!offer.name.toLowerCase().includes(searchTerm)) return false;
+            }
+
             if (glb_filters.offerCardEnding) {
-                const eligible = Array.isArray(o.eligibleCards) && o.eligibleCards.includes(glb_filters.offerCardEnding);
-                const enrolled = Array.isArray(o.enrolledCards) && o.enrolledCards.includes(glb_filters.offerCardEnding);
-                if (!eligible && !enrolled) return false;
+
+                const matchingAccounts = glb_account.filter(acc =>
+                    acc.cardEnding.includes(glb_filters.offerCardEnding)
+                ).map(acc => acc.account_token);
+
+                const isEligible = offer.eligibleCards?.some(token => matchingAccounts.includes(token));
+                const isEnrolled = offer.enrolledCards?.some(token => matchingAccounts.includes(token));
+
+                if (!isEligible && !isEnrolled) return false;
             }
 
-            // Check enrollment status filters
             if (glb_filters.enrollmentStatus === 'fully') {
-                const eligible = o.eligibleCards?.length || 0;
-                const enrolled = o.enrolledCards?.length || 0;
+                const eligible = offer.eligibleCards?.length || 0;
+                const enrolled = offer.enrolledCards?.length || 0;
                 if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
-            }
-
-            if (glb_filters.enrollmentStatus === 'pending') {
-                const eligible = o.eligibleCards?.length || 0;
-                const enrolled = o.enrolledCards?.length || 0;
+            } else if (glb_filters.enrollmentStatus === 'pending') {
+                const eligible = offer.eligibleCards?.length || 0;
+                const enrolled = offer.enrolledCards?.length || 0;
                 if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
             }
 
-            if (glb_filters.eligibleOnly) {
-                if ((o.eligibleCards?.length || 0) === 0) return false;
-            }
-
-            if (glb_filters.enrolledOnly) {
-                if ((o.enrolledCards?.length || 0) === 0) return false;
-            }
-
-            // Check custom filter for expiring soon
+            if (glb_filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
+            if (glb_filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
             if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
-                if (!glb_filters.customFilter(o)) return false;
+                if (!glb_filters.customFilter(offer)) return false;
             }
 
             return true;
@@ -5036,8 +4025,22 @@
 
     // Renderer for offers table (optimizing cell creation)
     function offers_renderTableView() {
-        // Filter offers based on search criteria
+        // Filter offers based on current filters
         const filteredOffers = offers_filterOffersList();
+
+        if (filteredOffers.length === 0) {
+            return ui_createEmptyState(document.createElement('div'), {
+                title: 'No Offers Found',
+                message: glb_filters.offerFav ? 'No favorite offers found' :
+                    glb_filters.offerMerchantSearch ? `No offers match "${glb_filters.offerMerchantSearch}"` :
+                        'No offers available',
+                buttonText: 'Reset Filters',
+                callback: () => {
+                    offers_resetAllFilters();
+                    ui_renderCurrentView();
+                }
+            });
+        }
 
         const headers = [
             { label: "★", key: "favorite" },
@@ -5062,1699 +4065,820 @@
             percentage: "80px", eligibleCards: "80px", enrolledCards: "80px"
         };
 
-        // Check if we have any offers after filtering
-        if (filteredOffers.length === 0) {
-            const container = document.createElement('div');
-            return ui_createEmptyState(container, {
-                title: 'No Offers Found',
-                message: glb_filters.offerFav ? 'No favorite offers found' :
-                    (glb_filters.offerMerchantSearch ? `No offers match "${glb_filters.offerMerchantSearch}"` : 'No offers available')
-            });
-        }
+        const cellRenderer = (offer, headerItem) => {
+            const key = headerItem.key;
 
-        // Create cell handlers for cleaner code organization
-        const cellHandlers = {
-            favorite: (offer) => {
-                const starBtn = document.createElement('button');
-                starBtn.innerHTML = offer.favorite ?
-                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
-                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
-                starBtn.style.cssText = 'background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; margin:0 auto; padding:5px; border-radius:50%; transition:all 0.2s ease;';
-
-                starBtn.addEventListener('mouseenter', () => {
-                    starBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
-                    starBtn.style.transform = 'scale(1.1)';
-                });
-
-                starBtn.addEventListener('mouseleave', () => {
-                    starBtn.style.backgroundColor = 'transparent';
-                    starBtn.style.transform = 'scale(1)';
-                });
-
-                starBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    offer.favorite = !offer.favorite;
-                    starBtn.innerHTML = offer.favorite ?
-                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
-                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
-
-                    // Save to storage
-                    storage_manageData("set", storage_accToken, ["offer"]);
-
-                    // If favorite filter is on, we need to re-render
-                    if (glb_filters.offerFav) {
-                        ui_renderCurrentView();
-                    }
-                });
-
-                return starBtn;
-            },
-
-            logo: (offer) => {
-                if (offer.logo && offer.logo !== "N/A") {
-                    const imgContainer = document.createElement('div');
-                    imgContainer.style.cssText = 'display:flex; justify-content:center; align-items:center; height:50px;';
-
-                    const img = document.createElement('img');
-                    img.src = offer.logo;
-                    img.alt = "Offer Logo";
-                    img.style.cssText = 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;';
-
-                    imgContainer.addEventListener('mouseenter', () => img.style.transform = 'scale(1.15)');
-                    imgContainer.addEventListener('mouseleave', () => img.style.transform = 'scale(1)');
-
-                    imgContainer.appendChild(img);
-                    return imgContainer;
-                }
-                return 'N/A';
-            },
-
-            name: (offer) => {
-                const nameContainer = document.createElement('div');
-                nameContainer.style.cssText = 'max-width:170px; font-weight:600; font-size:14px; color:var(--ios-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:8px 4px;';
-                nameContainer.textContent = offer.name;
-                nameContainer.title = offer.name;
-                return nameContainer;
-            },
-
-            achievement_type: (offer) => {
-                const achievementType = offer.achievement_type;
-                const achievementDiv = document.createElement('div');
-
-                if (achievementType === "STATEMENT_CREDIT") {
-                    achievementDiv.textContent = "Cash";
-                    achievementDiv.style.color = '#2e7d32';
-                } else if (achievementType === "MEMBERSHIP_REWARDS") {
-                    achievementDiv.textContent = "MR";
-                    achievementDiv.style.color = '#1976d2';
-                } else {
-                    achievementDiv.textContent = achievementType;
-                }
-
-                achievementDiv.style.fontWeight = '500';
-                achievementDiv.style.fontSize = '13px';
-                return achievementDiv;
-            },
-
-            category: (offer) => {
-                if (offer.category && offer.category !== "N/A") {
-                    const cat = offer.category.toString().toLowerCase().trim();
-                    const categoryDiv = document.createElement('div');
-                    categoryDiv.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:6px;';
-
-                    // Map categories to icons and colors
-                    const categoryMap = {
-                        "default": { icon: "🔰", color: "#9e9e9e" },
-                        "dining": { icon: "🍽️", color: "#d32f2f" },
-                        "entertainment": { icon: "🎭", color: "#7b1fa2" },
-                        "services": { icon: "⚙️", color: "#616161" },
-                        "shopping": { icon: "🛍️", color: "#1976d2" },
-                        "travel": { icon: "✈️", color: "#0288d1" }
-                    };
-
-                    const config = categoryMap[cat] || { icon: "•", color: "#757575" };
-
-                    const badge = document.createElement('span');
-                    badge.textContent = config.icon;
-
-                    const label = document.createElement('span');
-                    label.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-                    label.style.color = config.color;
-                    label.style.fontSize = '13px';
-
-                    categoryDiv.appendChild(badge);
-                    categoryDiv.appendChild(label);
-                    return categoryDiv;
-                }
-                return 'N/A';
-            },
-
-            redemption_types: (offer) => {
-                if (offer.redemption_types && offer.redemption_types !== "N/A") {
-                    let parts = offer.redemption_types.toString().split(",");
-                    const iconsDiv = document.createElement('div');
-                    iconsDiv.style.cssText = 'display:flex; justify-content:center; gap:8px;';
-
-                    parts.forEach(val => {
-                        let trimmed = val.trim().toLowerCase();
-                        const icon = document.createElement('span');
-                        icon.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background-color:rgba(0,0,0,0.05);';
-
-                        if (trimmed.includes("instore")) {
-                            icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1976d2" stroke-width="2">
-                            <path d="M3 3h18v7H3z"/>
-                            <path d="M21 10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10"/>
-                            <path d="M11 14h.01M6 14h.01M16 14h.01M4 11v-1h16v1"/>
-                        </svg>`;
-                            icon.title = "In-Store";
-                        } else if (trimmed.includes("online")) {
-                            icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2">
-                            <path d="M12 22s8-4 8-10V4l-8-2-8 2v8c0 6 8 10 8 10z"/>
-                        </svg>`;
-                            icon.title = "Online";
-                        } else {
-                            icon.textContent = trimmed.toUpperCase().slice(0, 1);
-                            icon.title = trimmed;
+            // Cell handlers for each column type
+            const handlers = {
+                favorite: offer => {
+                    return ui_createElement('button', {
+                        props: {
+                            innerHTML: offer.favorite ?
+                                '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>'
+                        },
+                        styleString: 'background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; margin:0 auto; padding:5px; border-radius:50%; transition:all 0.2s ease;',
+                        events: {
+                            mouseenter: e => {
+                                e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                                e.target.style.transform = 'scale(1.1)';
+                            },
+                            mouseleave: e => {
+                                e.target.style.backgroundColor = 'transparent';
+                                e.target.style.transform = 'scale(1)';
+                            },
+                            click: e => {
+                                e.stopPropagation();
+                                offer.favorite = !offer.favorite;
+                                e.target.innerHTML = offer.favorite ?
+                                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+                                storage_manageData("set", storage_accToken, ["offer"]);
+                                if (glb_filters.offerFav) ui_renderCurrentView();
+                            }
                         }
-
-                        iconsDiv.appendChild(icon);
                     });
-                    return iconsDiv;
-                }
-                return "N/A";
-            },
+                },
 
-            expiry_date: (offer) => {
-                if (offer.expiry_date && offer.expiry_date !== 'N/A') {
-                    const d = new Date(offer.expiry_date);
-                    if (!isNaN(d)) {
-                        const now = new Date();
-                        const daysUntilExpiry = Math.floor((d - now) / (1000 * 60 * 60 * 24));
-
-                        const expiryContainer = document.createElement('div');
-                        expiryContainer.style.cssText = 'display:flex; flex-direction:column; align-items:center;';
-
-                        const dateSpan = document.createElement('span');
-                        dateSpan.textContent = util_formatDate(offer.expiry_date);
-                        dateSpan.style.fontSize = '13px';
-
-                        const daysSpan = document.createElement('span');
-
-                        if (daysUntilExpiry < 0) {
-                            daysSpan.textContent = 'Expired';
-                            daysSpan.style.color = 'var(--ios-red)';
-                        } else if (daysUntilExpiry <= 30) {
-                            daysSpan.textContent = `${daysUntilExpiry} days left`;
-                            daysSpan.style.color = 'var(--ios-orange)';
-                        } else {
-                            daysSpan.textContent = `${daysUntilExpiry} days left`;
-                            daysSpan.style.color = 'var(--ios-gray)';
-                            daysSpan.style.fontSize = '11px';
-                        }
-
-                        expiryContainer.appendChild(dateSpan);
-                        expiryContainer.appendChild(daysSpan);
-                        return expiryContainer;
+                logo: offer => {
+                    if (offer.logo && offer.logo !== "N/A") {
+                        return ui_createElement('div', {
+                            styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
+                            children: [
+                                ui_createElement('img', {
+                                    props: { src: offer.logo, alt: "Offer Logo" },
+                                    styleString: 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;',
+                                    events: {
+                                        mouseenter: e => e.target.style.transform = 'scale(1.15)',
+                                        mouseleave: e => e.target.style.transform = 'scale(1)'
+                                    }
+                                })
+                            ]
+                        });
                     }
                     return 'N/A';
-                }
-                return 'N/A';
-            },
+                },
 
-            short_description: (offer) => {
-                const descContainer = document.createElement('div');
-                descContainer.style.cssText = 'font-size:13px; color:var(--ios-text-secondary); max-width:220px; max-height:60px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; line-height:1.3;';
-                descContainer.textContent = offer.short_description || 'No description available';
-                descContainer.title = offer.short_description;
-                return descContainer;
-            },
+                name: offer => {
+                    return ui_createElement('div', {
+                        text: offer.name,
+                        styleString: `${UI_STYLES.tableCells.name} color:var(--ios-text-primary); padding:8px 4px; font-weight:600; font-size:14px;`,
+                        props: { title: offer.name }
+                    });
+                },
 
-            threshold: (offer) => renderFormattedValue(offer.threshold, '#1c1c1e'),
-            reward: (offer) => renderFormattedValue(offer.reward, 'var(--ios-green)'),
-            percentage: (offer) => renderFormattedValue(offer.percentage, 'var(--ios-blue)'),
+                achievement_type: offer => {
+                    const achievementType = offer.achievement_type;
+                    return ui_createElement('div', {
+                        text: achievementType === "STATEMENT_CREDIT" ? "Cash" :
+                            achievementType === "MEMBERSHIP_REWARDS" ? "MR" : achievementType,
+                        styleString: `
+                            font-weight:500; 
+                            font-size:13px; 
+                            color:${achievementType === "STATEMENT_CREDIT" ? '#2e7d32' :
+                                achievementType === "MEMBERSHIP_REWARDS" ? '#1976d2' : '#2c3e50'};
+                        `
+                    });
+                },
 
-            eligibleCards: (offer) => renderCardsCountBadge(offer, 'eligibleCards'),
-            enrolledCards: (offer) => renderCardsCountBadge(offer, 'enrolledCards')
+                category: offer => {
+                    if (offer.category && offer.category !== "N/A") {
+                        const cat = offer.category.toString().toLowerCase().trim();
+
+                        // Map categories to icons and colors
+                        const categoryMap = {
+                            "default": { icon: "🔰", color: "#9e9e9e" },
+                            "dining": { icon: "🍽️", color: "#d32f2f" },
+                            "entertainment": { icon: "🎭", color: "#7b1fa2" },
+                            "services": { icon: "⚙️", color: "#616161" },
+                            "shopping": { icon: "🛍️", color: "#1976d2" },
+                            "travel": { icon: "✈️", color: "#0288d1" }
+                        };
+
+                        const config = categoryMap[cat] || { icon: "•", color: "#757575" };
+
+                        return ui_createElement('div', {
+                            styleString: 'display:flex; align-items:center; justify-content:center; gap:6px;',
+                            children: [
+                                ui_createElement('span', {
+                                    text: config.icon
+                                }),
+                                ui_createElement('span', {
+                                    text: cat.charAt(0).toUpperCase() + cat.slice(1),
+                                    styleString: `color:${config.color}; font-size:13px;`
+                                })
+                            ]
+                        });
+                    }
+                    return 'N/A';
+                },
+
+                redemption_types: offer => {
+                    if (offer.redemption_types && offer.redemption_types !== "N/A") {
+                        let parts = offer.redemption_types.toString().split(",");
+
+                        return ui_createElement('div', {
+                            styleString: 'display:flex; justify-content:center; gap:8px;',
+                            children: parts.map(val => {
+                                let trimmed = val.trim().toLowerCase();
+
+                                let iconContent, title;
+                                if (trimmed.includes("instore")) {
+                                    iconContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1976d2" stroke-width="2">
+                                        <path d="M3 3h18v7H3z"/>
+                                        <path d="M21 10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10"/>
+                                        <path d="M11 14h.01M6 14h.01M16 14h.01M4 11v-1h16v1"/>
+                                    </svg>`;
+                                    title = "In-Store";
+                                } else if (trimmed.includes("online")) {
+                                    iconContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2">
+                                        <path d="M12 22s8-4 8-10V4l-8-2-8 2v8c0 6 8 10 8 10z"/>
+                                    </svg>`;
+                                    title = "Online";
+                                } else {
+                                    iconContent = trimmed.toUpperCase().slice(0, 1);
+                                    title = trimmed;
+                                }
+
+                                return ui_createElement('span', {
+                                    props: {
+                                        innerHTML: iconContent,
+                                        title: title
+                                    },
+                                    styleString: 'display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background-color:rgba(0,0,0,0.05);'
+                                });
+                            })
+                        });
+                    }
+                    return "N/A";
+                },
+
+                expiry_date: offer => {
+                    if (offer.expiry_date && offer.expiry_date !== 'N/A') {
+                        const d = new Date(offer.expiry_date);
+                        if (!isNaN(d)) {
+                            const now = new Date();
+                            const daysUntilExpiry = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+
+                            return ui_createElement('div', {
+                                styleString: 'display:flex; flex-direction:column; align-items:center;',
+                                children: [
+                                    ui_createElement('span', {
+                                        text: util_formatDate(offer.expiry_date),
+                                        styleString: 'font-size:13px;'
+                                    }),
+                                    ui_createElement('span', {
+                                        text: daysUntilExpiry < 0 ? 'Expired' :
+                                            `${daysUntilExpiry} days left`,
+                                        styleString: `
+                                            font-size:${daysUntilExpiry > 30 ? '11px' : '12px'};
+                                            color:${daysUntilExpiry < 0 ? 'var(--ios-red)' :
+                                                daysUntilExpiry <= 30 ? 'var(--ios-orange)' :
+                                                    'var(--ios-gray)'};
+                                        `
+                                    })
+                                ]
+                            });
+                        }
+                    }
+                    return 'N/A';
+                },
+
+                short_description: offer => {
+                    return ui_createElement('div', {
+                        text: offer.short_description || 'No description available',
+                        styleString: UI_STYLES.tableCells.description,
+                        props: { title: offer.short_description }
+                    });
+                },
+
+                threshold: offer => renderFormattedValue(offer.threshold, '#1c1c1e'),
+                reward: offer => renderFormattedValue(offer.reward, 'var(--ios-green)'),
+                percentage: offer => renderFormattedValue(offer.percentage, 'var(--ios-blue)'),
+
+                eligibleCards: offer => renderCardsCountBadge(offer, 'eligibleCards'),
+                enrolledCards: offer => renderCardsCountBadge(offer, 'enrolledCards')
+            };
+
+            return handlers[key] ? handlers[key](offer) : (offer[key] || 'N/A');
         };
 
-        // Helper function for formatted values
         function renderFormattedValue(value, color) {
             if (value && value !== 'N/A') {
-                const valueDiv = document.createElement('div');
-                valueDiv.style.cssText = `font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color};`;
-                valueDiv.textContent = value;
-                return valueDiv;
+                return ui_createElement('div', {
+                    text: value,
+                    styleString: `font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color};`
+                });
             }
             return 'N/A';
         }
 
-        // Helper function for card count badges
         function renderCardsCountBadge(offer, key) {
             const cardTokens = Array.isArray(offer[key]) ? offer[key] : [];
             const count = cardTokens.length;
 
-            const container = document.createElement('div');
-            container.style.cssText = 'height:32px; display:flex; align-items:center; justify-content:center;';
-
             if (count > 0) {
                 const isEligible = key === 'eligibleCards';
-                const btn = document.createElement('button');
-                btn.className = isEligible ? 'eligible-badge' : 'enrolled-badge';
+                const statusStyle = isEligible ? UI_STYLES.status.inProgress : UI_STYLES.status.active;
 
-                const bgColor = isEligible ? 'rgba(0, 122, 255, 0.1)' : 'rgba(52, 199, 89, 0.1)';
-                const textColor = isEligible ? 'var(--ios-blue)' : 'var(--ios-green)';
-                const borderColor = isEligible ? 'rgba(0, 122, 255, 0.2)' : 'rgba(52, 199, 89, 0.2)';
-
-                btn.style.cssText = `
-                border-radius:16px; background-color:${bgColor}; color:${textColor}; 
-                border:1px solid ${borderColor}; padding:5px 12px; font-weight:600; 
-                font-size:13px; cursor:pointer; transition:all 0.2s ease; display:flex; 
-                align-items:center; justify-content:center; gap:4px;
-                `;
-
-                // Add icon based on type
-                if (isEligible) {
-                    btn.innerHTML = `
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textColor}" stroke-width="2">
-                        <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
-                        <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
-                    </svg>
-                    ${count}
-                    `;
-                } else {
-                    btn.innerHTML = `
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textColor}" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                        <path d="M22 4L12 14.01l-3-3"/>
-                    </svg>
-                    ${count}
-                    `;
-                }
-
-                btn.addEventListener('mouseover', () => {
-                    btn.style.transform = 'translateY(-2px)';
-                    btn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                return ui_createElement('button', {
+                    className: isEligible ? 'eligible-badge' : 'enrolled-badge',
+                    props: {
+                        innerHTML: `
+                        ${isEligible ?
+                                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${statusStyle.color}" stroke-width="2">
+                             <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+                             <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+                           </svg>` :
+                                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${statusStyle.color}" stroke-width="2">
+                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                             <path d="M22 4L12 14.01l-3-3"/>
+                           </svg>`
+                            }
+                        ${count}
+                    `},
+                    styleString: `
+                        border-radius: 16px;
+                        background-color: ${statusStyle.bgColor};
+                        color: ${statusStyle.color};
+                        border: 1px solid ${statusStyle.borderColor};
+                        padding: 5px 12px;
+                        font-weight: 600;
+                        font-size: 13px;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 4px;
+                    `,
+                    events: {
+                        mouseover: e => {
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                        },
+                        mouseout: e => {
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = 'none';
+                        },
+                        click: e => {
+                            e.stopPropagation();
+                            offers_popCard(offer.offerId);
+                        }
+                    }
                 });
-
-                btn.addEventListener('mouseout', () => {
-                    btn.style.transform = 'translateY(0)';
-                    btn.style.boxShadow = 'none';
-                });
-
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Prevent row click
-                    offers_showEnrollment(offer.offerId);
-                });
-
-                container.appendChild(btn);
-            } else {
-                // Zero count indicator
-                const emptySpan = document.createElement('span');
-                emptySpan.textContent = '0';
-                emptySpan.style.cssText = 'color:rgba(0,0,0,0.3);';
-                container.appendChild(emptySpan);
             }
 
-            return container;
+            // Zero count indicator
+            return ui_createElement('span', {
+                text: '0',
+                styleString: 'color:rgba(0,0,0,0.3);'
+            });
         }
 
-        // Define cell renderer with handler pattern
-        const cellRenderer = (offer, headerItem) => {
-            const key = headerItem.key;
-            return cellHandlers[key] ? cellHandlers[key](offer) : (offer[key] || 'N/A');
-        };
-
-        // Define sortable columns
         const sortableKeys = [
             "favorite", "name", "achievement_type", "category",
             "expiry_date", "threshold", "reward", "percentage",
             "eligibleCards", "enrolledCards"
         ];
 
-        // Use the improved ui_renderDataTable function
+        // Create the table
         const tableElement = ui_renderDataTable(headers, colWidths, filteredOffers, cellRenderer, offers_sortTable, sortableKeys);
 
-        // Apply required styling directly to the table
-        tableElement.style.cssText = 'font-size:13px; border-collapse:separate; border-spacing:0; background-color:#ffffff; border-radius:var(--ios-radius); overflow:hidden; width:100%; box-shadow:none; border:1px solid rgba(60, 60, 67, 0.12);';
+        const rows = tableElement.querySelectorAll('tbody tr');
+        const clickHandlers = [];
 
-        // Make rows clickable to open enrollment modal
-        setTimeout(() => {
-            const rows = tableElement.querySelectorAll('tbody tr');
-            rows.forEach((row, index) => {
+        rows.forEach((row, index) => {
+            if (index < filteredOffers.length) {
                 row.style.cursor = 'pointer';
-                row.addEventListener('click', () => {
-                    if (index < filteredOffers.length) {
-                        offers_showEnrollment(filteredOffers[index].offerId);
-                    }
+                clickHandlers.push(() => {
+                    row.addEventListener('click', () => {
+                        offers_popCard(filteredOffers[index].offerId);
+                    });
                 });
-            });
+            }
+        });
+
+        // Batch applying event handlers
+        setTimeout(() => {
+            clickHandlers.forEach(handler => handler());
         }, 0);
 
         return tableElement;
     }
 
-    // Optimized grid view renderer
-    function offers_renderGridView() {
-        // Filter offers
-        const filteredOffers = offers_filterOffersList();
-
-        // Create container
-        const gridContainer = document.createElement('div');
-        gridContainer.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:20px; width:100%; margin-top:16px;';
-
-        // Check for empty state
-        if (filteredOffers.length === 0) {
-            return ui_createEmptyState(gridContainer);
-        }
-
-        // Create a card for each offer
-        filteredOffers.forEach(offer => {
-            const card = offers_createGridCard(offer);
-            gridContainer.appendChild(card);
-        });
-
-        return gridContainer;
-    }
-
-    // Helper to create each offer card
-    function offers_createGridCard(offer) {
-        const card = document.createElement('div');
-        card.className = 'offer-card';
-        card.style.cssText = `background-color:white; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.08); overflow:hidden; transition:all 0.3s ease; border:${offer.favorite ? '2px solid rgba(255, 149, 0, 0.5)' : '1px solid rgba(0,0,0,0.08)'}; display:flex; flex-direction:column; height:100%;`;
-
-        card.addEventListener('mouseenter', () => {
-            card.style.transform = 'translateY(-6px)';
-            card.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)';
-        });
-
-        card.addEventListener('mouseleave', () => {
-            card.style.transform = 'translateY(0)';
-            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-        });
-
-        // Card components
-        const cardHeader = offers_createCardHeader(offer);
-        const cardBody = offers_createCardBody(offer);
-        const cardFooter = offers_createCardFooter(offer);
-
-        card.appendChild(cardHeader);
-        card.appendChild(cardBody);
-        card.appendChild(cardFooter);
-
-        // Make entire card clickable
-        card.addEventListener('click', () => {
-            offers_showEnrollment(offer.offerId);
-        });
-
-        return card;
-    }
-
-    // Create card header with merchant logo and favorite button
-    function offers_createCardHeader(offer) {
-        const cardHeader = document.createElement('div');
-        cardHeader.style.cssText = 'padding:16px; display:flex; align-items:center; border-bottom:1px solid rgba(0,0,0,0.04);';
-
-        // Logo container
-        const logoContainer = document.createElement('div');
-        logoContainer.style.cssText = 'width:48px; height:48px; background-color:rgba(0,0,0,0.03); border-radius:8px; display:flex; align-items:center; justify-content:center; margin-right:12px; flex-shrink:0;';
-
-        if (offer.logo && offer.logo !== 'N/A') {
-            const logo = document.createElement('img');
-            logo.src = offer.logo;
-            logo.alt = offer.name;
-            logo.style.cssText = 'max-width:80%; max-height:80%;';
-            logoContainer.appendChild(logo);
-        } else {
-            // Fallback to first letter of merchant name
-            const logoText = document.createElement('div');
-            logoText.textContent = offer.name.charAt(0).toUpperCase();
-            logoText.style.cssText = 'font-size:24px; font-weight:600; color:rgba(0,0,0,0.7);';
-            logoContainer.appendChild(logoText);
-        }
-
-        // Merchant name and category
-        const nameContainer = document.createElement('div');
-        nameContainer.style.cssText = 'flex:1; overflow:hidden;';
-
-        const nameRow = document.createElement('div');
-        nameRow.style.cssText = 'display:flex; align-items:center; gap:6px; margin-bottom:4px;';
-
-        if (offer.favorite) {
-            const starIcon = document.createElement('span');
-            starIcon.textContent = '★';
-            starIcon.style.cssText = 'color:#ff9500; font-size:14px;';
-            nameRow.appendChild(starIcon);
-        }
-
-        const merchantName = document.createElement('div');
-        merchantName.textContent = offer.name;
-        merchantName.style.cssText = 'font-weight:600; font-size:16px; color:#1c1c1e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-        nameRow.appendChild(merchantName);
-        nameContainer.appendChild(nameRow);
-
-        // Add category badge if available
-        if (offer.category && offer.category !== 'N/A') {
-            const categoryBadge = document.createElement('div');
-            categoryBadge.textContent = offer.category;
-            categoryBadge.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5); background-color:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; display:inline-block; margin-top:4px;';
-            nameContainer.appendChild(categoryBadge);
-        }
-
-        // Favorite toggle button
-        const favButton = document.createElement('button');
-        favButton.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="${offer.favorite ? '#ff9500' : 'none'}" 
-             stroke="${offer.favorite ? '#ff9500' : '#888'}" stroke-width="2">
-            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-        </svg>
-        `;
-        favButton.style.cssText = 'background:none; border:none; cursor:pointer; padding:6px; border-radius:50%; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;';
-
-        favButton.addEventListener('mouseenter', () => {
-            favButton.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            favButton.style.transform = 'scale(1.1)';
-        });
-
-        favButton.addEventListener('mouseleave', () => {
-            favButton.style.backgroundColor = 'transparent';
-            favButton.style.transform = 'scale(1)';
-        });
-
-        favButton.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent card click
-            offer.favorite = !offer.favorite;
-
-            // Update star icon
-            favButton.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="${offer.favorite ? '#ff9500' : 'none'}" 
-                 stroke="${offer.favorite ? '#ff9500' : '#888'}" stroke-width="2">
-                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-            </svg>
-            `;
-
-            // Update card border
-            card.style.border = offer.favorite ? '2px solid rgba(255, 149, 0, 0.5)' : '1px solid rgba(0,0,0,0.08)';
-
-            // Save to storage
-            storage_manageData("set", storage_accToken, ["offer"]);
-
-            // If favorite filter is on, we need to re-render
-            if (glb_filters.offerFav) {
-                ui_renderCurrentView();
-            }
-        });
-
-        // Assemble header
-        cardHeader.appendChild(logoContainer);
-        cardHeader.appendChild(nameContainer);
-        cardHeader.appendChild(favButton);
-
-        return cardHeader;
-    }
-
-    // Create card body with offer details
-    function offers_createCardBody(offer) {
-        const cardBody = document.createElement('div');
-        cardBody.style.cssText = 'padding:16px; flex:1; display:flex; flex-direction:column;';
-
-        // Offer description
-        const description = document.createElement('div');
-        description.style.cssText = 'font-size:14px; color:#4a4a4a; margin-bottom:16px; flex:1; line-height:1.5;';
-
-        // Truncate description if too long
-        if (offer.short_description && offer.short_description.length > 120) {
-            description.textContent = offer.short_description.substring(0, 120) + '...';
-            description.title = offer.short_description;
-        } else {
-            description.textContent = offer.short_description || 'No description available';
-        }
-
-        // Offer metrics grid with reusable component
-        const metricsGrid = document.createElement('div');
-        metricsGrid.style.cssText = 'display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:16px;';
-
-        // Helper for metric tiles
-        const createMetricTile = (label, value, iconSvg) => {
-            if (!value || value === 'N/A') return null;
-
-            const tile = document.createElement('div');
-            tile.style.cssText = 'background-color:rgba(0,0,0,0.02); border-radius:8px; padding:10px; display:flex; align-items:center;';
-
-            const icon = document.createElement('div');
-            icon.innerHTML = iconSvg;
-            icon.style.cssText = 'margin-right:8px; color:var(--ios-blue);';
-
-            const textContent = document.createElement('div');
-
-            const labelEl = document.createElement('div');
-            labelEl.textContent = label;
-            labelEl.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5); margin-bottom:2px;';
-
-            const valueEl = document.createElement('div');
-            valueEl.textContent = value;
-            valueEl.style.cssText = 'font-size:14px; font-weight:600; color:#1c1c1e;';
-
-            textContent.appendChild(labelEl);
-            textContent.appendChild(valueEl);
-
-            tile.appendChild(icon);
-            tile.appendChild(textContent);
-
-            return tile;
-        };
-
-        // Metric icons
-        const icons = {
-            threshold: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M2 20h20M6 16V4M10 16V8M14 16v-4M18 16V4"/>
-        </svg>`,
-            reward: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v6M12 18v4M4.93 10.93l4.24 4.24M14.83 8.93l4.24-4.24M3 18h18M3 6h18"/>
-        </svg>`,
-            percent: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 5L5 19M9 5a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM15 15a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
-        </svg>`,
-            expiry: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v6l4 2"/>
-        </svg>`
-        };
-
-        // Add available metrics
-        const tiles = [
-            createMetricTile('Spend', offer.threshold, icons.threshold),
-            createMetricTile('Reward', offer.reward, icons.reward),
-            createMetricTile('Percent', offer.percentage, icons.percent),
-            createMetricTile('Expires', util_formatDate(offer.expiry_date), icons.expiry)
-        ];
-
-        tiles.forEach(tile => {
-            if (tile) metricsGrid.appendChild(tile);
-        });
-
-        // Assemble body
-        cardBody.appendChild(description);
-        cardBody.appendChild(metricsGrid);
-
-        return cardBody;
-    }
-
-    // Create card footer with eligible/enrolled cards
-    function offers_createCardFooter(offer) {
-        const cardFooter = document.createElement('div');
-        cardFooter.style.cssText = 'padding:16px; border-top:1px solid rgba(0,0,0,0.04); display:flex; justify-content:space-between; align-items:center;';
-
-        // Count eligible and enrolled cards
-        const eligibleCount = Array.isArray(offer.eligibleCards) ? offer.eligibleCards.length : 0;
-        const enrolledCount = Array.isArray(offer.enrolledCards) ? offer.enrolledCards.length : 0;
-
-        // Helper for badge creation
-        const createCountBadge = (count, label, color, iconSvg) => {
-            const badge = document.createElement('div');
-            badge.style.cssText = 'display:flex; align-items:center; gap:8px;';
-
-            const icon = document.createElement('div');
-            icon.innerHTML = iconSvg;
-            icon.style.color = color;
-
-            const countContainer = document.createElement('div');
-
-            const countValue = document.createElement('div');
-            countValue.textContent = count;
-            countValue.style.cssText = `font-weight:600; font-size:16px; color:${count > 0 ? color : 'rgba(0,0,0,0.3)'};`;
-
-            const countLabel = document.createElement('div');
-            countLabel.textContent = label;
-            countLabel.style.cssText = 'font-size:11px; color:rgba(0,0,0,0.5);';
-
-            countContainer.appendChild(countValue);
-            countContainer.appendChild(countLabel);
-
-            badge.appendChild(icon);
-            badge.appendChild(countContainer);
-
-            return badge;
-        };
-
-        // Badge icons
-        const eligibleIcon = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
-            <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
-        </svg>
-        `;
-
-        const enrolledIcon = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <path d="M22 4L12 14.01l-3-3"/>
-        </svg>
-        `;
-
-        // Create badges
-        const eligibleBadge = createCountBadge(eligibleCount, 'Eligible', 'var(--ios-blue)', eligibleIcon);
-        const enrolledBadge = createCountBadge(enrolledCount, 'Enrolled', 'var(--ios-green)', enrolledIcon);
-
-        // Add click handlers
-        if (eligibleCount > 0) {
-            eligibleBadge.style.cursor = 'pointer';
-            eligibleBadge.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent card click
-                offers_showEnrollment(offer.offerId);
-            });
-
-            eligibleBadge.addEventListener('mouseenter', () => {
-                eligibleBadge.style.transform = 'scale(1.05)';
-            });
-
-            eligibleBadge.addEventListener('mouseleave', () => {
-                eligibleBadge.style.transform = 'scale(1)';
-            });
-        }
-
-        if (enrolledCount > 0) {
-            enrolledBadge.style.cursor = 'pointer';
-            enrolledBadge.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent card click
-                offers_showEnrollment(offer.offerId);
-            });
-
-            enrolledBadge.addEventListener('mouseenter', () => {
-                enrolledBadge.style.transform = 'scale(1.05)';
-            });
-
-            enrolledBadge.addEventListener('mouseleave', () => {
-                enrolledBadge.style.transform = 'scale(1)';
-            });
-        }
-
-        // Add badges to footer
-        cardFooter.appendChild(eligibleBadge);
-        cardFooter.appendChild(enrolledBadge);
-
-        return cardFooter;
-    }
 
     // Enhanced enrollment card modal
-    function offers_showEnrollment(offerId) {
-        // Get offer data
+    function offers_popCard(offerId) {
         const offer = glb_offer.find(o => o.offerId === offerId);
+        if (!offer) return;
 
-        if (!offer) {
-            console.error('Offer not found for ID:', offerId);
-            return;
-        }
-
-        // Remove existing overlay
-        const overlayId = 'offer-details-overlay';
-        const existing = document.getElementById(overlayId);
-        if (existing) existing.remove();
-
-        // Create overlay with smooth animation
-        const overlay = document.createElement('div');
-        overlay.id = overlayId;
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100vw';
-        overlay.style.height = '100vh';
-        overlay.style.background = 'rgba(0,0,0,0.4)';
-        overlay.style.backdropFilter = 'blur(8px)';
-        overlay.style.WebkitBackdropFilter = 'blur(8px)';
-        overlay.style.zIndex = '10001';
-        overlay.style.display = 'flex';
-        overlay.style.justifyContent = 'center';
-        overlay.style.alignItems = 'center';
-        overlay.style.opacity = '0';
-        overlay.style.transition = 'opacity 0.3s ease';
-
-        // Create modal container
-        const modal = document.createElement('div');
-        modal.style.backgroundColor = '#fff';
-        modal.style.borderRadius = '16px';
-        modal.style.boxShadow = '0 20px 60px rgba(0,0,0,0.15)';
-        modal.style.width = '90%';
-        modal.style.maxWidth = '800px';
-        modal.style.maxHeight = '90vh';
-        modal.style.overflow = 'hidden';
-        modal.style.display = 'flex';
-        modal.style.flexDirection = 'column';
-        modal.style.transform = 'translateY(40px) scale(0.95)';
-        modal.style.opacity = '0';
-        modal.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-
-        // Modal header with offer details
-        const header = document.createElement('div');
-        header.style.padding = '20px';
-        header.style.paddingRight = '60px';
-        header.style.borderBottom = '1px solid rgba(0,0,0,0.08)';
-        header.style.position = 'relative';
-
-        // Offer title row
-        const titleRow = document.createElement('div');
-        titleRow.style.display = 'flex';
-        titleRow.style.alignItems = 'flex-start';
-        titleRow.style.gap = '16px';
-        titleRow.style.marginRight = '24px'; // Space for close button
-
-        // Logo container
-        const logoContainer = document.createElement('div');
-        logoContainer.style.width = '60px';
-        logoContainer.style.height = '60px';
-        logoContainer.style.borderRadius = '8px';
-        logoContainer.style.backgroundColor = 'rgba(0,0,0,0.03)';
-        logoContainer.style.display = 'flex';
-        logoContainer.style.alignItems = 'center';
-        logoContainer.style.justifyContent = 'center';
-        logoContainer.style.overflow = 'hidden';
-        logoContainer.style.flexShrink = '0';
-
-        if (offer.logo && offer.logo !== 'N/A') {
-            const logo = document.createElement('img');
-            logo.src = offer.logo;
-            logo.alt = offer.name;
-            logo.style.maxWidth = '80%';
-            logo.style.maxHeight = '80%';
-            logoContainer.appendChild(logo);
-        } else {
-            // Fallback logo
-            logoContainer.textContent = offer.name.charAt(0).toUpperCase();
-            logoContainer.style.fontSize = '30px';
-            logoContainer.style.fontWeight = '600';
-            logoContainer.style.color = '#1c1c1e';
-        }
-
-        // Title and details
-        const titleContainer = document.createElement('div');
-        titleContainer.style.flex = '1';
-
-        // Create a container for title and favorite button
-        const titleFavContainer = document.createElement('div');
-        titleFavContainer.style.display = 'flex';
-        titleFavContainer.style.alignItems = 'center';
-        titleFavContainer.style.justifyContent = 'space-between';
-        titleFavContainer.style.marginBottom = '8px';
-
-
-        const title = document.createElement('h2');
-        title.textContent = offer.name;
-        title.style.margin = '0';
-        title.style.fontSize = '20px';
-        title.style.fontWeight = '600';
-        title.style.color = '#1c1c1e';
-        title.style.flex = '1';
-        title.style.overflow = 'hidden';
-        title.style.textOverflow = 'ellipsis';
-        title.style.whiteSpace = 'nowrap';
-
-        const details = document.createElement('div');
-        details.style.fontSize = '14px';
-        details.style.color = 'var(--ios-text-secondary)';
-        details.style.lineHeight = '1.4';
-
-        // Format description
-        details.textContent = offer.short_description || 'No description available';
-
-        // Badge row for metrics
-        const badgeRow = document.createElement('div');
-        badgeRow.style.display = 'flex';
-        badgeRow.style.flexWrap = 'wrap';
-        badgeRow.style.gap = '8px';
-        badgeRow.style.marginTop = '12px';
-
-        // Helper for creating metric badges
-        function createBadge(label, value, color) {
-            if (!value || value === 'N/A') return null;
-
-            const badge = document.createElement('div');
-            badge.style.backgroundColor = `rgba(${color}, 0.1)`;
-            badge.style.color = `rgb(${color})`;
-            badge.style.padding = '5px 10px';
-            badge.style.borderRadius = '12px';
-            badge.style.fontSize = '13px';
-            badge.style.fontWeight = '600';
-            badge.style.display = 'flex';
-            badge.style.alignItems = 'center';
-            badge.style.gap = '4px';
-
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = label + ':';
-            labelSpan.style.opacity = '0.8';
-            labelSpan.style.fontWeight = '400';
-
-            const valueSpan = document.createElement('span');
-            valueSpan.textContent = value;
-
-            badge.appendChild(labelSpan);
-            badge.appendChild(valueSpan);
-
-            return badge;
-        }
-
-        // Add available badges
-        const thresholdBadge = createBadge('Spend', offer.threshold, '74, 74, 74');
-        const rewardBadge = createBadge('Reward', offer.reward, '76, 175, 80');
-        const percentBadge = createBadge('Rate', offer.percentage, '33, 150, 243');
-        const expiryBadge = createBadge('Expires', util_formatDate(offer.expiry_date), '255, 87, 34');
-
-        if (thresholdBadge) badgeRow.appendChild(thresholdBadge);
-        if (rewardBadge) badgeRow.appendChild(rewardBadge);
-        if (percentBadge) badgeRow.appendChild(percentBadge);
-        if (expiryBadge) badgeRow.appendChild(expiryBadge);
-
-        // Add type badge
-        if (offer.achievement_type) {
-            let typeLabel = offer.achievement_type;
-            let typeColor = '97, 97, 97'; // Default gray
-
-            if (offer.achievement_type === 'STATEMENT_CREDIT') {
-                typeLabel = 'Cash Back';
-                typeColor = '76, 175, 80'; // Green
-            } else if (offer.achievement_type === 'MEMBERSHIP_REWARDS') {
-                typeLabel = 'MR Points';
-                typeColor = '33, 150, 243'; // Blue
-            }
-
-            const typeBadge = createBadge('Type', typeLabel, typeColor);
-            if (typeBadge) badgeRow.appendChild(typeBadge);
-        }
-
-        // Create favorite button
-        const favBtn = document.createElement('button');
-        favBtn.innerHTML = offer.favorite ? `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff9500">
-            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-        </svg>
-        ` : `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-        </svg>
-        `;
-        favBtn.style.cssText = `
-        background:none;
-        border:none;
-        padding:4px 6px;
-        border-radius:16px;
-        background-color:${offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.05)'};
-        color:${offer.favorite ? '#ff9500' : '#666'};
-        cursor:pointer;
-        display:inline-flex;
-        align-items:center;
-        transition:all 0.2s ease;
-        flex-shrink:0;
-        `;
-
-        favBtn.addEventListener('mouseenter', () => {
-            favBtn.style.transform = 'scale(1.05)';
+        const { overlay, content, closeBtn } = ui_createModal({
+            id: 'offer-details-modal',
+            width: '800px',
+            title: offer.name,
+            onClose: () => { }
         });
 
-        favBtn.addEventListener('mouseleave', () => {
-            favBtn.style.transform = 'scale(1)';
+        // Create tabs container and content areas
+        const tabContainer = ui_createElement('div', {
+            styleString: UI_STYLES.modal.tabContainer
         });
 
-        favBtn.addEventListener('click', () => {
-            offer.favorite = !offer.favorite;
+        const tabContents = setupTabs(['Cards', 'Details', 'Terms'], tabContainer);
 
-            // Update button appearance
-            favBtn.innerHTML = offer.favorite ? `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff9500">
-                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-            </svg>
-            ` : `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-            </svg>
-            `;
+        // Add offer header with details
+        const headerInfo = createOfferHeaderInfo(offer);
+        content.appendChild(headerInfo);
+        content.appendChild(tabContainer);
 
-            favBtn.style.backgroundColor = offer.favorite ? 'rgba(255, 149, 0, 0.1)' : 'rgba(0,0,0,0.05)';
-            favBtn.style.color = offer.favorite ? '#ff9500' : '#666';
+        // Add content containers
+        Object.values(tabContents).forEach(el => content.appendChild(el));
 
-            // Save to storage
-            storage_manageData("set", storage_accToken, ["offer"]);
-        });
+        // Populate tabs
+        populateCardsTab(tabContents.cards, offer);
+        populateDetailsTab(tabContents.details, offer);
+        populateTermsTab(tabContents.terms, offer);
 
-        // Add title and favorite button to their container
-        titleFavContainer.appendChild(title);
-        titleFavContainer.appendChild(favBtn);
-
-        // Assemble title container
-        titleContainer.appendChild(titleFavContainer);
-        titleContainer.appendChild(details);
-        titleContainer.appendChild(badgeRow);
-
-        // Close button
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-        `;
-        closeBtn.style.position = 'absolute';
-        closeBtn.style.top = '16px';
-        closeBtn.style.right = '16px';
-        closeBtn.style.width = '32px';
-        closeBtn.style.height = '32px';
-        closeBtn.style.borderRadius = '50%';
-        closeBtn.style.border = 'none';
-        closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
-        closeBtn.style.color = '#666';
-        closeBtn.style.display = 'flex';
-        closeBtn.style.alignItems = 'center';
-        closeBtn.style.justifyContent = 'center';
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.transition = 'all 0.2s ease';
-        closeBtn.style.zIndex = '5'; // Ensure close button stays above other elements
-
-        closeBtn.addEventListener('mouseenter', () => {
-            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.1)';
-            closeBtn.style.color = '#333';
-        });
-
-        closeBtn.addEventListener('mouseleave', () => {
-            closeBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            closeBtn.style.color = '#666';
-        });
-
-        closeBtn.addEventListener('click', () => {
-            // Fade out animation
-            modal.style.transform = 'translateY(40px) scale(0.95)';
-            modal.style.opacity = '0';
-            overlay.style.opacity = '0';
-
-            // Remove after animation
-            setTimeout(() => {
-                overlay.remove();
-            }, 300);
-        });
-
-        // Assemble header
-        titleRow.appendChild(logoContainer);
-        titleRow.appendChild(titleContainer);
-        header.appendChild(titleRow);
-        header.appendChild(closeBtn);
-
-        // Create tabbed navigation area
-        const tabContainer = document.createElement('div');
-        tabContainer.style.cssText = `
-        display: flex;
-        border-bottom: 1px solid rgba(0,0,0,0.1);
-        padding: 0 20px;
-        background-color: #f8f8f8;
-        `;
-
-        // Create the tabs
-        const tabs = ['Cards', 'Details', 'Terms'];
-        const tabButtons = {};
-
-        tabs.forEach((tabName, index) => {
-            const tab = document.createElement('button');
-            tab.textContent = tabName;
-            tab.style.cssText = `
-            padding: 12px 20px;
-            background: none;
-            border: none;
-            border-bottom: 3px solid transparent;
-            font-size: 15px;
-            font-weight: 500;
-            color: #555;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-right: 8px;
-            ${index === 0 ? 'border-bottom-color: var(--ios-blue); color: var(--ios-blue);' : ''}
-            `;
-
-            tab.addEventListener('mouseenter', () => {
-                if (!tab.classList.contains('active')) {
-                    tab.style.backgroundColor = 'rgba(0,0,0,0.03)';
-                }
-            });
-
-            tab.addEventListener('mouseleave', () => {
-                if (!tab.classList.contains('active')) {
-                    tab.style.backgroundColor = 'transparent';
-                }
-            });
-
-            tab.addEventListener('click', () => {
-                // Deactivate all tabs
-                Object.values(tabButtons).forEach(btn => {
-                    btn.style.borderBottomColor = 'transparent';
-                    btn.style.color = '#555';
-                    btn.classList.remove('active');
-                });
-
-                // Activate this tab
-                tab.style.borderBottomColor = 'var(--ios-blue)';
-                tab.style.color = 'var(--ios-blue)';
-                tab.classList.add('active');
-
-                // Show corresponding content
-                showTabContent(tabName.toLowerCase());
-            });
-
-            tabButtons[tabName.toLowerCase()] = tab;
-            tabContainer.appendChild(tab);
-        });
-
-        // Create content area with tab-specific content
-        const contentContainer = document.createElement('div');
-        contentContainer.style.cssText = `
-        flex: 1;
-        overflow: auto;
-        position: relative;
-        `;
-
-        // Content for each tab
-        const tabContents = {};
-
-        // 1. Cards tab content - eligible and enrolled cards
-        tabContents.cards = document.createElement('div');
-        tabContents.cards.style.cssText = `
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        `;
-
-        // Add enroll all button if there are eligible cards
-        if (Array.isArray(offer.eligibleCards) && offer.eligibleCards.length > 0) {
-            const enrollAllContainer = document.createElement('div');
-            enrollAllContainer.style.cssText = 'margin-bottom: 16px;';
-
-            const enrollAllBtn = document.createElement('button');
-            enrollAllBtn.style.cssText = `
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(to right, #2196F3, #4CAF50);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
-            transition: all 0.2s ease;
-            `;
-
-            enrollAllBtn.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <path d="M22 4L12 14.01l-3-3"/>
-            </svg>
-            Enroll All Eligible Cards (${offer.eligibleCards.length})
-            `;
-
-            // Add hover effects
-            enrollAllBtn.addEventListener('mouseenter', () => {
-                enrollAllBtn.style.transform = 'translateY(-2px)';
-                enrollAllBtn.style.boxShadow = '0 6px 16px rgba(0, 122, 255, 0.3)';
-            });
-
-            enrollAllBtn.addEventListener('mouseleave', () => {
-                enrollAllBtn.style.transform = 'translateY(0)';
-                enrollAllBtn.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.2)';
-            });
-
-            enrollAllBtn.addEventListener('click', async () => {
-                enrollAllBtn.innerHTML = '<div style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>Enrolling...';
-                enrollAllBtn.disabled = true;
-                enrollAllBtn.style.opacity = '0.8';
-
-                try {
-                    await api_batchEnrollOffers(offer.source_id);
-                    enrollAllBtn.innerHTML = '✓ Enrolled Successfully';
-                    enrollAllBtn.style.background = 'linear-gradient(to right, #4CAF50, #2E7D32)';
-                    setTimeout(() => {
-                        closeBtn.click();
-                        ui_renderCurrentView();
-                    }, 1500);
-                } catch (err) {
-                    console.error('Error:', err);
-                    enrollAllBtn.innerHTML = '× Error - Try Again';
-                    enrollAllBtn.style.background = '#F44336';
-                    setTimeout(() => {
-                        enrollAllBtn.disabled = false;
-                        enrollAllBtn.style.opacity = '1';
-                    }, 2000);
-                }
-            });
-
-            enrollAllContainer.appendChild(enrollAllBtn);
-            tabContents.cards.appendChild(enrollAllContainer);
-        }
-
-        // Create sections for eligible and enrolled cards
-
-
-
-        // Create sections for eligible and enrolled cards
-        const eligibleSection = createCardList('Eligible Cards', offer.eligibleCards || [], 'eligible');
-        const enrolledSection = createCardList('Enrolled Cards', offer.enrolledCards || [], 'enrolled');
-
-        // Add sections to container
-        tabContents.cards.appendChild(eligibleSection);
-        tabContents.cards.appendChild(enrolledSection);
-
-        // 2. Details tab content
-        tabContents.details = document.createElement('div');
-        tabContents.details.style.cssText = `
-        padding: 20px;
-        display: none;
-        `;
-
-        // Only show details if we have long_description
-        if (!offer.long_description && !offer.terms) {
-            // Try to fetch detailed information if not already present
-            const fetchDetailsBtn = document.createElement('button');
-            fetchDetailsBtn.textContent = 'Load Detailed Information';
-            fetchDetailsBtn.style.cssText = `
-            margin: 40px auto;
-            display: block;
-            padding: 12px 24px;
-            background-color: var(--ios-blue);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            `;
-
-            fetchDetailsBtn.addEventListener('mouseenter', () => {
-                fetchDetailsBtn.style.transform = 'translateY(-2px)';
-                fetchDetailsBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-            });
-
-            fetchDetailsBtn.addEventListener('mouseleave', () => {
-                fetchDetailsBtn.style.transform = 'translateY(0)';
-                fetchDetailsBtn.style.boxShadow = 'none';
-            });
-
-            fetchDetailsBtn.addEventListener('click', async () => {
-                // Find a valid account for this offer
-                const account = glb_account.find(acc =>
-                    acc.account_status?.trim().toLowerCase() === "active" &&
-                    (offer.eligibleCards?.includes(acc.account_token) ||
-                        offer.enrolledCards?.includes(acc.account_token))
-                );
-
-                if (!account) {
-                    console.error("No valid account found for this offer");
-                    return;
-                }
-
-                // Change button to loading state
-                fetchDetailsBtn.textContent = 'Loading...';
-                fetchDetailsBtn.disabled = true;
-
-                try {
-                    const details = await api_fetchOfferDetails(account.account_token, offer.offerId);
-
-                    if (details && (details.terms || details.long_description)) {
-                        // Update the offer object with the fetched data
-                        offer.terms = details.terms;
-                        offer.long_description = details.long_description;
-
-                        // Save updated data
-                        storage_manageData("set", storage_accToken, ["offer"]);
-
-                        // Rebuild the details tab content
-                        buildDetailsContent();
-                    } else {
-                        throw new Error("No detailed information available");
-                    }
-                } catch (error) {
-                    console.error("Error loading offer details:", error);
-
-                    fetchDetailsBtn.textContent = 'Unable to Load Details';
-                    setTimeout(() => {
-                        fetchDetailsBtn.textContent = 'Try Again';
-                        fetchDetailsBtn.disabled = false;
-                    }, 2000);
-                }
-            });
-
-            tabContents.details.appendChild(fetchDetailsBtn);
-        } else {
-            buildDetailsContent();
-        }
-
-        function buildDetailsContent() {
-            tabContents.details.innerHTML = '';
-
-            if (offer.long_description) {
-                const detailsTitle = document.createElement('h3');
-                detailsTitle.textContent = 'Offer Details';
-                detailsTitle.style.cssText = `
-                font-size: 18px;
-                font-weight: 600;
-                margin: 0 0 16px 0;
-                color: #333;
-                `;
-
-                const detailsText = document.createElement('div');
-                detailsText.style.cssText = `
-                font-size: 15px;
-                line-height: 1.6;
-                color: #333;
-                padding: 16px;
-                background-color: rgba(0,0,0,0.02);
-                border-radius: 12px;
-                margin-bottom: 24px;
-                `;
-                detailsText.textContent = offer.long_description;
-
-                tabContents.details.appendChild(detailsTitle);
-                tabContents.details.appendChild(detailsText);
-            } else {
-                // Show placeholder for missing description
-                const noDetailsMessage = document.createElement('div');
-                noDetailsMessage.style.cssText = `
-                text-align: center;
-                padding: 30px;
-                color: #888;
-                background-color: rgba(0,0,0,0.02);
-                border-radius: 12px;
-                margin-bottom: 24px;
-                `;
-                noDetailsMessage.textContent = 'No detailed description available for this offer.';
-
-                tabContents.details.appendChild(noDetailsMessage);
-            }
-
-            // Add redemption info if available
-            if (offer.redemption_types) {
-                const redemptionTitle = document.createElement('h3');
-                redemptionTitle.textContent = 'Redemption Options';
-                redemptionTitle.style.cssText = `
-                font-size: 18px;
-                font-weight: 600;
-                margin: 24px 0 16px 0;
-                color: #333;
-                `;
-
-                // Rest of redemption code...
-            }
-
-            // Add links if available
-            if (offer.location || offer.cta) {
-                // Rest of links code...
-            }
-        }
-
-        function createOfferLink(text, url) {
-            const link = document.createElement('a');
-            link.textContent = text;
-            link.href = url;
-            link.target = '_blank';
-            link.style.cssText = `
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 20px;
-            background-color: #f5f5f5;
-            color: #333;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            max-width: fit-content;
-            `;
-
-            link.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-            ${text}
-            `;
-
-            link.addEventListener('mouseenter', () => {
-                link.style.backgroundColor = '#eee';
-                link.style.transform = 'translateY(-2px)';
-            });
-
-            link.addEventListener('mouseleave', () => {
-                link.style.backgroundColor = '#f5f5f5';
-                link.style.transform = 'translateY(0)';
-            });
-
-            return link;
-        }
-
-        // 3. Terms tab content
-        tabContents.terms = document.createElement('div');
-        tabContents.terms.style.cssText = `
-        padding: 20px;
-        display: none;
-        `;
-
-        if (!offer.terms) {
-            // Terms aren't available - show message
-            const termsPlaceholder = document.createElement('div');
-            termsPlaceholder.style.cssText = `
-            text-align: center;
-            padding: 40px 20px;
-            color: #666;
-            background-color: rgba(0,0,0,0.02);
-            border-radius: 12px;
-            `;
-            termsPlaceholder.textContent = 'No terms and conditions available for this offer.';
-            tabContents.terms.appendChild(termsPlaceholder);
-        } else {
-            // Show terms
-            const termsContainer = document.createElement('div');
-            termsContainer.style.cssText = `
-            font-size: 14px;
-            line-height: 1.6;
-            color: #333;
-            padding: 16px;
-            background-color: rgba(0,0,0,0.02);
-            border-radius: 12px;
-            `;
-            termsContainer.innerHTML = offer.terms;
-            tabContents.terms.appendChild(termsContainer);
-        }
-
-        // Function to show tab content
-        function showTabContent(tabName) {
-            Object.entries(tabContents).forEach(([name, element]) => {
-                element.style.display = name === tabName ? 'block' : 'none';
-            });
-        }
-
-        // Add all tabs to content container
-        Object.values(tabContents).forEach(element => {
-            contentContainer.appendChild(element);
-        });
-
-        // Assemble modal
-        modal.appendChild(header);
-        modal.appendChild(tabContainer);
-        modal.appendChild(contentContainer);
-
-        // Add modal to overlay
-        overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // Trigger animations after a small delay
-        setTimeout(() => {
-            overlay.style.opacity = '1';
-            modal.style.transform = 'translateY(0) scale(1)';
-            modal.style.opacity = '1';
-        }, 10);
+        // Helper function to setup tabs
+        function setupTabs(tabNames, container) {
+            const contents = {};
 
-        // Helper function to create a card section
-        function createCardList(title, cardTokens, type) {
-            const section = document.createElement('div');
+            tabNames.forEach((name, index) => {
+                // Create tab button
+                const tab = ui_createElement('button', {
+                    text: name,
+                    styleString: `${UI_STYLES.modal.tab} ${index === 0 ? UI_STYLES.modal.tabActive : ''}`,
+                    events: {
+                        click: e => {
+                            // Deactivate all tabs
+                            Array.from(e.target.parentNode.children).forEach(btn => {
+                                btn.style.borderBottomColor = 'transparent';
+                                btn.style.color = '#555';
+                            });
 
-            // Section header (existing code)
-            const sectionHeader = document.createElement('div');
-            sectionHeader.style.display = 'flex';
-            sectionHeader.style.alignItems = 'center';
-            sectionHeader.style.justifyContent = 'space-between';
-            sectionHeader.style.marginBottom = '12px';
+                            // Activate this tab
+                            e.target.style.borderBottomColor = 'var(--ios-blue)';
+                            e.target.style.color = 'var(--ios-blue)';
 
-            const sectionTitle = document.createElement('h3');
-            sectionTitle.textContent = title;
-            sectionTitle.style.margin = '0';
-            sectionTitle.style.fontSize = '16px';
-            sectionTitle.style.fontWeight = '600';
-            sectionTitle.style.color = type === 'eligible' ? 'var(--ios-blue)' : 'var(--ios-green)';
-
-            const cardCount = document.createElement('span');
-            cardCount.textContent = `${cardTokens.length || 0} cards`;
-            cardCount.style.fontSize = '14px';
-            cardCount.style.color = 'var(--ios-gray)';
-
-            sectionHeader.appendChild(sectionTitle);
-            sectionHeader.appendChild(cardCount);
-            section.appendChild(sectionHeader);
-
-            // Cards container
-            const cardsContainer = document.createElement('div');
-            cardsContainer.id = `${type}-cards-container`;
-            cardsContainer.style.display = 'grid';
-            cardsContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
-            cardsContainer.style.gap = '12px';
-
-            // No cards message
-            if (!cardTokens || cardTokens.length === 0) {
-                const emptyMessage = document.createElement('div');
-                emptyMessage.textContent = `No ${type} cards for this offer`;
-                emptyMessage.style.gridColumn = '1 / -1';
-                emptyMessage.style.padding = '16px';
-                emptyMessage.style.textAlign = 'center';
-                emptyMessage.style.backgroundColor = 'rgba(0,0,0,0.02)';
-                emptyMessage.style.borderRadius = '10px';
-                emptyMessage.style.color = 'var(--ios-gray)';
-                emptyMessage.style.fontSize = '14px';
-                cardsContainer.appendChild(emptyMessage);
-            } else {
-                // Create card items
-                cardTokens.forEach(cardToken => {
-                    if (!cardToken) return; // Skip undefined tokens
-
-                    // Find the card - WITH PROPER ERROR HANDLING
-                    const account = glb_account.find(acc => acc.account_token === cardToken);
-                    // Use optional chaining and provide a fallback value
-                    const displayNumber = account.cardEnding;
-
-                    // Create card item
-                    const cardItem = document.createElement('div');
-                    cardItem.id = `card-${type}-${displayNumber}`;
-                    cardItem.style.backgroundColor = 'white';
-                    cardItem.style.borderRadius = '12px';
-                    cardItem.style.border = '1px solid rgba(0,0,0,0.08)';
-                    cardItem.style.padding = '12px';
-                    cardItem.style.display = 'flex';
-                    cardItem.style.flexDirection = 'column';
-                    cardItem.style.gap = '8px';
-                    cardItem.style.transition = 'all 0.2s ease';
-
-                    // Card logo/icon with null check
-                    const cardIcon = document.createElement('div');
-                    cardIcon.style.width = '40px';
-                    cardIcon.style.height = '40px';
-                    cardIcon.style.marginBottom = '4px';
-
-                    if (account?.small_card_art && account.small_card_art !== 'N/A') {
-                        const cardImage = document.createElement('img');
-                        cardImage.src = account.small_card_art;
-                        cardImage.alt = 'Card';
-                        cardImage.style.width = '100%';
-                        cardImage.style.height = '100%';
-                        cardImage.style.objectFit = 'contain';
-                        cardIcon.appendChild(cardImage);
-                    } else {
-                        // Fallback icon
-                        cardIcon.innerHTML = `
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5">
-                            <rect x="2" y="5" width="20" height="14" rx="2" />
-                            <line x1="2" y1="10" x2="22" y2="10" />
-                        </svg>
-                        `;
+                            // Show selected content
+                            Object.keys(contents).forEach(key => {
+                                contents[key].style.display = key === name.toLowerCase() ? 'block' : 'none';
+                            });
+                        }
                     }
+                });
+                container.appendChild(tab);
 
-                    // Card number - with fallback
-                    const cardNumberEl = document.createElement('div');
-                    cardNumberEl.textContent = `${displayNumber}-${account.embossed_name || ''}`;
-                    cardNumberEl.style.fontWeight = '400';
-                    cardNumberEl.style.fontSize = '12px';
+                // Create content container
+                contents[name.toLowerCase()] = ui_createElement('div', {
+                    styleString: `padding:20px; display:${index === 0 ? 'block' : 'none'};`
+                });
+            });
 
-                    // Card description/name if available
-                    let cardNameEl;
-                    if (account) {
-                        cardNameEl = document.createElement('div');
-                        cardNameEl.textContent = account.description || account.embossed_name || '';
-                        cardNameEl.style.fontSize = '12px';
-                        cardNameEl.style.color = 'var(--ios-gray)';
-                        cardNameEl.style.whiteSpace = 'nowrap';
-                        cardNameEl.style.overflow = 'hidden';
-                        cardNameEl.style.textOverflow = 'ellipsis';
+            return contents;
+        }
+
+        // Create offer header with logo and details
+        function createOfferHeaderInfo(offer) {
+            return ui_createElement('div', {
+                styleString: `${UI_STYLES.containers.flexRow} padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.08);`,
+                children: [
+                    // Logo container
+                    ui_createElement('div', {
+                        styleString: 'width:60px; height:60px; border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; background-color:rgba(0,0,0,0.03); flex-shrink:0;',
+                        children: [
+                            offer.logo && offer.logo !== 'N/A'
+                                ? ui_createElement('img', {
+                                    props: { src: offer.logo, alt: offer.name },
+                                    styleString: 'max-width:80%; max-height:80%;'
+                                })
+                                : ui_createElement('div', {
+                                    text: offer.name.charAt(0).toUpperCase(),
+                                    styleString: 'font-size:30px; font-weight:600; color:#1c1c1e;'
+                                })
+                        ]
+                    }),
+
+                    // Offer details
+                    ui_createElement('div', {
+                        styleString: 'flex:1;',
+                        children: [
+                            ui_createElement('div', {
+                                text: offer.short_description || 'No description available',
+                                styleString: 'font-size:14px; color:var(--ios-text-secondary); line-height:1.4; margin-top:4px;'
+                            }),
+                            ui_createElement('div', {
+                                styleString: `${UI_STYLES.containers.flexRow} flex-wrap:wrap; gap:8px; margin-top:12px;`,
+                                children: [
+                                    ui_createBadge({ label: 'Spend', value: offer.threshold, color: 'var(--ios-gray)' }),
+                                    ui_createBadge({ label: 'Reward', value: offer.reward, color: 'var(--ios-green)' }),
+                                    ui_createBadge({ label: 'Rate', value: offer.percentage, color: 'var(--ios-blue)' }),
+                                    ui_createBadge({ label: 'Expires', value: util_formatDate(offer.expiry_date), color: 'var(--ios-orange)' })
+                                ].filter(Boolean)
+                            })
+                        ]
+                    })
+                ]
+            });
+        }
+
+        // Cards tab content
+        function populateCardsTab(container, offer) {
+            // Add "Enroll All" button for eligible offers
+            if (offer.eligibleCards.length > 0) {
+                container.appendChild(ui_createBtn_v2({
+                    label: `Enroll All Eligible Cards (${offer.eligibleCards.length})`,
+                    icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
+                    type: 'primary',
+                    fullWidth: true,
+                    customStyle: 'margin-bottom:16px;',
+                    onClick: async (e) => handleEnrollAll(e, offer)
+                }));
+            }
+
+            // Create combined table with all cards
+            const allCards = [
+                ...offer.eligibleCards.map(token => ({ token, status: 'eligible' })),
+                ...offer.enrolledCards.map(token => ({ token, status: 'enrolled' }))
+            ];
+
+            // Add table header
+            container.appendChild(ui_createElement('h3', {
+                text: `Cards (${allCards.length})`,
+                styleString: UI_STYLES.text.subtitle
+            }));
+
+            // Create and add cards table
+            container.appendChild(createCardsTable(allCards, offer));
+        }
+
+        // Handle enrollment of all cards for an offer
+        async function handleEnrollAll(e, offer) {
+            const btn = e.currentTarget;
+            btn.innerHTML = '<div class="loading-spinner" style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>Enrolling...';
+            btn.disabled = true;
+
+            try {
+                // Save eligible tokens before enrollment
+                const eligibleTokens = [...offer.eligibleCards];
+
+                // Perform enrollment
+                await api_batchEnrollOffers(offer.source_id);
+
+                // Update button state
+                btn.innerHTML = '✓ All Cards Enrolled';
+                btn.style.backgroundColor = 'var(--ios-green)';
+
+                // Update offer data
+                offer.eligibleCards = [];
+                eligibleTokens.forEach(token => {
+                    if (!offer.enrolledCards.includes(token)) {
+                        offer.enrolledCards.push(token);
                     }
+                });
 
-                    // Enroll button (only for eligible cards)
-                    let enrollButton;
-                    if (type === 'eligible') {
-                        enrollButton = document.createElement('button');
-                        enrollButton.innerHTML = `
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        Enroll
-                        `;
-                        enrollButton.style.marginTop = '8px';
-                        enrollButton.style.padding = '6px 10px';
-                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                        enrollButton.style.color = 'var(--ios-blue)';
-                        enrollButton.style.border = 'none';
-                        enrollButton.style.borderRadius = '8px';
-                        enrollButton.style.fontSize = '12px';
-                        enrollButton.style.fontWeight = '500';
-                        enrollButton.style.cursor = 'pointer';
-                        enrollButton.style.display = 'flex';
-                        enrollButton.style.alignItems = 'center';
-                        enrollButton.style.justifyContent = 'center';
-                        enrollButton.style.gap = '4px';
-                        enrollButton.style.transition = 'all 0.2s ease';
+                // Update table UI
+                updateTableAfterEnrollment();
+            } catch (err) {
+                console.error('Error:', err);
+                btn.innerHTML = '× Error - Try Again';
+                btn.style.backgroundColor = 'var(--ios-red)';
 
-                        // Hover effect
-                        enrollButton.addEventListener('mouseenter', () => {
-                            enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.2)';
-                        });
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = `Enroll All Eligible Cards (${offer.eligibleCards.length})`;
+                    btn.style.backgroundColor = 'var(--ios-blue)';
+                }, 2000);
+            }
 
-                        enrollButton.addEventListener('mouseleave', () => {
-                            enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                        });
+            // Update UI after enrollment
+            function updateTableAfterEnrollment() {
+                const table = tabContents.cards.querySelector('table');
+                if (!table) return;
 
-                        // Enroll functionality
-                        enrollButton.addEventListener('click', async (e) => {
-                            e.stopPropagation(); // Prevent card click
+                // Update rows
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach(row => {
+                    const actionCell = row.querySelector('td:last-child');
+                    const actionBtn = actionCell?.querySelector('button');
 
-                            if (!account) {
-                                console.error('Account not found for card:', displayNumber);
-                                return;
+                    if (actionBtn && actionBtn.textContent === 'Enroll') {
+                        // Update button
+                        actionBtn.innerHTML = 'Enrolled';
+                        actionBtn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
+                        actionBtn.style.color = 'var(--ios-green)';
+                        actionBtn.disabled = true;
+
+                        // Highlight row briefly
+                        row.style.transition = 'background-color 1.5s ease';
+                        row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
+                        setTimeout(() => row.style.backgroundColor = '', 1500);
+                    }
+                });
+            }
+        }
+
+        // Create cards table
+        function createCardsTable(cardItems, offer) {
+            const headers = [
+                { label: "Index", key: "cardIndex" },
+                { label: "Card", key: "card" },
+                { label: "Card Ending", key: "cardEnding" },
+                { label: "Name", key: "name" },
+                { label: "Type", key: "type" },
+                { label: "Action", key: "action" }
+            ];
+
+            const colWidths = {
+                cardIndex: "60px",
+                card: "60px",
+                cardEnding: "100px",
+                name: "180px",
+                type: "80px",
+                action: "80px"
+            };
+
+            // Map card tokens to table items
+            const items = cardItems.map(item => {
+                const account = glb_account.find(acc => acc.account_token === item.token);
+                if (!account) return null;
+
+                return {
+                    _token: item.token,
+                    _account: account,
+                    status: item.status,
+                    cardEnding: account.cardEnding,
+                    name: account.embossed_name || '',
+                    type: account.relationship || '',
+                    card: account.small_card_art || '',
+                    cardIndex: account.cardIndex || ''
+                };
+            }).filter(Boolean);
+
+            // Sort: eligible first, then by cardIndex
+            items.sort((a, b) => {
+                if (a.status !== b.status) {
+                    return a.status === 'eligible' ? -1 : 1;
+                }
+
+                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
+
+                if (aMain === bMain) {
+                    return aSub - bSub;
+                }
+                return aMain - bMain;
+            });
+
+            // Cell renderer for table
+            const cellRenderer = (item, header) => {
+                const key = header.key;
+
+                switch (key) {
+                    case 'card':
+                        if (item.card && item.card !== 'N/A') {
+                            return ui_createElement('div', {
+                                styleString: 'display:flex; justify-content:center; align-items:center; height:40px;',
+                                children: [
+                                    ui_createElement('img', {
+                                        props: { src: item.card, alt: "Card Logo" },
+                                        styleString: 'max-width:40px; max-height:40px; border-radius:4px;'
+                                    })
+                                ]
+                            });
+                        }
+                        return '';
+
+                    case 'cardIndex':
+                        const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
+                        return ui_createElement('span', {
+                            styleString: UI_STYLES.tableCells.index,
+                            props: {
+                                innerHTML: subIndex ?
+                                    `<strong>${mainIndex}</strong>-${subIndex}` :
+                                    `<strong>${mainIndex}</strong>`
                             }
-
-                            // Change button to loading state
-                            const originalButtonHtml = enrollButton.innerHTML;
-                            enrollButton.innerHTML = `
-                            <div class="spinner" style="width:12px;height:12px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>
-                            `;
-                            enrollButton.disabled = true;
-
-                            try {
-                                // Call enrollment API
-                                const result = await api_enrollInOffer(account.account_token, offer.offerId);
-
-                                if (result.result) {
-                                    // Success state
-                                    enrollButton.innerHTML = `
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                    </svg>
-                                    `;
-                                    enrollButton.style.backgroundColor = 'var(--ios-green)';
-                                    enrollButton.style.color = 'white';
-
-                                    // Update data
-                                    const idx = offer.eligibleCards.indexOf(cardToken);
-                                    if (idx !== -1) {
-                                        offer.eligibleCards.splice(idx, 1);
-                                    }
-                                    if (!offer.enrolledCards.includes(account.account_token)) {
-                                        offer.enrolledCards.push(account.account_token);
-                                    }
-
-                                    // Animate card movement
-                                    setTimeout(() => {
-                                        cardItem.style.transform = 'translateX(100%)';
-                                        cardItem.style.opacity = '0';
-
-                                        // Remove after animation and update sections
-                                        setTimeout(() => {
-                                            cardItem.remove();
-                                            updateCardSections();
-                                        }, 300);
-                                    }, 500);
-                                } else {
-                                    // Error state
-                                    enrollButton.innerHTML = `
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"/>
-                                        <line x1="15" y1="9" x2="9" y2="15"/>
-                                        <line x1="9" y1="9" x2="15" y2="15"/>
-                                    </svg>
-                                    `;
-                                    enrollButton.style.backgroundColor = 'var(--ios-red)';
-                                    enrollButton.style.color = 'white';
-
-                                    // Reset after delay
-                                    setTimeout(() => {
-                                        enrollButton.innerHTML = originalButtonHtml;
-                                        enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                                        enrollButton.style.color = 'var(--ios-blue)';
-                                        enrollButton.disabled = false;
-                                    }, 2000);
-                                }
-                            } catch (error) {
-                                console.error('Error enrolling card:', error);
-
-                                // Error state
-                                enrollButton.innerHTML = `
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <line x1="15" y1="9" x2="9" y2="15"/>
-                                    <line x1="9" y1="9" x2="15" y2="15"/>
-                                </svg>
-                                `;
-                                enrollButton.style.backgroundColor = 'var(--ios-red)';
-                                enrollButton.style.color = 'white';
-
-                                // Reset after delay
-                                setTimeout(() => {
-                                    enrollButton.innerHTML = originalButtonHtml;
-                                    enrollButton.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                                    enrollButton.style.color = 'var(--ios-blue)';
-                                    enrollButton.disabled = false;
-                                }, 2000);
-                            }
                         });
+
+                    case 'action':
+                        return item.status === 'eligible' ?
+                            createEnrollButton(item, offer) :
+                            createEnrolledLabel();
+
+                    default:
+                        return item[key] || '';
+                }
+            };
+
+            return ui_renderDataTable(headers, colWidths, items, cellRenderer);
+
+            // Create enroll button for eligible card
+            function createEnrollButton(item, offer) {
+                return ui_createElement('button', {
+                    text: 'Enroll',
+                    styleString: `
+                        padding: 4px 10px;
+                        background-color: rgba(0, 122, 255, 0.1);
+                        color: var(--ios-blue);
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                    `,
+                    events: {
+                        mouseenter: e => {
+                            e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.2)';
+                        },
+                        mouseleave: e => {
+                            e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                        },
+                        click: async e => {
+                            await handleSingleEnrollment(e, item._token, offer);
+                        }
                     }
-
-                    // Assemble card item
-                    cardItem.appendChild(cardIcon);
-                    cardItem.appendChild(cardNumberEl);
-                    if (cardNameEl) cardItem.appendChild(cardNameEl);
-                    if (enrollButton) cardItem.appendChild(enrollButton);
-
-                    // Add hover effect
-                    cardItem.addEventListener('mouseenter', () => {
-                        cardItem.style.transform = 'translateY(-3px)';
-                        cardItem.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                    });
-
-                    cardItem.addEventListener('mouseleave', () => {
-                        cardItem.style.transform = 'translateY(0)';
-                        cardItem.style.boxShadow = 'none';
-                    });
-
-                    cardsContainer.appendChild(cardItem);
                 });
             }
 
-            section.appendChild(cardsContainer);
-            return section;
-        }
+            // Create enrolled label
+            function createEnrolledLabel() {
+                return ui_createElement('span', {
+                    text: 'Enrolled',
+                    styleString: `
+                        display: inline-block;
+                        padding: 4px 10px;
+                        background-color: rgba(52, 199, 89, 0.1);
+                        color: var(--ios-green);
+                        border-radius: 8px;
+                        font-size: 12px;
+                    `
+                });
+            }
 
-        // Helper function to update the card sections after enrollment changes
-        function updateCardSections() {
-            const eligibleContainer = document.getElementById('eligible-cards-container');
-            const enrolledContainer = document.getElementById('enrolled-cards-container');
+            // Handle enrollment of a single card
+            async function handleSingleEnrollment(e, token, offer) {
+                const btn = e.target;
+                const originalHTML = btn.innerHTML;
 
-            if (eligibleContainer && enrolledContainer) {
-                // Clear containers
-                eligibleContainer.innerHTML = '';
-                enrolledContainer.innerHTML = '';
+                btn.innerHTML = '<div class="spinner" style="width:10px;height:10px;border:1px solid rgba(0,122,255,0.3);border-top:1px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>';
+                btn.disabled = true;
 
-                // Re-create card sections
-                const newEligibleSection = createCardList('Eligible Cards', offer.eligibleCards || [], 'eligible');
-                const newEnrolledSection = createCardList('Enrolled Cards', offer.enrolledCards || [], 'enrolled');
+                try {
+                    const result = await api_enrollInOffer(token, offer.offerId);
 
-                // Get the parent elements
-                const eligibleParent = eligibleContainer.parentNode;
-                const enrolledParent = enrolledContainer.parentNode;
+                    if (result.result) {
+                        // Success
+                        btn.innerHTML = '✓';
+                        btn.style.backgroundColor = 'var(--ios-green)';
+                        btn.style.color = 'white';
 
-                // Replace with new sections
-                eligibleParent.innerHTML = '';
-                enrolledParent.innerHTML = '';
+                        // Update offer data
+                        const idx = offer.eligibleCards.indexOf(token);
+                        if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                        if (!offer.enrolledCards.includes(token)) {
+                            offer.enrolledCards.push(token);
+                        }
 
-                eligibleParent.appendChild(newEligibleSection.children[0]); // Header
-                eligibleParent.appendChild(newEligibleSection.children[0]); // Cards container
+                        // Update the row
+                        const row = btn.closest('tr');
+                        if (row) {
+                            btn.innerHTML = 'Enrolled';
+                            btn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
+                            btn.style.color = 'var(--ios-green)';
+                            btn.disabled = true;
 
-                enrolledParent.appendChild(newEnrolledSection.children[0]); // Header
-                enrolledParent.appendChild(newEnrolledSection.children[0]); // Cards container
+                            // Highlight row briefly
+                            row.style.transition = 'background-color 1.5s ease';
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
+                            setTimeout(() => row.style.backgroundColor = '', 1500);
+                        }
 
-                // Update count badges
-                const eligibleCount = eligibleParent.querySelector('span');
-                if (eligibleCount) eligibleCount.textContent = `${offer.eligibleCards.length} cards`;
+                        // Update enroll all button if needed
+                        updateEnrollAllButton();
+                    } else {
+                        handleEnrollmentError(btn, originalHTML);
+                    }
+                } catch (error) {
+                    console.error('Error enrolling card:', error);
+                    handleEnrollmentError(btn, originalHTML);
+                }
+            }
 
-                const enrolledCount = enrolledParent.querySelector('span');
-                if (enrolledCount) enrolledCount.textContent = `${offer.enrolledCards.length} cards`;
+            // Update enroll all button based on remaining eligible cards
+            function updateEnrollAllButton() {
+                const enrollAllBtn = tabContents.cards.querySelector('button');
+                if (!enrollAllBtn) return;
+
+                if (offer.eligibleCards.length === 0) {
+                    enrollAllBtn.innerHTML = 'All Cards Enrolled';
+                    enrollAllBtn.style.background = 'var(--ios-green)';
+                    enrollAllBtn.disabled = true;
+                } else {
+                    enrollAllBtn.innerHTML = `Enroll All Eligible Cards (${offer.eligibleCards.length})`;
+                }
+            }
+
+            // Handle enrollment error
+            function handleEnrollmentError(btn, originalHTML) {
+                btn.innerHTML = '×';
+                btn.style.backgroundColor = 'var(--ios-red)';
+                btn.style.color = 'white';
+
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                    btn.style.color = 'var(--ios-blue)';
+                    btn.disabled = false;
+                }, 2000);
             }
         }
 
-        // Show the 'Cards' tab by default
-        showTabContent('cards');
+        // Details tab content
+        function populateDetailsTab(container, offer) {
+            if (!offer.long_description && !offer.terms) {
+                container.appendChild(ui_createBtn_v2({
+                    label: 'Load Detailed Information',
+                    type: 'primary',
+                    customStyle: 'margin:40px auto; display:block;',
+                    onClick: async e => loadDetailedInfo(e, offer)
+                }));
+            } else if (offer.long_description) {
+                container.appendChild(ui_createElement('h3', {
+                    text: 'Offer Details',
+                    styleString: UI_STYLES.text.subtitle
+                }));
+
+                container.appendChild(ui_createElement('div', {
+                    text: offer.long_description,
+                    styleString: 'font-size:15px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                }));
+            } else {
+                container.appendChild(ui_createElement('div', {
+                    text: 'No detailed description available for this offer.',
+                    styleString: 'text-align:center; padding:30px; color:#888; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                }));
+            }
+
+            // Load detailed information
+            async function loadDetailedInfo(e, offer) {
+                const btn = e.currentTarget;
+                btn.textContent = 'Loading...';
+                btn.disabled = true;
+
+                try {
+                    const account = glb_account.find(acc =>
+                        acc.account_status?.trim().toLowerCase() === "active" &&
+                        (offer.eligibleCards?.includes(acc.account_token) || offer.enrolledCards?.includes(acc.account_token))
+                    );
+
+                    if (account) {
+                        const details = await api_fetchOfferDetails(account.account_token, offer.offerId);
+
+                        if (details && (details.terms || details.long_description)) {
+                            // Update offer data
+                            offer.terms = details.terms;
+                            offer.long_description = details.long_description;
+                            storage_manageData("set", storage_accToken, ["offer"]);
+
+                            // Update UI
+                            populateDetailsTab(container, offer);
+                            populateTermsTab(tabContents.terms, offer);
+                        } else {
+                            throw new Error("No detailed information available");
+                        }
+                    } else {
+                        throw new Error("No active card found for this offer");
+                    }
+                } catch (error) {
+                    btn.textContent = 'Unable to Load Details';
+                    setTimeout(() => {
+                        btn.textContent = 'Try Again';
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            }
+        }
+
+        // Terms tab content
+        function populateTermsTab(container, offer) {
+            if (!offer.terms) {
+                container.appendChild(ui_createElement('div', {
+                    text: 'No terms and conditions available for this offer.',
+                    styleString: 'text-align:center; padding:40px 20px; color:#666; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                }));
+            } else {
+                container.appendChild(ui_createElement('div', {
+                    props: { innerHTML: offer.terms },
+                    styleString: 'font-size:14px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                }));
+            }
+        }
     }
+
+
     //----------------------------  Benefits Page  ----------------------------//
 
     // Improved benefits page rendering with better state management and UI rendering
@@ -6764,309 +4888,337 @@
             await api_fetchAllBenefits();
         }
 
-        const containerDiv = document.createElement('div');
-        containerDiv.className = 'benefits-container';
-        containerDiv.style.cssText = 'padding:20px; background-color:rgba(255,255,255,0.04); border-radius:12px; max-width:1000px; margin:0 auto;';
+        const containerDiv = ui_createElement('div', {
+            styleString: `${UI_STYLES.pageContainer} max-width:1000px; margin:0 auto;`
+        });
 
-        // Process all data once before rendering to improve performance
+        // Process all data once before rendering
         const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefits_processAndGroup(glb_benefit);
 
-        // Add benefits overview statistics
+        // Add benefits overview
         containerDiv.appendChild(benefits_renderStatsSummary(statusCounts));
 
-        // Create status legend with enhanced styling
+        // Create status legend
         const statusLegendConfig = {
-            'ACHIEVED': { label: 'Completed', color: 'var(--ios-green)' },
-            'IN_PROGRESS': { label: 'In Progress', color: 'var(--ios-blue)' },
-            'NOT_STARTED': { label: 'Not Started', color: 'var(--ios-gray)' }
+            'ACHIEVED': { label: 'Completed', color: UI_STYLES.status.achieved.color },
+            'IN_PROGRESS': { label: 'In Progress', color: UI_STYLES.status.inProgress.color },
+            'NOT_STARTED': { label: 'Not Started', color: UI_STYLES.status.notStarted.color }
         };
-
         containerDiv.appendChild(benefits_createStatusKey(statusLegendConfig));
 
-        // Handle empty state with better user feedback
+        // Handle empty state
         if (sortedBenefitGroups.length === 0) {
-            containerDiv.appendChild(ui_createEmptyState());
+            containerDiv.appendChild(createEmptyState());
         } else {
-            // Create filter controls
-            const filterControls = benefits_createFilters();
-            containerDiv.appendChild(filterControls);
+            // Add filter controls
+            containerDiv.appendChild(benefits_createFilters());
 
-            // Create accordion items with a document fragment for better performance
-            const accordionContainer = document.createElement('div');
-            accordionContainer.className = 'accordion-container';
-
-            const fragment = document.createDocumentFragment();
-            sortedBenefitGroups.forEach(groupObj => {
-                fragment.appendChild(benefits_createExpandableItem(groupObj, statusLegendConfig));
+            // Create benefit accordions
+            const accordionContainer = ui_createElement('div', {
+                className: 'accordion-container',
+                styleString: 'display:flex; flex-direction:column; gap:16px;'
             });
 
-            accordionContainer.appendChild(fragment);
+            // Add each benefit group as an accordion item
+            sortedBenefitGroups.forEach(groupObj => {
+                accordionContainer.appendChild(benefits_createExpandableItem(groupObj, statusLegendConfig));
+            });
+
             containerDiv.appendChild(accordionContainer);
         }
 
         return containerDiv;
+
+        // Create empty state for no benefits
+        function createEmptyState() {
+            return ui_createElement('div', {
+                styleString: 'text-align:center; padding:40px 20px; background-color:rgba(0,0,0,0.02); border-radius:12px; margin-top:20px;',
+                children: [
+                    ui_createElement('div', {
+                        props: {
+                            innerHTML: `
+                            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        `},
+                        styleString: 'margin-bottom:20px;'
+                    }),
+                    ui_createElement('h3', {
+                        text: 'No Benefits Found',
+                        styleString: 'font-size:18px; font-weight:600; margin-bottom:12px; color:#333;'
+                    }),
+                    ui_createElement('p', {
+                        text: 'No benefits are currently available for your cards.',
+                        styleString: 'color:#666; margin-bottom:24px;'
+                    }),
+                    ui_createBtn_v2({
+                        label: 'Refresh Benefits',
+                        type: 'primary',
+                        onClick: async () => {
+                            await api_fetchAllBenefits();
+                            ui_renderCurrentView();
+                        }
+                    })
+                ]
+            });
+        }
     }
 
     // Enhanced benefits overview with statistics
     function benefits_renderStatsSummary(statusCounts) {
-        const overviewSection = document.createElement('div');
-        overviewSection.style.cssText = 'display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; justify-content:center;';
+        const statsContainer = ui_createElement('div', {
+            styleString: 'display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; justify-content:center;'
+        });
 
-        // Create stat cards for each status
-        const createStatCard = (label, value, color, icon) => {
-            const card = document.createElement('div');
-            card.style.cssText = `
-            background-color:white; 
-            border-radius:16px; 
-            padding:16px 20px; 
-            min-width:140px; 
-            box-shadow:0 4px 12px rgba(0,0,0,0.06); 
-            display:flex; 
-            flex-direction:column; 
-            align-items:center; 
-            border-top:3px solid ${color};
-            transition:transform 0.2s ease;
-            `;
-
-            card.addEventListener('mouseenter', () => {
-                card.style.transform = 'translateY(-4px)';
-            });
-
-            card.addEventListener('mouseleave', () => {
-                card.style.transform = 'translateY(0)';
-            });
-
-            const valueEl = document.createElement('div');
-            valueEl.textContent = value;
-            valueEl.style.cssText = `font-size:32px; font-weight:700; color:${color}; margin-bottom:8px;`;
-
-            const labelEl = document.createElement('div');
-            labelEl.textContent = label;
-            labelEl.style.cssText = 'font-size:14px; color:#666; text-align:center;';
-
-            // Add icon if provided
-            if (icon) {
-                const iconEl = document.createElement('div');
-                iconEl.innerHTML = icon;
-                iconEl.style.cssText = 'margin-bottom:10px;';
-                card.appendChild(iconEl);
+        // Define stats data
+        const stats = [
+            {
+                label: 'Total Benefits',
+                value: statusCounts.total || 0,
+                color: 'var(--ios-blue)',
+                icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/><path d="M7 12h2v5H7v-5zm4-7h2v12h-2V5zm4 4h2v8h-2v-8z"/></svg>'
+            },
+            {
+                label: 'Completed',
+                value: statusCounts.achieved || 0,
+                color: UI_STYLES.status.achieved.color,
+                icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>'
+            },
+            {
+                label: 'In Progress',
+                value: statusCounts.inProgress || 0,
+                color: UI_STYLES.status.inProgress.color,
+                icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>'
+            },
+            {
+                label: 'Not Started',
+                value: statusCounts.notStarted || 0,
+                color: UI_STYLES.status.notStarted.color,
+                icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M11 7h2v6h-2zm0 8h2v2h-2z"/></svg>'
             }
+        ];
 
-            card.appendChild(valueEl);
-            card.appendChild(labelEl);
+        // Create stat cards
+        stats.forEach(stat => {
+            statsContainer.appendChild(ui_createElement('div', {
+                styleString: `${UI_STYLES.cards.stats} border-top:3px solid ${stat.color};`,
+                events: {
+                    mouseenter: e => e.target.style.transform = 'translateY(-4px)',
+                    mouseleave: e => e.target.style.transform = 'translateY(0)'
+                },
+                children: [
+                    ui_createElement('div', {
+                        props: { innerHTML: stat.icon },
+                        styleString: `margin-bottom:10px; color:${stat.color};`
+                    }),
+                    ui_createElement('div', {
+                        text: stat.value,
+                        styleString: `font-size:32px; font-weight:700; color:${stat.color}; margin-bottom:8px;`
+                    }),
+                    ui_createElement('div', {
+                        text: stat.label,
+                        styleString: 'font-size:14px; color:#666; text-align:center;'
+                    })
+                ]
+            }));
+        });
 
-            return card;
-        };
+        return statsContainer;
+    }
 
-        // Icons for stat cards
-        const icons = {
-            total: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.total ? 'var(--ios-blue)' : '#aaa'}">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
-            <path d="M7 12h2v5H7v-5zm4-7h2v12h-2V5zm4 4h2v8h-2v-8z"/>
-        </svg>`,
-            completed: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.achieved ? 'var(--ios-green)' : '#aaa'}">
-            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-        </svg>`,
-            inProgress: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.inProgress ? 'var(--ios-blue)' : '#aaa'}">
-            <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
-        </svg>`,
-            notStarted: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${statusCounts.notStarted ? 'var(--ios-gray)' : '#aaa'}">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
-            <path d="M11 7h2v6h-2zm0 8h2v2h-2z"/>
-        </svg>`
-        };
-
-        // Add stats cards
-        overviewSection.appendChild(createStatCard('Total Benefits', statusCounts.total || 0, 'var(--ios-blue)', icons.total));
-        overviewSection.appendChild(createStatCard('Completed', statusCounts.achieved || 0, 'var(--ios-green)', icons.completed));
-        overviewSection.appendChild(createStatCard('In Progress', statusCounts.inProgress || 0, 'var(--ios-blue)', icons.inProgress));
-        overviewSection.appendChild(createStatCard('Not Started', statusCounts.notStarted || 0, 'var(--ios-gray)', icons.notStarted));
-
-        return overviewSection;
+    function benefits_createStatusKey(statusConfig) {
+        return ui_createElement('div', {
+            styleString: 'display:flex; gap:15px; margin-bottom:25px; justify-content:center; flex-wrap:wrap; background-color:rgba(255,255,255,0.6); border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.05);',
+            children: Object.entries(statusConfig).map(([status, { label, color }]) =>
+                ui_createElement('div', {
+                    styleString: 'display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; transition:background-color 0.2s ease;',
+                    events: {
+                        mouseenter: e => e.target.style.backgroundColor = 'rgba(0,0,0,0.05)',
+                        mouseleave: e => e.target.style.backgroundColor = 'transparent'
+                    },
+                    children: [
+                        ui_createElement('div', {
+                            styleString: `width:12px; height:12px; border-radius:50%; background-color:${color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);`
+                        }),
+                        ui_createElement('span', {
+                            text: label,
+                            styleString: 'color:#333; font-size:14px; font-weight:500;'
+                        })
+                    ]
+                })
+            )
+        });
     }
 
     function benefits_createFilters() {
-        const filterContainer = document.createElement('div');
-        filterContainer.style.cssText = `
-        display:flex;
-        flex-wrap:wrap;
-        gap:12px;
-        margin-bottom:20px;
-        padding:16px;
-        background-color:rgba(255,255,255,0.6);
-        border-radius:12px;
-        box-shadow:0 2px 8px rgba(0,0,0,0.05);
-        align-items:center;
-        `;
-
-        // Search input
-        const searchWrapper = document.createElement('div');
-        searchWrapper.style.cssText = 'position:relative; flex:1; min-width:200px;';
-
-        const searchInput = document.createElement('input');
-        searchInput.type = 'text';
-        searchInput.placeholder = 'Search benefits...';
-        searchInput.style.cssText = `
-        width:100%;
-        padding:10px 12px;
-        padding-left:36px;
-        border-radius:8px;
-        border:1px solid #ddd;
-        font-size:14px;
-        outline:none;
-        transition:all 0.2s ease;
-        `;
-
-        searchInput.addEventListener('focus', () => {
-            searchInput.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.2)';
-            searchInput.style.borderColor = 'var(--ios-blue)';
+        return ui_createElement('div', {
+            styleString: `
+                display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
+                padding:16px; background-color:rgba(255,255,255,0.6);
+                border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05);
+                align-items:center;
+            `,
+            children: [
+                // Search input
+                createSearchInput(),
+                // Status filter
+                createStatusFilter(),
+                // Card filter
+                createCardFilter(),
+                // Reset button
+                createResetButton()
+            ]
         });
 
-        searchInput.addEventListener('blur', () => {
-            searchInput.style.boxShadow = 'none';
-            searchInput.style.borderColor = '#ddd';
-        });
-
-        // Search icon
-        const searchIcon = document.createElement('div');
-        searchIcon.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        `;
-        searchIcon.style.cssText = 'position:absolute; top:50%; left:12px; transform:translateY(-50%);';
-
-        searchWrapper.appendChild(searchIcon);
-        searchWrapper.appendChild(searchInput);
-
-        // Status filter
-        const statusFilter = document.createElement('select');
-        statusFilter.style.cssText = `
-        padding:10px 12px;
-        border-radius:8px;
-        border:1px solid #ddd;
-        font-size:14px;
-        outline:none;
-        background-color:white;
-        cursor:pointer;
-        `;
-
-        const statusOptions = [
-            { value: 'all', label: 'All Statuses' },
-            { value: 'ACHIEVED', label: 'Completed' },
-            { value: 'IN_PROGRESS', label: 'In Progress' },
-            { value: 'NOT_STARTED', label: 'Not Started' }
-        ];
-
-        statusOptions.forEach(option => {
-            const optionEl = document.createElement('option');
-            optionEl.value = option.value;
-            optionEl.textContent = option.label;
-            statusFilter.appendChild(optionEl);
-        });
-
-        // Card filter
-        const cardFilter = document.createElement('select');
-        cardFilter.style.cssText = `
-        padding:10px 12px;
-        border-radius:8px;
-        border:1px solid #ddd;
-        font-size:14px;
-        outline:none;
-        background-color:white;
-        cursor:pointer;
-        `;
-
-        // Get unique card endings
-        const cardNumbers = [...new Set(glb_benefit.map(benefit => benefit.cardEnding))];
-
-        const cardOptions = [
-            { value: 'all', label: 'All Cards' },
-            ...cardNumbers.map(card => ({ value: card, label: `Card ending ${card}` }))
-        ];
-
-        cardOptions.forEach(option => {
-            const optionEl = document.createElement('option');
-            optionEl.value = option.value;
-            optionEl.textContent = option.label;
-            cardFilter.appendChild(optionEl);
-        });
-
-        // Add event listeners for filtering
-        const applyFilters = () => {
-            const searchTerm = searchInput.value.toLowerCase();
-            const selectedStatus = statusFilter.value;
-            const selectedCard = cardFilter.value;
-
-            // Find all accordion items
-            const accordionItems = document.querySelectorAll('.accordion-item');
-
-            accordionItems.forEach(item => {
-                // Get title text for search
-                const titleText = item.querySelector('.accordion-title').textContent.toLowerCase();
-
-                // Get status information
-                const statusMarkers = Array.from(item.querySelectorAll('.mini-card'));
-                const hasStatus = selectedStatus === 'all' || statusMarkers.some(marker =>
-                    marker.getAttribute('data-status') === selectedStatus
-                );
-
-                // Get card information
-                const cardMarkers = Array.from(item.querySelectorAll('.card-ending'));
-                const hasCard = selectedCard === 'all' || cardMarkers.some(marker =>
-                    marker.textContent === selectedCard
-                );
-
-                // Determine visibility
-                const matchesSearch = searchTerm === '' || titleText.includes(searchTerm);
-                const isVisible = matchesSearch && hasStatus && hasCard;
-
-                // Apply visibility
-                item.style.display = isVisible ? 'block' : 'none';
+        function createSearchInput() {
+            const searchWrapper = ui_createElement('div', {
+                styleString: 'position:relative; flex:1; min-width:200px;'
             });
-        };
 
-        searchInput.addEventListener('input', applyFilters);
-        statusFilter.addEventListener('change', applyFilters);
-        cardFilter.addEventListener('change', applyFilters);
+            const searchInput = ui_createElement('input', {
+                props: {
+                    type: 'text',
+                    placeholder: 'Search benefits...'
+                },
+                styleString: `
+                    width:100%; padding:10px 12px; padding-left:36px;
+                    border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; transition:all 0.2s ease;
+                `,
+                events: {
+                    focus: e => {
+                        e.target.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.2)';
+                        e.target.style.borderColor = 'var(--ios-blue)';
+                    },
+                    blur: e => {
+                        e.target.style.boxShadow = 'none';
+                        e.target.style.borderColor = '#ddd';
+                    },
+                    input: util_debounce(() => applyFilters(), 300)
+                }
+            });
 
-        // Add reset button
-        const resetButton = document.createElement('button');
-        resetButton.textContent = 'Reset Filters';
-        resetButton.style.cssText = `
-        padding:10px 16px;
-        border-radius:8px;
-        border:none;
-        background-color:rgba(142, 142, 147, 0.1);
-        color:var(--ios-text-secondary);
-        font-size:14px;
-        cursor:pointer;
-        transition:all 0.2s ease;
-        `;
+            searchWrapper.appendChild(searchInput);
+            searchWrapper.appendChild(ui_createElement('div', {
+                props: {
+                    innerHTML: `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    `
+                },
+                styleString: 'position:absolute; top:50%; left:12px; transform:translateY(-50%);'
+            }));
 
-        resetButton.addEventListener('mouseenter', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.2)';
-        });
+            return searchWrapper;
+        }
 
-        resetButton.addEventListener('mouseleave', () => {
-            resetButton.style.backgroundColor = 'rgba(142, 142, 147, 0.1)';
-        });
+        function createStatusFilter() {
+            return ui_createElement('select', {
+                styleString: `
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
+                children: [
+                    { value: 'all', label: 'All Statuses' },
+                    { value: 'ACHIEVED', label: 'Completed' },
+                    { value: 'IN_PROGRESS', label: 'In Progress' },
+                    { value: 'NOT_STARTED', label: 'Not Started' }
+                ].map(option =>
+                    ui_createElement('option', {
+                        props: { value: option.value },
+                        text: option.label
+                    })
+                ),
+                events: {
+                    change: () => applyFilters()
+                }
+            });
+        }
 
-        resetButton.addEventListener('click', () => {
-            searchInput.value = '';
-            statusFilter.value = 'all';
-            cardFilter.value = 'all';
-            applyFilters();
-        });
+        function createCardFilter() {
+            // Get unique card endings
+            const cardNumbers = [...new Set(glb_benefit.map(benefit => benefit.cardEnding))];
 
-        // Assemble filter container
-        filterContainer.appendChild(searchWrapper);
-        filterContainer.appendChild(statusFilter);
-        filterContainer.appendChild(cardFilter);
-        filterContainer.appendChild(resetButton);
+            return ui_createElement('select', {
+                styleString: `
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
+                children: [
+                    { value: 'all', label: 'All Cards' },
+                    ...cardNumbers.map(card => ({ value: card, label: `Card ending ${card}` }))
+                ].map(option =>
+                    ui_createElement('option', {
+                        props: { value: option.value },
+                        text: option.label
+                    })
+                ),
+                events: {
+                    change: () => applyFilters()
+                }
+            });
+        }
 
-        return filterContainer;
+        function createResetButton() {
+            return ui_createElement('button', {
+                text: 'Reset Filters',
+                styleString: `
+                    padding:10px 16px; border-radius:8px; border:none;
+                    background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary);
+                    font-size:14px; cursor:pointer; transition:all 0.2s ease;
+                `,
+                events: {
+                    mouseenter: e => e.target.style.backgroundColor = 'rgba(142, 142, 147, 0.2)',
+                    mouseleave: e => e.target.style.backgroundColor = 'rgba(142, 142, 147, 0.1)',
+                    click: () => {
+                        // Reset all input elements
+                        const searchInput = document.querySelector('.accordion-container ~ div input');
+                        const statusFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(1)');
+                        const cardFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(2)');
+
+                        if (searchInput) searchInput.value = '';
+                        if (statusFilter) statusFilter.value = 'all';
+                        if (cardFilter) cardFilter.value = 'all';
+
+                        applyFilters();
+                    }
+                }
+            });
+        }
+
+        function applyFilters() {
+            const searchInput = document.querySelector('.accordion-container ~ div input');
+            const statusFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(1)');
+            const cardFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(2)');
+
+            const searchTerm = searchInput?.value.toLowerCase() || '';
+            const selectedStatus = statusFilter?.value || 'all';
+            const selectedCard = cardFilter?.value || 'all';
+
+            // Apply filters to all accordion items
+            document.querySelectorAll('.accordion-item').forEach(item => {
+                const titleText = item.querySelector('.accordion-title')?.textContent.toLowerCase() || '';
+
+                // Status filter
+                const hasStatus = selectedStatus === 'all' ||
+                    item.querySelector(`.mini-card[data-status="${selectedStatus}"]`);
+
+                // Card filter
+                const hasCard = selectedCard === 'all' ||
+                    Array.from(item.querySelectorAll('.card-ending'))
+                        .some(el => el.textContent === selectedCard);
+
+                // Text search filter
+                const matchesSearch = searchTerm === '' || titleText.includes(searchTerm);
+
+                // Show/hide based on all filters
+                item.style.display = (matchesSearch && hasStatus && hasCard) ? 'block' : 'none';
+            });
+        }
     }
 
     // Process benefits data with improved analytics
@@ -7211,8 +5363,7 @@
                 overflow: hidden;
                 border: 1px solid #ddd;
                 width: 100%;
-                box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
-            `
+                box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);  `
         });
 
         // Create fill
@@ -7224,8 +5375,7 @@
                 left: 0;
                 width: ${animate ? '0' : `${percent}%`};
                 background-color: ${barColor};
-                transition: width ${animate ? '1s cubic-bezier(0.22, 1, 0.36, 1)' : '0s'};
-            `
+                transition: width ${animate ? '1s cubic-bezier(0.22, 1, 0.36, 1)' : '0s'};  `
         });
 
         // Add percentage label if needed
@@ -7330,283 +5480,196 @@
         }
     }
 
-    // Create enhanced status legend
-    function benefits_createStatusKey(statusConfig) {
-        const legend = document.createElement('div');
-        legend.className = 'status-legend';
-        legend.style.cssText = 'display:flex; gap:15px; margin-bottom:25px; justify-content:center; flex-wrap:wrap; background-color:rgba(255,255,255,0.6); border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.05);';
-
-        Object.entries(statusConfig).forEach(([status, { label, color }]) => {
-            const legendItem = document.createElement('div');
-            legendItem.className = 'legend-item';
-            legendItem.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; transition:background-color 0.2s ease;';
-
-            legendItem.addEventListener('mouseenter', () => {
-                legendItem.style.backgroundColor = 'rgba(0,0,0,0.05)';
-            });
-
-            legendItem.addEventListener('mouseleave', () => {
-                legendItem.style.backgroundColor = 'transparent';
-            });
-
-            const colorDot = document.createElement('div');
-            colorDot.className = 'legend-dot';
-            colorDot.style.cssText = `width:12px; height:12px; border-radius:50%; background-color:${color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);`;
-
-            const labelSpan = document.createElement('span');
-            labelSpan.className = 'legend-label';
-            labelSpan.style.cssText = 'color:#333; font-size:14px; font-weight:500;';
-            labelSpan.textContent = label;
-
-            legendItem.appendChild(colorDot);
-            legendItem.appendChild(labelSpan);
-            legend.appendChild(legendItem);
-        });
-
-        return legend;
-    }
-
     // Create enhanced accordion item
     function benefits_createExpandableItem(groupObj, statusConfig) {
-        const accordionItem = document.createElement('div');
-        accordionItem.className = 'accordion-item';
-        accordionItem.style.cssText = `
-        border:1px solid #e0e0e0;
-        border-radius:12px;
-        margin-bottom:16px;
-        background-color:#ffffff;
-        box-shadow:0 2px 8px rgba(0,0,0,0.08);
-        transition:box-shadow 0.2s ease, transform 0.2s ease;
-        overflow:hidden;
-        `;
-
-        // Apply hover effects
-        accordionItem.addEventListener('mouseenter', () => {
-            accordionItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
-            accordionItem.style.transform = 'translateY(-3px)';
+        const accordionItem = ui_createElement('div', {
+            className: 'accordion-item',
+            styleString: UI_STYLES.accordion.item,
+            events: {
+                mouseenter: e => {
+                    e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
+                    e.target.style.transform = 'translateY(-3px)';
+                },
+                mouseleave: e => {
+                    e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                    e.target.style.transform = 'translateY(0)';
+                }
+            },
+            props: { 'data-category': groupObj.category || 'Other' }
         });
 
-        accordionItem.addEventListener('mouseleave', () => {
-            accordionItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-            accordionItem.style.transform = 'translateY(0)';
+        // Add data attributes for filtering
+        groupObj.trackers.forEach(tracker => {
+            accordionItem.setAttribute(`data-has-${tracker.status.toLowerCase()}`, 'true');
         });
 
-        // Tag the item with categories and status for filtering
-        if (groupObj.category) {
-            accordionItem.setAttribute('data-category', groupObj.category);
-        }
-
-        const allStatuses = groupObj.trackers.map(t => t.status);
-        allStatuses.forEach(status => {
-            accordionItem.setAttribute(`data-has-${status.toLowerCase()}`, 'true');
+        // Create header
+        const headerDiv = ui_createElement('div', {
+            className: 'accordion-header',
+            styleString: UI_STYLES.accordion.header
         });
 
-        // Create header with enhanced UI
-        const headerDiv = benefits_createItemHeader(groupObj, statusConfig);
+        // Create body with content
+        const bodyDiv = ui_createElement('div', {
+            className: 'accordion-body',
+            styleString: UI_STYLES.accordion.body
+        });
 
-        // Create body with enhanced UI
-        const bodyDiv = benefits_createItemContent(groupObj);
+        // Add header content
+        headerDiv.appendChild(createHeaderContent(groupObj, statusConfig));
 
-        // Store reference to body for toggle functionality
+        // Add arrow indicator
+        const arrowIcon = createArrowIcon();
+        headerDiv.appendChild(arrowIcon);
+
+        // Add body content with tracker cards
+        bodyDiv.appendChild(createBodyContent(groupObj));
+
+        // Store references for toggle functionality
         headerDiv.bodyRef = bodyDiv;
+        headerDiv.arrowRef = arrowIcon;
         headerDiv.parentItem = accordionItem;
+
+        // Add click handler
+        headerDiv.addEventListener('click', () => {
+            benefits_toggleItemExpansion(headerDiv);
+        });
 
         accordionItem.appendChild(headerDiv);
         accordionItem.appendChild(bodyDiv);
 
         return accordionItem;
-    }
 
-    // Create enhanced accordion header
-    function benefits_createItemHeader(groupObj, statusConfig) {
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'accordion-header';
-        headerDiv.style.cssText = `
-        padding:16px 20px;
-        cursor:pointer;
-        transition:background-color 0.2s ease;
-        background-color:#f9f9f9;
-        position:relative;
-        border-bottom:1px solid transparent;
-        `;
+        // Create header content with title, category, indicators
+        function createHeaderContent(groupObj, statusConfig) {
+            return ui_createElement('div', {
+                styleString: 'display:flex; flex-direction:column; gap:10px;',
+                children: [
+                    // Title section with category badge
+                    ui_createElement('div', {
+                        styleString: `${UI_STYLES.containers.flexRow} gap:12px;`,
+                        children: [
+                            // Category badge
+                            ui_createElement('div', {
+                                text: groupObj.category || 'Other',
+                                styleString: 'font-size:11px; padding:4px 8px; background-color:rgba(0,0,0,0.05); color:#666; border-radius:4px; font-weight:500; align-self:flex-start;'
+                            }),
 
-        // Add hover and active styles
-        headerDiv.addEventListener('mouseenter', () => {
-            headerDiv.style.backgroundColor = '#f0f0f0';
-        });
+                            // Title with icon
+                            ui_createElement('div', {
+                                styleString: `${UI_STYLES.containers.flexRow} flex:1;`,
+                                children: [
+                                    benefits_getCategoryIcon(groupObj.category),
+                                    ui_createElement('span', {
+                                        className: 'accordion-title',
+                                        text: groupObj.displayName || groupObj.trackers[0].benefitName || "",
+                                        styleString: 'font-size:17px; font-weight:600; color:#333;'
+                                    })
+                                ]
+                            }),
 
-        headerDiv.addEventListener('mouseleave', () => {
-            if (!headerDiv.classList.contains('active')) {
-                headerDiv.style.backgroundColor = '#f9f9f9';
-            }
-        });
+                            // Period badge
+                            groupObj.periodLabel ? ui_createElement('div', {
+                                text: groupObj.periodLabel,
+                                styleString: 'font-size:12px; padding:4px 10px; background-color:rgba(0,122,255,0.08); color:var(--ios-blue); border-radius:12px; font-weight:500;'
+                            }) : null
+                        ].filter(Boolean)
+                    }),
 
-        // Create title section with icons
-        const titleSection = document.createElement('div');
-        titleSection.style.cssText = 'display:flex; align-items:flex-start; gap:12px; margin-bottom:10px;';
-
-        // Category badge
-        const categoryBadge = document.createElement('div');
-        categoryBadge.style.cssText = `
-        font-size:11px;
-        padding:4px 8px;
-        background-color:rgba(0,0,0,0.05);
-        color:#666;
-        border-radius:4px;
-        font-weight:500;
-        white-space:nowrap;
-        align-self:flex-start;
-        `;
-        categoryBadge.textContent = groupObj.category || 'Other';
-
-        // Title row with category and period
-        const titleRow = document.createElement('div');
-        titleRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; width:100%;';
-
-        // Title with icon based on category
-        const titleContainer = document.createElement('div');
-        titleContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex:1;';
-
-        // Category icon (choose based on category)
-        const categoryIcon = benefits_getCategoryIcon(groupObj.category);
-        categoryIcon.style.cssText = 'width:24px; height:24px; flex-shrink:0;';
-
-        // Title text
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'accordion-title';
-        titleSpan.style.cssText = 'font-size:17px; font-weight:600; color:#333;';
-        titleSpan.textContent = groupObj.displayName || groupObj.trackers[0].benefitName || "";
-
-        // Create the arrow icon
-        const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        arrowIcon.setAttribute('viewBox', '0 0 24 24');
-        arrowIcon.setAttribute('width', '24');
-        arrowIcon.setAttribute('height', '24');
-        arrowIcon.style.transition = 'transform 0.3s ease';
-        arrowIcon.style.flexShrink = '0';
-        arrowIcon.style.marginLeft = 'auto';
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M7 10l5 5 5-5');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', '#888');
-        path.setAttribute('stroke-width', '2');
-        path.setAttribute('stroke-linecap', 'round');
-        path.setAttribute('stroke-linejoin', 'round');
-        arrowIcon.appendChild(path);
-
-        // Store arrow reference for animation
-        headerDiv.arrowRef = arrowIcon;
-
-        // Create right side container for period badge and arrow
-        const rightElements = document.createElement('div');
-        rightElements.style.cssText = 'display:flex; align-items:center;';
-
-        // Add period badge to right side if available
-        if (groupObj.periodLabel) {
-            const periodBadge = document.createElement('div');
-            periodBadge.style.cssText = `
-            font-size:12px;
-            padding:4px 10px;
-            background-color:rgba(0, 122, 255, 0.08);
-            color:var(--ios-blue);
-            border-radius:12px;
-            font-weight:500;
-            white-space:nowrap;
-            margin-right:8px;
-            `;
-            periodBadge.textContent = groupObj.periodLabel;
-            rightElements.appendChild(periodBadge);
+                    // Card status indicators
+                    ui_createElement('div', {
+                        className: 'mini-bar',
+                        styleString: 'display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;',
+                        children: createStatusIndicators(groupObj, statusConfig)
+                    })
+                ]
+            });
         }
 
-        // Add arrow to right side
-        rightElements.appendChild(arrowIcon);
+        // Create arrow icon for accordions
+        function createArrowIcon() {
+            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            arrowIcon.setAttribute('viewBox', '0 0 24 24');
+            arrowIcon.setAttribute('width', '24');
+            arrowIcon.setAttribute('height', '24');
+            arrowIcon.style.cssText = 'transition:transform 0.3s ease; position:absolute; right:20px; top:20px;';
 
-        // Assemble title container
-        titleContainer.appendChild(categoryIcon);
-        titleContainer.appendChild(titleSpan);
-        titleRow.appendChild(titleContainer);
-        titleRow.appendChild(rightElements);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M7 10l5 5 5-5');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#888');
+            path.setAttribute('stroke-width', '2');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
 
-        // Create mini cards for each card's status
-        const miniBarDiv = document.createElement('div');
-        miniBarDiv.className = 'mini-bar';
-        miniBarDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;';
+            arrowIcon.appendChild(path);
+            return arrowIcon;
+        }
 
-        // Group trackers by card for a cleaner display
-        const cardTrackers = {};
-        groupObj.trackers.forEach(tracker => {
-            cardTrackers[tracker.cardEnding] = tracker;
-        });
-
-        // Add card status indicators
-        Object.entries(cardTrackers).forEach(([cardEnding, tracker]) => {
-            // Get status color from config or use default
-            const statusObj = statusConfig[tracker.status] || { color: 'var(--ios-gray)', label: tracker.status };
-
-            const miniCard = document.createElement('div');
-            miniCard.className = 'mini-card';
-            miniCard.setAttribute('data-status', tracker.status);
-            miniCard.style.cssText = `
-            display:flex;
-            align-items:center;
-            gap:6px;
-            padding:6px 10px;
-            border-radius:8px;
-            font-size:13px;
-            color:#444;
-            background-color:${statusObj.color}15;
-            border:1px solid ${statusObj.color}30;
-            transition:all 0.2s ease;
-            `;
-
-            // Add hover effect to mini cards
-            miniCard.addEventListener('mouseenter', () => {
-                miniCard.style.transform = 'translateY(-2px)';
-                miniCard.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
-                miniCard.style.backgroundColor = `${statusObj.color}25`;
+        // Create status indicators for each card
+        function createStatusIndicators(groupObj, statusConfig) {
+            // Group trackers by card for cleaner display
+            const cardTrackers = {};
+            groupObj.trackers.forEach(tracker => {
+                cardTrackers[tracker.cardEnding] = tracker;
             });
 
-            miniCard.addEventListener('mouseleave', () => {
-                miniCard.style.transform = 'translateY(0)';
-                miniCard.style.boxShadow = 'none';
-                miniCard.style.backgroundColor = `${statusObj.color}15`;
+            // Create indicators
+            return Object.entries(cardTrackers).map(([cardEnding, tracker]) => {
+                const statusKey = tracker.status === 'ACHIEVED' ? 'achieved' :
+                    tracker.status === 'IN_PROGRESS' ? 'inProgress' : 'notStarted';
+                const statusStyle = UI_STYLES.status[statusKey];
+
+                return ui_createElement('div', {
+                    className: 'mini-card',
+                    styleString: `
+                        display:flex; align-items:center; gap:6px; padding:6px 10px;
+                        border-radius:8px; font-size:13px; color:#444;
+                        background-color:${statusStyle.bgColor};
+                        border:1px solid ${statusStyle.borderColor};
+                        transition:all 0.2s ease;
+                    `,
+                    props: { 'data-status': tracker.status },
+                    events: {
+                        mouseenter: e => {
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+                        },
+                        mouseleave: e => {
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = 'none';
+                        }
+                    },
+                    children: [
+                        // Status dot
+                        ui_createElement('div', {
+                            styleString: `width:10px; height:10px; border-radius:50%; background-color:${statusStyle.color}; box-shadow:0 1px 2px rgba(0,0,0,0.1);`
+                        }),
+                        // Card ending
+                        ui_createElement('span', {
+                            className: 'card-ending',
+                            text: cardEnding,
+                            styleString: 'font-weight:500;'
+                        }),
+                        // Status label
+                        ui_createElement('span', {
+                            text: statusConfig[tracker.status]?.label || tracker.status,
+                            styleString: 'font-size:11px; opacity:0.8;'
+                        })
+                    ]
+                });
             });
+        }
 
-            // Status indicator dot
-            const statusDot = document.createElement('div');
-            statusDot.className = 'status-dot';
-            statusDot.style.cssText = `width:10px; height:10px; border-radius:50%; background-color:${statusObj.color}; box-shadow:0 1px 2px rgba(0,0,0,0.1);`;
-
-            // Card ending
-            const cardEndingSpan = document.createElement('span');
-            cardEndingSpan.className = 'card-ending';
-            cardEndingSpan.style.cssText = 'font-weight:500;';
-            cardEndingSpan.textContent = cardEnding;
-
-            // Add status label
-            const statusLabel = document.createElement('span');
-            statusLabel.style.cssText = 'font-size:11px; opacity:0.8;';
-            statusLabel.textContent = statusObj.label;
-
-            miniCard.appendChild(statusDot);
-            miniCard.appendChild(cardEndingSpan);
-            miniCard.appendChild(statusLabel);
-            miniBarDiv.appendChild(miniCard);
-        });
-
-        // Assemble header
-        titleSection.appendChild(categoryBadge);
-        titleSection.appendChild(titleRow);
-        headerDiv.appendChild(titleSection);
-        headerDiv.appendChild(miniBarDiv);
-
-        // Add click handler for toggling body with improved animation
-        headerDiv.addEventListener('click', () => {
-            benefits_toggleItemExpansion(headerDiv);
-        });
-
-        return headerDiv;
+        // Create body content with tracker cards
+        function createBodyContent(groupObj) {
+            return ui_createElement('div', {
+                styleString: 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;',
+                children: groupObj.trackers.map(tracker =>
+                    benefits_createProgressCard(tracker, groupObj)
+                )
+            });
+        }
     }
 
     // Get category icon based on category
@@ -7673,274 +5736,209 @@
         return iconSvg;
     }
 
-    // Create enhanced accordion body
-    function benefits_createItemContent(groupObj) {
-        const bodyDiv = document.createElement('div');
-        bodyDiv.className = 'accordion-body';
-        bodyDiv.style.cssText = 'padding:0 20px; overflow:hidden; max-height:0; transition:max-height 0.4s ease-in-out, padding 0.4s ease-in-out, opacity 0.3s ease;';
-        bodyDiv.style.opacity = '0';
-
-        // Create a container for trackers with nicer layout
-        const trackersContainer = document.createElement('div');
-        trackersContainer.style.cssText = 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;';
-
-        // Create tracker cards
-        groupObj.trackers.forEach(trackerObj => {
-            trackersContainer.appendChild(benefits_createProgressCard(trackerObj, groupObj));
-        });
-
-        bodyDiv.appendChild(trackersContainer);
-
-        return bodyDiv;
-    }
 
     // Create enhanced tracker card
     function benefits_createProgressCard(trackerObj, groupObj) {
         // Find card details in accounts
-        const cardAccount = glb_account.find(acc => acc.account_token === trackerObj.cardToken);
+        const cardAccount = glb_account.find(acc => acc.cardEnding === trackerObj.cardEnding);
 
-        const trackerCard = document.createElement('div');
+        // Determine status style
+        const statusKey = trackerObj.status === 'ACHIEVED' ? 'achieved' :
+            trackerObj.status === 'IN_PROGRESS' ? 'inProgress' : 'notStarted';
+        const statusStyle = UI_STYLES.status[statusKey];
 
-        trackerCard.className = 'tracker-card';
-        trackerCard.style.cssText = `
-        border:1px solid #e6e6e6;
-        border-radius:16px;
-        padding:16px;
-        margin-top:16px;
-        background-color:#fff;
-        box-shadow:0 2px 8px rgba(0,0,0,0.04);
-        transition:all 0.3s ease;
-        position:relative;
-        overflow:hidden;
-        `;
-
-        // Add hover effect
-        trackerCard.addEventListener('mouseenter', () => {
-            trackerCard.style.transform = 'translateY(-3px)';
-            trackerCard.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-        });
-
-        trackerCard.addEventListener('mouseleave', () => {
-            trackerCard.style.transform = 'translateY(0)';
-            trackerCard.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
-        });
-
-        // Add status indicator stripe based on status
-        const statusColors = {
-            'ACHIEVED': 'var(--ios-green)',
-            'IN_PROGRESS': 'var(--ios-blue)',
-            'NOT_STARTED': 'var(--ios-gray)'
-        };
-
-        const statusColor = statusColors[trackerObj.status] || 'var(--ios-gray)';
-        trackerCard.style.borderLeft = `4px solid ${statusColor}`;
-
-        // Card header with improved layout
-        const cardHeader = document.createElement('div');
-        cardHeader.className = 'card-header';
-        cardHeader.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:16px; align-items:flex-start;';
-
-        // Card info container with logo if available
-        const cardInfoContainer = document.createElement('div');
-        cardInfoContainer.style.cssText = 'display:flex; align-items:center; gap:12px;';
-
-        // Card logo/icon
-        const cardIconContainer = document.createElement('div');
-        cardIconContainer.style.cssText = 'width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0;';
-
-        if (cardAccount && cardAccount.small_card_art && cardAccount.small_card_art !== 'N/A') {
-            const cardImage = document.createElement('img');
-            cardImage.src = cardAccount.small_card_art;
-            cardImage.alt = 'Card Logo';
-            cardImage.style.cssText = 'width:100%; height:100%; object-fit:contain;';
-            cardIconContainer.appendChild(cardImage);
-        } else {
-            // Fallback icon
-            cardIconContainer.innerHTML = `
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <line x1="2" y1="10" x2="22" y2="10" />
-            </svg>
-            `;
-        }
-
-        // Card details
-        const cardDetails = document.createElement('div');
-        cardDetails.style.cssText = 'display:flex; flex-direction:column;';
-
-        const cardNumber = document.createElement('div');
-        cardNumber.className = 'card-number';
-        cardNumber.style.cssText = 'font-weight:600; color:#444; font-size:15px;';
-        cardNumber.textContent = `Card •••• ${trackerObj.cardEnding}`;
-
-        // Add card name if available
-        let cardName;
-        if (cardAccount) {
-            cardName = document.createElement('div');
-            cardName.style.cssText = 'font-size:13px; color:#777;';
-            cardName.textContent = cardAccount.description || '';
-        }
-
-        cardDetails.appendChild(cardNumber);
-        if (cardName) cardDetails.appendChild(cardName);
-
-        cardInfoContainer.appendChild(cardIconContainer);
-        cardInfoContainer.appendChild(cardDetails);
-
-        // Date range with better formatting
-        const dateRange = document.createElement('div');
-        dateRange.className = 'date-range';
-        dateRange.style.cssText = 'color:#888; font-size:13px; background-color:rgba(0,0,0,0.03); padding:4px 10px; border-radius:8px;';
-
-        // Format date range
-        const startDate = new Date(trackerObj.periodStartDate);
-        const endDate = new Date(trackerObj.periodEndDate);
-
-        const formatOptions = {
-            month: 'short',
-            day: 'numeric',
-            year: endDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-        };
-
-        let dateRangeText = 'No period available';
-        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-            const startFormatted = startDate.toLocaleDateString('en-US', formatOptions);
-            const endFormatted = endDate.toLocaleDateString('en-US', formatOptions);
-            dateRangeText = `${startFormatted} - ${endFormatted}`;
-
-            // Calculate and display days remaining
-            const now = new Date();
-            if (now <= endDate) {
-                const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-                const daysText = document.createElement('div');
-                daysText.style.cssText = 'font-size:12px; text-align:center; margin-top:4px;';
-                daysText.textContent = `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} left`;
-                dateRange.appendChild(daysText);
-            }
-        }
-
-        dateRange.prepend(document.createTextNode(dateRangeText));
-
-        // Add to header
-        cardHeader.appendChild(cardInfoContainer);
-        cardHeader.appendChild(dateRange);
-
-        // Progress section with enhanced visualization
-        const progressContainer = document.createElement('div');
-        progressContainer.className = 'progress-container';
-        progressContainer.style.cssText = 'margin:16px 0;';
-
-        // Progress header with amount and percentage
-        const progressHeader = document.createElement('div');
-        progressHeader.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;';
-
-        // Format amounts with proper currency
-        let currencySymbol = trackerObj.tracker.targetCurrencySymbol || '$';
-        const spentAmount = parseFloat(trackerObj.tracker.spentAmount) || 0;
-        const targetAmount = parseFloat(trackerObj.tracker.targetAmount) || 0;
-
-        // Left side: Amount label
-        const amountLabel = document.createElement('div');
-        amountLabel.style.cssText = 'font-size:14px; color:#555; font-weight:500;';
-        amountLabel.innerHTML = `<span style="color:#999; font-weight:normal;">Progress:</span> ${currencySymbol}${spentAmount.toFixed(2)} of ${currencySymbol}${targetAmount.toFixed(2)}`;
-
-        // Right side: Percentage
-        const percentLabel = document.createElement('div');
-        percentLabel.style.cssText = 'font-size:14px; font-weight:600;';
-
-        // Calculate percentage
-        let percent = 0;
-        if (targetAmount > 0) {
-            percent = Math.min(100, (spentAmount / targetAmount) * 100);
-        }
-
-        percentLabel.textContent = `${percent.toFixed(0)}%`;
-        percentLabel.style.color = percent >= 100 ? 'var(--ios-green)' : 'var(--ios-blue)';
-
-        progressHeader.appendChild(amountLabel);
-        progressHeader.appendChild(percentLabel);
-
-        // Progress bar with enhanced style
-        const progressBarWrapper = benefit_createProgressBar({
-            current: spentAmount,
-            max: targetAmount,
-            barColor: statusColor,
-            animate: true
-        });
-
-        // Progress fill with animation
-        const progressFill = document.createElement('div');
-        progressFill.className = `progress-fill ${trackerObj.status.toLowerCase()}`;
-        progressFill.style.cssText = `
-        height:100%;
-        position:absolute;
-        top:0;
-        left:0;
-        width:0;
-        background-color:${statusColor};
-        transition:width 1s cubic-bezier(0.22, 1, 0.36, 1);
-        `;
-
-        // Animate progress bar after a short delay
-        setTimeout(() => {
-            progressFill.style.width = `${percent}%`;
-        }, 300);
-
-        progressBarWrapper.appendChild(progressFill);
-
-        // Add milestone markers if the target amount is large enough
-        if (targetAmount >= 100) {
-            // Add quarter markers
-            [25, 50, 75].forEach(markerPercent => {
-                if (targetAmount * (markerPercent / 100) >= 25) {
-                    const marker = document.createElement('div');
-                    marker.style.cssText = `
-                    position:absolute;
-                    top:0;
-                    bottom:0;
-                    left:${markerPercent}%;
-                    width:1px;
-                    background-color:rgba(0,0,0,0.1);
-                    z-index:1;
-                    `;
-                    progressBarWrapper.appendChild(marker);
+        const trackerCard = ui_createElement('div', {
+            className: 'tracker-card',
+            styleString: `${UI_STYLES.cards.benefit} border-left: 4px solid ${statusStyle.color};`,
+            events: {
+                mouseenter: e => {
+                    e.target.style.transform = 'translateY(-3px)';
+                    e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+                },
+                mouseleave: e => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
                 }
-            });
-        }
+            }
+        });
 
-        // Message section with better formatting
-        let messageDiv;
+        // Add card header
+        trackerCard.appendChild(createCardHeader(trackerObj, cardAccount));
+
+        // Add progress section
+        trackerCard.appendChild(createProgressSection(trackerObj, statusStyle.color));
+
+        // Add message section if available
         if (trackerObj.progress && trackerObj.progress.message) {
-            messageDiv = document.createElement('div');
-            messageDiv.className = 'message-div';
-            messageDiv.style.cssText = `
-            margin-top:16px;
-            padding:12px 16px;
-            background-color:rgba(0,0,0,0.02);
-            border-radius:12px;
-            color:#333;
-            font-size:14px;
-            line-height:1.5;
-            border-left:3px solid ${statusColor}40;
-            `;
-
-            // Clean up message format
-            const messageText = trackerObj.progress.message
-                .replace(/\*\*/g, '')  // Remove ** formatting
-                .replace(/\n\n/g, '<br><br>')  // Keep paragraph breaks
-                .replace(/\n/g, ' ');  // Replace single newlines with spaces
-
-            messageDiv.innerHTML = messageText;
+            trackerCard.appendChild(createMessageSection(trackerObj, statusStyle.color));
         }
-
-        // Assembled tracker card
-        trackerCard.appendChild(cardHeader);
-        progressContainer.appendChild(progressHeader);
-        progressContainer.appendChild(progressBarWrapper);
-        trackerCard.appendChild(progressContainer);
-        if (messageDiv) trackerCard.appendChild(messageDiv);
 
         return trackerCard;
+
+        // Helper function to create card header with logo and date range
+        function createCardHeader(tracker, account) {
+            const cardHeader = ui_createElement('div', {
+                styleString: 'display:flex; justify-content:space-between; margin-bottom:16px; align-items:flex-start;'
+            });
+
+            // Card info with logo
+            const cardInfoContainer = ui_createElement('div', {
+                styleString: 'display:flex; align-items:center; gap:12px;'
+            });
+
+            // Card logo/icon
+            const cardIconContainer = ui_createElement('div', {
+                styleString: 'width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0;'
+            });
+
+            if (account && account.small_card_art && account.small_card_art !== 'N/A') {
+                cardIconContainer.appendChild(ui_createElement('img', {
+                    props: { src: account.small_card_art, alt: 'Card Logo' },
+                    styleString: 'width:100%; height:100%; object-fit:contain;'
+                }));
+            } else {
+                cardIconContainer.innerHTML = `
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5">
+                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                    <line x1="2" y1="10" x2="22" y2="10" />
+                </svg>`;
+            }
+
+            // Card details text
+            const cardDetails = ui_createElement('div', {
+                styleString: 'display:flex; flex-direction:column;'
+            });
+
+            cardDetails.appendChild(ui_createElement('div', {
+                className: 'card-number',
+                text: `Card •••• ${tracker.cardEnding}`,
+                styleString: 'font-weight:600; color:#444; font-size:15px;'
+            }));
+
+            if (account) {
+                cardDetails.appendChild(ui_createElement('div', {
+                    text: account.description || '',
+                    styleString: 'font-size:13px; color:#777;'
+                }));
+            }
+
+            cardInfoContainer.appendChild(cardIconContainer);
+            cardInfoContainer.appendChild(cardDetails);
+
+            // Date range
+            const dateRange = createDateRange(tracker);
+
+            cardHeader.appendChild(cardInfoContainer);
+            cardHeader.appendChild(dateRange);
+
+            return cardHeader;
+        }
+
+        // Helper function to create date range badge
+        function createDateRange(tracker) {
+            const dateRange = ui_createElement('div', {
+                styleString: 'color:#888; font-size:13px; background-color:rgba(0,0,0,0.03); padding:4px 10px; border-radius:8px;'
+            });
+
+            // Format date range
+            const startDate = new Date(tracker.periodStartDate);
+            const endDate = new Date(tracker.periodEndDate);
+
+            const formatOptions = {
+                month: 'short',
+                day: 'numeric',
+                year: endDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            };
+
+            let dateRangeText = 'No period available';
+            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                const startFormatted = startDate.toLocaleDateString('en-US', formatOptions);
+                const endFormatted = endDate.toLocaleDateString('en-US', formatOptions);
+                dateRangeText = `${startFormatted} - ${endFormatted}`;
+
+                // Add days remaining
+                const now = new Date();
+                if (now <= endDate) {
+                    const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+                    dateRange.appendChild(ui_createElement('div', {
+                        text: `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} left`,
+                        styleString: 'font-size:12px; text-align:center; margin-top:4px;'
+                    }));
+                }
+            }
+
+            dateRange.prepend(document.createTextNode(dateRangeText));
+            return dateRange;
+        }
+
+        // Helper function to create progress section
+        function createProgressSection(tracker, statusColor) {
+            // Format values
+            const currencySymbol = tracker.tracker?.targetCurrencySymbol || '$';
+            const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
+            const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
+
+            // Calculate percentage
+            const percent = targetAmount > 0 ? Math.min(100, (spentAmount / targetAmount) * 100) : 0;
+
+            const progressContainer = ui_createElement('div', {
+                styleString: UI_STYLES.progress.container
+            });
+
+            // Progress header with amounts and percentage
+            const progressHeader = ui_createElement('div', {
+                styleString: 'display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;'
+            });
+
+            // Amount label
+            progressHeader.appendChild(ui_createElement('div', {
+                props: {
+                    innerHTML: `<span style="color:#999; font-weight:normal;">Progress:</span> ${currencySymbol}${spentAmount.toFixed(2)} of ${currencySymbol}${targetAmount.toFixed(2)}`
+                },
+                styleString: 'font-size:14px; color:#555; font-weight:500;'
+            }));
+
+            // Percentage
+            progressHeader.appendChild(ui_createElement('div', {
+                text: `${percent.toFixed(0)}%`,
+                styleString: `font-size:14px; font-weight:600; color:${percent >= 100 ? 'var(--ios-green)' : 'var(--ios-blue)'};`
+            }));
+
+            progressContainer.appendChild(progressHeader);
+
+            // Progress bar
+            progressContainer.appendChild(benefit_createProgressBar({
+                current: spentAmount,
+                max: targetAmount,
+                barColor: statusColor,
+                height: '12px',
+                animate: true
+            }));
+
+            return progressContainer;
+        }
+
+        // Helper function to create message section
+        function createMessageSection(tracker, statusColor) {
+            return ui_createElement('div', {
+                props: {
+                    innerHTML: tracker.progress.message
+                        .replace(/\*\*/g, '')  // Remove ** formatting
+                        .replace(/\n\n/g, '<br><br>')  // Keep paragraph breaks
+                        .replace(/\n/g, ' ')  // Replace single newlines with spaces
+                },
+                styleString: `
+                    margin-top:16px;
+                    padding:12px 16px;
+                    background-color:rgba(0,0,0,0.02);
+                    border-radius:12px;
+                    color:#333;
+                    font-size:14px;
+                    line-height:1.5;
+                    border-left:3px solid ${statusColor}40;
+                `
+            });
+        }
     }
 
     // Enhanced accordion toggle with smoother animations
@@ -7949,53 +5947,60 @@
         const arrowIcon = header.arrowRef;
         const parentItem = header.parentItem;
 
-        // Determine if currently open
+        // Determine current state
         const isOpen = bodyDiv.classList.contains('active');
 
-        // Close all other open accordions for cleaner UX
+        // First close all other open accordions for cleaner UX
         document.querySelectorAll('.accordion-header.active').forEach(activeHeader => {
             if (activeHeader !== header && activeHeader.bodyRef) {
-                const activeBody = activeHeader.bodyRef;
-                const activeArrow = activeHeader.arrowRef;
-                const activeParent = activeHeader.parentItem;
+                // Reset previous active item
+                const prevBody = activeHeader.bodyRef;
+                const prevArrow = activeHeader.arrowRef;
+                const prevParent = activeHeader.parentItem;
+
+                // Update classes
+                activeHeader.classList.remove('active');
+                prevBody.classList.remove('active');
 
                 // Reset styles
-                activeHeader.classList.remove('active');
                 activeHeader.style.backgroundColor = '#f9f9f9';
                 activeHeader.style.borderBottomColor = 'transparent';
-                activeArrow.style.transform = 'rotate(0deg)';
-                activeBody.style.maxHeight = '0';
-                activeBody.style.padding = '0 20px';
-                activeBody.style.opacity = '0';
-                activeBody.classList.remove('active');
+                prevArrow.style.transform = 'rotate(0deg)';
+                prevBody.style.maxHeight = '0';
+                prevBody.style.padding = '0 20px';
+                prevBody.style.opacity = '0';
 
-                // Remove active styling from parent
-                if (activeParent) {
-                    activeParent.style.borderColor = '#e0e0e0';
+                // Reset parent styling
+                if (prevParent) {
+                    prevParent.style.borderColor = '#e0e0e0';
+                    prevParent.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                 }
             }
         });
 
-        // Toggle current accordion
+        // Toggle current accordion with improved animation
         if (!isOpen) {
             // Open this accordion
             header.classList.add('active');
             bodyDiv.classList.add('active');
+
+            // Animate transitions
             arrowIcon.style.transform = 'rotate(180deg)';
             header.style.backgroundColor = '#f0f0f0';
             header.style.borderBottomColor = '#e0e0e0';
+
+            // Set max height to content height for animation
             bodyDiv.style.maxHeight = `${bodyDiv.scrollHeight}px`;
             bodyDiv.style.padding = '0 20px 20px 20px';
             bodyDiv.style.opacity = '1';
 
-            // Add active styling to parent with default accent color
+            // Apply active styling to parent
             if (parentItem) {
-                // Use a default accent color rather than statusColor
                 parentItem.style.borderColor = 'var(--ios-blue)';
                 parentItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
             }
 
-            // Ensure scroll into view for long pages
+            // Scroll item into view if needed
             setTimeout(() => {
                 const headerRect = header.getBoundingClientRect();
                 if (headerRect.top < 0 || headerRect.bottom > window.innerHeight) {
@@ -8006,6 +6011,8 @@
             // Close this accordion
             header.classList.remove('active');
             bodyDiv.classList.remove('active');
+
+            // Animate transitions
             arrowIcon.style.transform = 'rotate(0deg)';
             header.style.backgroundColor = '#f9f9f9';
             header.style.borderBottomColor = 'transparent';
@@ -8023,44 +6030,1081 @@
 
     // ----------------------------  ui_renderCurrentView  ----------------------------//
 
-    // Main page renderer
-    async function ui_renderCurrentView() {
-        if (!content) return;
-        content.innerHTML = '';
-        let viewContent;
 
-        switch (glb_view_page) {
-            case 'members':
-                viewContent = members_renderPage();
-                break;
+    function batchedRender(container, elements) {
+        const fragment = document.createDocumentFragment();
+        elements.forEach(el => fragment.appendChild(el));
+        container.appendChild(fragment);
+    }
 
-            case 'offers':
-                viewContent = offers_renderPage(glb_offer);
-                break;
 
-            case 'benefits':
-                viewContent = await benefits_renderPage();
-                break;
+    const ElementCache = (() => {
+        const cache = new Map();
 
-            default:
-                // Default to members page if unknown
-                glb_view_page = 'members';
-                viewContent = members_renderPage();
+        return {
+
+            getElement(key, creator) {
+                if (!cache.has(key)) {
+                    cache.set(key, creator());
+                }
+                return cache.get(key).cloneNode(true);
+            },
+
+            clearCache(keys) {
+                if (!keys) {
+                    cache.clear();
+                } else if (Array.isArray(keys)) {
+                    keys.forEach(key => cache.delete(key));
+                } else {
+                    cache.delete(keys);
+                }
+            }
+        };
+    })();
+
+    // Example usage for commonly created elements
+    function createCardLogo(logoUrl, altText) {
+        const cacheKey = `logo-${logoUrl || 'default'}`;
+
+        return ElementCache.getElement(cacheKey, () => {
+            if (logoUrl && logoUrl !== "N/A") {
+                return ui_createElement('div', {
+                    styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
+                    children: [
+                        ui_createElement('img', {
+                            props: { src: logoUrl, alt: altText || "Logo" },
+                            styleString: 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;',
+                            events: {
+                                mouseenter: e => e.target.style.transform = 'scale(1.15)',
+                                mouseleave: e => e.target.style.transform = 'scale(1)'
+                            }
+                        })
+                    ]
+                });
+            }
+
+            return ui_createElement('div', {
+                styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
+                children: [
+                    ui_createElement('div', {
+                        props: { innerHTML: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#ccc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>' },
+                        styleString: 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; background:#f5f5f5; border-radius:6px;'
+                    })
+                ]
+            });
+        });
+    }
+
+
+    /**
+     * Memoized offer filtering with cache invalidation
+     */
+    const MemoizedOffers = (() => {
+        let cachedFilters = null;
+        let cachedResults = null;
+        let lastOfferId = null;
+
+        return {
+            /**
+             * Gets filtered offers list with memoization
+             * @returns {Array} - Filtered offers
+             */
+            getFilteredOffers() {
+                const currentFilterHash = JSON.stringify(glb_filters);
+                const currentOfferId = glb_offer.length > 0 ?
+                    glb_offer.map(o => o.offerId).join(',') : 'empty';
+
+                // Check if we need to invalidate cache
+                if (!cachedResults ||
+                    cachedFilters !== currentFilterHash ||
+                    lastOfferId !== currentOfferId) {
+
+                    // Apply filters
+                    cachedResults = glb_offer.filter(offer => {
+                        if (glb_filters.offerFav && !offer.favorite) return false;
+                        if (glb_filters.offerMerchantSearch) {
+                            const searchTerm = glb_filters.offerMerchantSearch.toLowerCase();
+                            if (!offer.name.toLowerCase().includes(searchTerm)) return false;
+                        }
+
+                        if (glb_filters.offerCardEnding) {
+                            const matchingAccounts = glb_account.filter(acc =>
+                                acc.cardEnding.includes(glb_filters.offerCardEnding)
+                            ).map(acc => acc.account_token);
+
+                            const isEligible = offer.eligibleCards?.some(token => matchingAccounts.includes(token));
+                            const isEnrolled = offer.enrolledCards?.some(token => matchingAccounts.includes(token));
+
+                            if (!isEligible && !isEnrolled) return false;
+                        }
+
+                        if (glb_filters.enrollmentStatus === 'fully') {
+                            const eligible = offer.eligibleCards?.length || 0;
+                            const enrolled = offer.enrolledCards?.length || 0;
+                            if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
+                        } else if (glb_filters.enrollmentStatus === 'pending') {
+                            const eligible = offer.eligibleCards?.length || 0;
+                            const enrolled = offer.enrolledCards?.length || 0;
+                            if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
+                        }
+
+                        if (glb_filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
+                        if (glb_filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
+                        if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
+                            if (!glb_filters.customFilter(offer)) return false;
+                        }
+
+                        return true;
+                    });
+
+                    // Update cache keys
+                    cachedFilters = currentFilterHash;
+                    lastOfferId = currentOfferId;
+                }
+
+                return cachedResults;
+            },
+
+            /**
+             * Invalidates the cache, forcing a refresh on next request
+             */
+            invalidateCache() {
+                cachedResults = null;
+                cachedFilters = null;
+            }
+        };
+    })();
+
+    // Updated offers_filterOffersList function
+    function offers_filterOffersList() {
+        return MemoizedOffers.getFilteredOffers();
+    }
+
+
+    /**
+ * Updates a table incrementally without full re-render
+ * @param {HTMLElement} table - The table element to update
+ * @param {Array} newData - New data array
+ * @param {Function} renderer - Cell renderer function
+ * @param {string} keyField - Field to use as unique identifier
+ */
+    function updateTableIncrementally(table, newData, renderer, keyField = 'offerId') {
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+
+        // Get existing rows and create a map
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const rowMap = new Map();
+
+        // Map existing rows by their data key
+        rows.forEach(row => {
+            const key = row.dataset.key;
+            if (key) rowMap.set(key, row);
+        });
+
+        // Create document fragment for new rows
+        const fragment = document.createDocumentFragment();
+        let rowsAdded = 0;
+
+        // Process new data
+        newData.forEach((item, index) => {
+            const key = item[keyField];
+            const existingRow = rowMap.get(key);
+
+            if (existingRow) {
+                // Update existing row if needed
+                updateRowContent(existingRow, item, renderer);
+                // Mark as processed
+                rowMap.delete(key);
+            } else {
+                // Create new row
+                const newRow = createTableRow(item, renderer);
+                newRow.dataset.key = key;
+                fragment.appendChild(newRow);
+                rowsAdded++;
+            }
+        });
+
+        // Remove rows that no longer exist in the data
+        rowMap.forEach((row) => {
+            row.style.animation = 'fadeOut 0.3s ease forwards';
+            setTimeout(() => {
+                if (tbody.contains(row)) {
+                    tbody.removeChild(row);
+                }
+            }, 300);
+        });
+
+        // Append new rows
+        if (rowsAdded > 0) {
+            tbody.appendChild(fragment);
         }
 
-        // In case viewContent is a promise
-        if (viewContent && typeof viewContent.then === 'function') {
-            viewContent = await viewContent;
+        // Helper function to create a new row
+        function createTableRow(item, renderer) {
+            const row = document.createElement('tr');
+
+            // Add cells based on visible columns
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            headers.forEach(header => {
+                const key = header.dataset.key;
+                if (!key) return;
+
+                const cell = document.createElement('td');
+                const content = renderer(item, { key });
+
+                if (content instanceof Node) {
+                    cell.appendChild(content);
+                } else {
+                    cell.textContent = content || '';
+                }
+
+                row.appendChild(cell);
+            });
+
+            // Add animation
+            row.style.animation = 'fadeIn 0.3s ease forwards';
+            return row;
         }
 
-        content.appendChild(viewContent);
+        // Helper function to update row content
+        function updateRowContent(row, item, renderer) {
+            const cells = Array.from(row.querySelectorAll('td'));
+            const headers = Array.from(table.querySelectorAll('thead th'));
 
-        // Restore scroll state if available
-        const viewState = glb_view_scroll[glb_view_page];
-        if (viewState && typeof viewState.scrollTop === 'number') {
-            content.scrollTop = viewState.scrollTop;
+            headers.forEach((header, index) => {
+                if (index >= cells.length) return;
+
+                const key = header.dataset.key;
+                if (!key) return;
+
+                const cell = cells[index];
+                const content = renderer(item, { key });
+
+                // Only update if content changed
+                const newContent = content instanceof Node ?
+                    content.outerHTML : (content || '');
+                const oldContent = cell.innerHTML;
+
+                if (newContent !== oldContent) {
+                    cell.innerHTML = '';
+                    if (content instanceof Node) {
+                        cell.appendChild(content);
+                    } else {
+                        cell.textContent = content || '';
+                    }
+
+                    // Highlight updated cell
+                    cell.style.animation = 'pulse 1s ease';
+                }
+            });
         }
     }
+
+    const SmartRenderer = (() => {
+        // Track render state and changes
+        const state = {
+            currentView: null,
+            lastRenderTime: {},
+            isLoading: false,
+            componentsChanged: {
+                offers: false,
+                members: false,
+                benefits: false
+            }
+        };
+
+        // Cache rendered components
+        const viewCache = {
+            offers: null,
+            members: null,
+            benefits: null
+        };
+
+        return {
+            /**
+             * Mark a component as changed, requiring re-render
+             * @param {string} component - Component name
+             */
+            markChanged(component) {
+                if (state.componentsChanged.hasOwnProperty(component)) {
+                    state.componentsChanged[component] = true;
+
+                    // Also invalidate cache
+                    if (viewCache.hasOwnProperty(component)) {
+                        viewCache[component] = null;
+                    }
+                }
+            },
+
+            /**
+             * Renders the current view with optimization
+             * @param {boolean} forceFullRender - Force complete re-render
+             */
+            renderCurrentView(forceFullRender = false) {
+                if (!content) return;
+
+                // Show loading state for full renders or new views
+                const isNewView = state.currentView !== glb_view_page;
+                if (forceFullRender || isNewView || state.isLoading) {
+                    content.innerHTML = '';
+                    const loader = createLoaderElement();
+                    content.appendChild(loader);
+                    state.isLoading = true;
+                }
+
+                // Update current view tracking
+                state.currentView = glb_view_page;
+
+                // Determine if this component needs updating
+                const needsUpdate = forceFullRender ||
+                    isNewView ||
+                    state.componentsChanged[glb_view_page] ||
+                    !viewCache[glb_view_page];
+
+                // Render in a non-blocking way
+                setTimeout(async () => {
+                    try {
+                        if (needsUpdate) {
+                            // Render appropriate view
+                            let viewContent;
+
+                            switch (glb_view_page) {
+                                case 'members':
+                                    viewContent = members_renderPage();
+                                    state.componentsChanged.members = false;
+                                    break;
+                                case 'offers':
+                                    viewContent = offers_renderPage();
+                                    state.componentsChanged.offers = false;
+                                    break;
+                                case 'benefits':
+                                    viewContent = await benefits_renderPage();
+                                    state.componentsChanged.benefits = false;
+                                    break;
+                                default:
+                                    viewContent = members_renderPage();
+                                    state.componentsChanged.members = false;
+                            }
+
+                            // Handle async content
+                            if (viewContent && typeof viewContent.then === 'function') {
+                                viewContent = await viewContent;
+                            }
+
+                            // Cache the rendered view
+                            viewCache[glb_view_page] = viewContent;
+
+                            // Replace content
+                            content.innerHTML = '';
+                            content.appendChild(viewContent);
+                        } else {
+                            // Use cached view if available
+                            content.innerHTML = '';
+                            content.appendChild(viewCache[glb_view_page]);
+                        }
+
+                        // Restore scroll position
+                        if (glb_view_scroll[glb_view_page]?.scrollTop) {
+                            content.scrollTop = glb_view_scroll[glb_view_page].scrollTop;
+                        }
+
+                        // Update timestamp
+                        state.lastRenderTime[glb_view_page] = Date.now();
+                        state.isLoading = false;
+                    } catch (error) {
+                        console.error('Error rendering view:', error);
+                        content.innerHTML = '';
+                        content.appendChild(ui_createElement('div', {
+                            styleString: 'color:var(--ios-red); text-align:center; padding:40px;',
+                            text: `Error rendering view: ${error.message}`
+                        }));
+                        state.isLoading = false;
+                    }
+                }, 0);
+            }
+        };
+
+        // Helper function to create loader
+        function createLoaderElement() {
+            return ui_createElement('div', {
+                styleString: 'display:flex; justify-content:center; align-items:center; height:200px;',
+                children: [
+                    ui_createElement('div', {
+                        styleString: 'width:40px; height:40px; border:3px solid rgba(0,122,255,0.2); border-top:3px solid var(--ios-blue); border-radius:50%; animation:spin 1s linear infinite;'
+                    })
+                ]
+            });
+        }
+    })();
+
+
+    /**
+    * Performance utilities for controlling execution frequency
+    */
+    const PerformanceUtils = (() => {
+        return {
+            /**
+             * Throttles a function to run at most once in a specified interval
+             * @param {Function} func - Function to throttle
+             * @param {number} limit - Minimum milliseconds between executions
+             * @returns {Function} - Throttled function
+             */
+            throttle(func, limit) {
+                let lastCall = 0;
+                let lastResult;
+
+                return function (...args) {
+                    const now = Date.now();
+                    if (now - lastCall >= limit) {
+                        lastResult = func.apply(this, args);
+                        lastCall = now;
+                    }
+                    return lastResult;
+                };
+            },
+
+            /**
+             * Debounces a function to run only after wait period with no calls
+             * @param {Function} func - Function to debounce
+             * @param {number} wait - Milliseconds to wait
+             * @returns {Function} - Debounced function
+             */
+            debounce(func, wait) {
+                let timeout;
+                return function (...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            },
+
+            /**
+             * Runs a function on the next animation frame
+             * @param {Function} func - Function to run
+             * @returns {Function} - RAF-wrapped function
+             */
+            animFrame(func) {
+                return function (...args) {
+                    const context = this;
+                    return new Promise(resolve => {
+                        requestAnimationFrame(() => {
+                            const result = func.apply(context, args);
+                            resolve(result);
+                        });
+                    });
+                };
+            }
+        };
+    })();
+
+    // Application examples:
+
+    // Throttled sorting (prevents rapid re-sorting)
+    const throttledMemberSort = PerformanceUtils.throttle(members_sortTable, 300);
+    const throttledOfferSort = PerformanceUtils.throttle(offers_sortTable, 300);
+
+
+    const elementCache = new Map();
+    function getCachedElement(id, creator) {
+        if (!elementCache.has(id)) {
+            elementCache.set(id, creator());
+        }
+        return elementCache.get(id);
+    }
+
+    const memoizedFilters = {};
+    function getFilteredOffers(filterKey) {
+        const filterHash = JSON.stringify(glb_filters);
+        if (!memoizedFilters[filterKey] || memoizedFilters[filterKey].hash !== filterHash) {
+            memoizedFilters[filterKey] = {
+                hash: filterHash,
+                data: offers_filterOffersList()
+            };
+        }
+        return memoizedFilters[filterKey].data;
+    }
+
+    function updateTableRows(table, newData, keyField) {
+        const rows = table.querySelectorAll('tbody tr');
+        const rowMap = new Map();
+
+        // Map existing rows
+        rows.forEach(row => {
+            rowMap.set(row.dataset[keyField], row);
+        });
+
+        // Update only changed rows
+        newData.forEach((item, index) => {
+            const key = item[keyField];
+            if (rowMap.has(key)) {
+                // Update existing row
+                updateRowContent(rowMap.get(key), item);
+            } else {
+                // Add new row
+                addNewRow(table, item);
+            }
+        });
+    }
+
+    /**
+ * Creates a virtual scrolling table for large datasets
+ * @param {Object} config - Configuration object
+ */
+    function createVirtualScrollingTable(config) {
+        const {
+            container, // Container element
+            data, // Full data array
+            rowHeight = 50, // Height of each row in pixels
+            bufferRows = 10, // Number of extra rows to render above/below viewport
+            headers, // Table headers
+            colWidths, // Column widths
+            cellRenderer, // Cell renderer function
+            sortHandler, // Sort handler function
+            sortableKeys, // Sortable column keys
+            rowIdKey = 'id' // Key to use for row identification
+        } = config;
+
+        // Create table structure
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'virtual-table-wrapper';
+        tableWrapper.style.cssText = 'position:relative; overflow-y:auto; width:100%; height:100%;';
+
+        // Create actual table
+        const table = document.createElement('table');
+        table.className = 'ios-table virtual-table';
+        table.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; position:relative;';
+
+        // Create header
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+        thead.style.cssText = 'position:sticky; top:0; z-index:10; background:var(--ios-header-bg);';
+
+        const headerRow = document.createElement('tr');
+        headers.forEach(headerItem => {
+            const th = document.createElement('th');
+            th.textContent = headerItem.label;
+            th.dataset.key = headerItem.key;
+
+            // Apply column width if specified
+            if (colWidths && colWidths[headerItem.key]) {
+                th.style.width = colWidths[headerItem.key];
+            }
+
+            // Add sort functionality
+            if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
+                th.className = 'sortable';
+                th.style.cursor = 'pointer';
+                th.addEventListener('click', () => sortHandler(headerItem.key));
+            }
+
+            headerRow.appendChild(th);
+        });
+
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Create body and placeholder
+        const tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+
+        // Create spacer elements
+        const topSpacer = document.createElement('tr');
+        topSpacer.className = 'virtual-spacer top-spacer';
+        topSpacer.style.height = '0px';
+
+        const bottomSpacer = document.createElement('tr');
+        bottomSpacer.className = 'virtual-spacer bottom-spacer';
+
+        tbody.appendChild(topSpacer);
+        tbody.appendChild(bottomSpacer);
+
+        tableWrapper.appendChild(table);
+        container.appendChild(tableWrapper);
+
+        // Store internal state
+        const state = {
+            firstVisibleRow: 0,
+            lastVisibleRow: 0,
+            totalRows: data.length,
+            renderedRows: new Map(),
+            scrollTop: 0
+        };
+
+        // Initial render
+        calculateVisibleRows();
+        renderVisibleRows();
+
+        // Add scroll handler
+        const scrollHandler = PerformanceUtils.throttle(() => {
+            if (tableWrapper.scrollTop !== state.scrollTop) {
+                state.scrollTop = tableWrapper.scrollTop;
+                calculateVisibleRows();
+                renderVisibleRows();
+            }
+        }, 16); // ~60fps
+
+        tableWrapper.addEventListener('scroll', scrollHandler);
+
+        // Expose API for external updates
+        return {
+            /**
+             * Updates the data and rerenders
+             * @param {Array} newData - New data array
+             */
+            updateData(newData) {
+                data.length = 0;
+                data.push(...newData);
+                state.totalRows = data.length;
+                state.renderedRows.clear();
+                calculateVisibleRows();
+                renderVisibleRows();
+            },
+
+            /**
+             * Gets the current visible row range
+             * @returns {Object} - First and last visible row
+             */
+            getVisibleRange() {
+                return {
+                    first: state.firstVisibleRow,
+                    last: state.lastVisibleRow
+                };
+            },
+
+            /**
+             * Scrolls to a specific row
+             * @param {number} rowIndex - Index of row to scroll to
+             */
+            scrollToRow(rowIndex) {
+                if (rowIndex >= 0 && rowIndex < state.totalRows) {
+                    tableWrapper.scrollTop = rowIndex * rowHeight;
+                }
+            },
+
+            /**
+             * Refreshes the current view
+             */
+            refresh() {
+                state.renderedRows.clear();
+                calculateVisibleRows();
+                renderVisibleRows();
+            }
+        };
+
+        // Helper function to calculate visible row range
+        function calculateVisibleRows() {
+            const scrollTop = tableWrapper.scrollTop;
+            const viewportHeight = tableWrapper.clientHeight;
+
+            // Calculate range with buffer
+            const firstVisible = Math.floor(scrollTop / rowHeight);
+            const visibleCount = Math.ceil(viewportHeight / rowHeight);
+
+            state.firstVisibleRow = Math.max(0, firstVisible - bufferRows);
+            state.lastVisibleRow = Math.min(
+                state.totalRows - 1,
+                firstVisible + visibleCount + bufferRows
+            );
+
+            // Update spacers
+            topSpacer.style.height = `${state.firstVisibleRow * rowHeight}px`;
+            const bottomSpacerHeight = Math.max(
+                0,
+                (state.totalRows - state.lastVisibleRow - 1) * rowHeight
+            );
+            bottomSpacer.style.height = `${bottomSpacerHeight}px`;
+        }
+
+        // Helper function to render only visible rows
+        function renderVisibleRows() {
+            // Create record of current rows
+            const currentRows = new Set(state.renderedRows.keys());
+            const newRows = new Set();
+
+            // Create document fragment for batch insertion
+            const fragment = document.createDocumentFragment();
+
+            // Process visible range
+            for (let i = state.firstVisibleRow; i <= state.lastVisibleRow; i++) {
+                if (i >= data.length) break;
+
+                newRows.add(i);
+
+                // Skip if already rendered
+                if (state.renderedRows.has(i)) {
+                    currentRows.delete(i);
+                    continue;
+                }
+
+                // Create row
+                const item = data[i];
+                const row = document.createElement('tr');
+                row.dataset.index = i;
+                row.dataset.id = item[rowIdKey] || i;
+
+                // Create cells
+                headers.forEach(headerItem => {
+                    const td = document.createElement('td');
+
+                    // Apply column width if specified
+                    if (colWidths && colWidths[headerItem.key]) {
+                        td.style.width = colWidths[headerItem.key];
+                    }
+
+                    // Render cell content
+                    const cellContent = cellRenderer(item, headerItem);
+                    if (cellContent instanceof Node) {
+                        td.appendChild(cellContent);
+                    } else {
+                        td.textContent = cellContent || '';
+                    }
+
+                    row.appendChild(td);
+                });
+
+                // Store in render map
+                state.renderedRows.set(i, row);
+                fragment.appendChild(row);
+            }
+
+            // Remove rows that are no longer visible
+            currentRows.forEach(index => {
+                const row = state.renderedRows.get(index);
+                if (row && row.parentNode) {
+                    row.parentNode.removeChild(row);
+                }
+                state.renderedRows.delete(index);
+            });
+
+            // Insert new rows
+            if (fragment.childNodes.length > 0) {
+                tbody.insertBefore(fragment, bottomSpacer);
+            }
+        }
+    }
+
+    // Example usage in a table view function
+    function offers_renderVirtualTableView() {
+        const filteredOffers = offers_filterOffersList();
+
+        if (filteredOffers.length === 0) {
+            return ui_createEmptyState(document.createElement('div'), {
+                title: 'No Offers Found',
+                message: 'No offers match your current filters',
+                buttonText: 'Reset Filters',
+                callback: () => {
+                    offers_resetAllFilters();
+                    ui_renderCurrentView();
+                }
+            });
+        }
+
+        const headers = [ /* your existing headers */];
+        const colWidths = { /* your existing column widths */ };
+
+        // Container for virtual table
+        const container = document.createElement('div');
+        container.id = 'offers-virtual-table-container';
+        container.style.cssText = 'height:600px; width:100%;';
+
+        // Create virtual table after the container is in the DOM
+        setTimeout(() => {
+            createVirtualScrollingTable({
+                container,
+                data: filteredOffers,
+                rowHeight: 60,
+                headers,
+                colWidths,
+                cellRenderer: offers_cellRenderer,
+                sortHandler: offers_sortTable,
+                sortableKeys
+            });
+        }, 0);
+
+        return container;
+    }
+
+    /**
+ * Pre-computes and manages table data for efficient rendering
+ */
+    const TableDataProcessor = (() => {
+        // Cache for processed data
+        const processedData = new Map();
+
+        return {
+            /**
+             * Process data for table rendering with cell pre-computation
+             * @param {string} tableId - Unique ID for this table
+             * @param {Array} rawData - Raw data array
+             * @param {Object} options - Processing options
+             * @returns {Array} - Processed data ready for rendering
+             */
+            processTableData(tableId, rawData, options = {}) {
+                const {
+                    processFunctions = {}, // Map of column key to processor function
+                    computeDerivedFields = [], // Array of functions to compute new fields
+                    sortState = null, // Current sort state
+                    filterFn = null // Current filter function
+                } = options;
+
+                // Create a unique cache key
+                const cacheKey = `${tableId}-${JSON.stringify(sortState)}-${filterFn ? filterFn.toString() : 'nofilter'}`;
+
+                // Check cache first
+                if (processedData.has(cacheKey)) {
+                    const cached = processedData.get(cacheKey);
+                    if (cached.timestamp > Date.now() - 5000 && // Cache valid for 5 seconds
+                        cached.dataLength === rawData.length) {
+                        return cached.data;
+                    }
+                }
+
+                // Start with a filtered copy if filter function provided
+                let processedItems = filterFn ? rawData.filter(filterFn) : [...rawData];
+
+                // Apply sorting if provided
+                if (sortState && sortState.key) {
+                    processedItems.sort((a, b) => {
+                        const valueA = a[sortState.key];
+                        const valueB = b[sortState.key];
+                        return sortState.direction * String(valueA).localeCompare(String(valueB));
+                    });
+                }
+
+                // Compute derived fields
+                processedItems = processedItems.map(item => {
+                    const result = { ...item };
+
+                    // Apply each derivation function
+                    computeDerivedFields.forEach(deriveFn => {
+                        Object.assign(result, deriveFn(item));
+                    });
+
+                    // Pre-compute cell values for known processors
+                    Object.entries(processFunctions).forEach(([key, processFn]) => {
+                        result[`__processed_${key}`] = processFn(item);
+                    });
+
+                    return result;
+                });
+
+                // Cache the processed data
+                processedData.set(cacheKey, {
+                    data: processedItems,
+                    timestamp: Date.now(),
+                    dataLength: rawData.length
+                });
+
+                return processedItems;
+            },
+
+            /**
+             * Clears the processing cache for a specific table or all tables
+             * @param {string} [tableId] - Specific table ID to clear or all if omitted
+             */
+            clearCache(tableId) {
+                if (tableId) {
+                    // Remove specific table entries
+                    for (const key of processedData.keys()) {
+                        if (key.startsWith(`${tableId}-`)) {
+                            processedData.delete(key);
+                        }
+                    }
+                } else {
+                    // Clear all
+                    processedData.clear();
+                }
+            }
+        };
+    })();
+
+    /**
+ * Enhanced reactive filter handler for immediate UI updates
+ */
+    function createReactiveFilter(container, options = {}) {
+        const {
+            searchPlaceholder = 'Search...',
+            onSearch = () => { },
+            initialValue = '',
+            onFilterChange = null,
+            debounceDelay = 200 // Add debounce delay parameter with default 300ms
+        } = options;
+
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'ios-search-container';
+        searchContainer.style.cssText = 'position:relative; width:100%; max-width:300px;';
+
+        // Create search input
+        const input = document.createElement('input');
+        input.className = 'ios-search-input';
+        input.type = 'text';
+        input.placeholder = searchPlaceholder;
+        input.value = initialValue;
+        input.style.cssText = UI_STYLES.controls.search;
+
+        // Add icon
+        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        searchIcon.setAttribute('width', '16');
+        searchIcon.setAttribute('height', '16');
+        searchIcon.setAttribute('viewBox', '0 0 24 24');
+        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        searchIcon.appendChild(path);
+
+        // Add clear button
+        const clearButton = document.createElement('button');
+        clearButton.innerHTML = '×';
+        clearButton.style.cssText = 'position:absolute; right:30px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:18px; cursor:pointer; color:#999; display:none;';
+
+        // Create debounced update function
+        let debounceTimeout;
+
+        const triggerFilterChange = (value) => {
+            if (onFilterChange) {
+                onFilterChange(value);
+            } else {
+                MemoizedOffers.invalidateCache();
+                ui_renderCurrentView(true);
+            }
+        };
+
+        // Handle input with debounce
+        input.addEventListener('input', function () {
+            const searchValue = this.value.toLowerCase();
+
+            // Update filter state immediately
+            glb_filters.memberMerchantSearch = searchValue;
+            glb_filters.offerMerchantSearch = searchValue;
+
+            // Show/hide clear button immediately
+            clearButton.style.display = searchValue ? 'block' : 'none';
+
+            // Call the search handler
+            onSearch(searchValue);
+
+            // Show visual feedback that something is happening
+            searchIcon.style.color = 'var(--ios-orange)';
+
+            // Debounce the actual filtering/rendering
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                triggerFilterChange(searchValue);
+                searchIcon.style.color = 'var(--ios-blue)';
+            }, debounceDelay);
+        });
+
+        // Clear button functionality
+        clearButton.addEventListener('click', () => {
+            input.value = '';
+            glb_filters.memberMerchantSearch = '';
+            glb_filters.offerMerchantSearch = '';
+            clearButton.style.display = 'none';
+
+            // Clear any pending debounce
+            clearTimeout(debounceTimeout);
+
+            // Immediately trigger update for clearing
+            triggerFilterChange('');
+            input.focus();
+        });
+
+        searchContainer.appendChild(input);
+        searchContainer.appendChild(searchIcon);
+        searchContainer.appendChild(clearButton);
+        container.appendChild(searchContainer);
+
+        return {
+            container: searchContainer,
+            input: input,
+            getValue: () => input.value.toLowerCase(),
+            setValue: (val) => {
+                input.value = val;
+                clearButton.style.display = val ? 'block' : 'none';
+            }
+        };
+    }
+
+    /**
+ * Adds optimized CSS animation keyframes
+ */
+    function addOptimizedAnimations() {
+        const style = document.createElement('style');
+        style.textContent = `
+      /* Hardware-accelerated animations */
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+  
+      @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(10px); }
+      }
+  
+      @keyframes pulse {
+        0% { background-color: transparent; }
+        30% { background-color: rgba(0, 122, 255, 0.1); }
+        100% { background-color: transparent; }
+      }
+  
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+  
+      /* Hardware acceleration classes */
+      .hw-accelerated {
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        perspective: 1000px;
+      }
+  
+      /* Animation utility classes */
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease forwards;
+      }
+  
+      .animate-fade-out {
+        animation: fadeOut 0.3s ease forwards;
+      }
+  
+      .animate-pulse {
+        animation: pulse 1s ease;
+      }
+  
+      /* Virtual scrolling optimization */
+      .virtual-table-wrapper {
+        -webkit-overflow-scrolling: touch;
+        overflow-scrolling: touch;
+      }
+  
+      .virtual-table thead th {
+        will-change: transform;
+      }
+  
+      /* Optimize common elements */
+      .ios-table {
+        contain: content;
+      }
+  
+      .ios-table tbody tr {
+        contain: layout style;
+      }
+    `;
+
+        document.head.appendChild(style);
+    }
+
+
+    function ui_renderCurrentView(forceFullRender = false) {
+        SmartRenderer.renderCurrentView(forceFullRender);
+    }
+
 
     // =========================================================================
     // Section 7: Local Storage Handling
@@ -8207,6 +7251,9 @@
         const auth = await auth_init();
         if (!auth) { alert("Authorization failed."); return; }
 
+        // Add optimized animations first
+        addOptimizedAnimations();
+
         const ui = ui_createMain();
         ({ container, content, viewBtns, toggleBtn, btnMembers, btnOffers, btnBenefits } = ui);
 
@@ -8225,15 +7272,14 @@
 
             lastUpdate = new Date().toLocaleString();
             storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
-            await ui_renderCurrentView();
+            SmartRenderer.renderCurrentView(true);
         } else {
             console.log("Using data from LocalStorage.");
             await api_fetchAllBalances();
+            SmartRenderer.renderCurrentView();
         }
 
         btnMembers.classList.add('active');
-
-        ui_renderCurrentView();
     }
 
     init();
