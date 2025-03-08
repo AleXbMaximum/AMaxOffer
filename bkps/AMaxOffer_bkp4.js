@@ -374,74 +374,6 @@
     // Call this function to add the global styles at the beginning
     addGlobalStyle();
 
-    function addOptimizedAnimations() {
-        const style = document.createElement('style');
-        style.textContent = `
-        /* Hardware-accelerated animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    
-        @keyframes fadeOut {
-            from { opacity: 1; transform: translateY(0); }
-            to { opacity: 0; transform: translateY(10px); }
-        }
-    
-        @keyframes pulse {
-            0% { background-color: transparent; }
-            30% { background-color: rgba(0, 122, 255, 0.1); }
-            100% { background-color: transparent; }
-        }
-    
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    
-        /* Hardware acceleration classes */
-        .hw-accelerated {
-            transform: translateZ(0);
-            backface-visibility: hidden;
-            perspective: 1000px;
-        }
-    
-        /* Animation utility classes */
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease forwards;
-        }
-    
-        .animate-fade-out {
-            animation: fadeOut 0.3s ease forwards;
-        }
-    
-        .animate-pulse {
-            animation: pulse 1s ease;
-        }
-    
-        /* Virtual scrolling optimization */
-        .virtual-table-wrapper {
-            -webkit-overflow-scrolling: touch;
-            overflow-scrolling: touch;
-        }
-    
-        .virtual-table thead th {
-            will-change: transform;
-        }
-    
-        /* Optimize common elements */
-        .ios-table {
-            contain: content;
-        }
-    
-        .ios-table tbody tr {
-            contain: layout style;
-        }
-        `;
-
-        document.head.appendChild(style);
-    }
-
     const UI_STYLES = {
         // Layout containers
         containers: {
@@ -681,191 +613,6 @@
 
     let content, viewBtns, toggleBtn, container, btnMembers, btnOffers, btnBenefits;
 
-
-    // =========================================================================
-    // Section 3: General Helper Functions
-    // =========================================================================
-
-    const util_antiKickOff = (() => {
-        // Instead of overriding prototype methods, create a wrapper for the element
-        const managedElements = new Map();
-
-        const manage = (element) => {
-            if (managedElements.has(element)) return managedElements.get(element);
-
-            const listeners = [];
-            const originalAdd = element.addEventListener.bind(element);
-            const originalRemove = element.removeEventListener.bind(element);
-
-            const wrapper = {
-                addListener: (type, listener, options) => {
-                    listeners.push({ type, listener, options });
-                    return originalAdd(type, listener, options);
-                },
-                removeListener: (type, listener, options) => {
-                    const index = listeners.findIndex(l =>
-                        l.type === type && l.listener === listener && l.options === options);
-                    if (index !== -1) listeners.splice(index, 1);
-                    return originalRemove(type, listener, options);
-                },
-                getListeners: (typeFilter) => typeFilter ?
-                    listeners.filter(l => l.type === typeFilter) : [...listeners]
-            };
-
-            managedElements.set(element, wrapper);
-            return wrapper;
-        };
-        // Private registry to track event listeners.
-        const registry = new WeakMap();
-
-        // Preserve original methods.
-        const origAddEventListener = EventTarget.prototype.addEventListener;
-        const origRemoveEventListener = EventTarget.prototype.removeEventListener;
-
-        // Override addEventListener to store registrations.
-        EventTarget.prototype.addEventListener = function (type, listener, options) {
-            if (!registry.has(this)) {
-                registry.set(this, []);
-            }
-            registry.get(this).push({ type, listener, options });
-            return origAddEventListener.call(this, type, listener, options);
-        };
-
-        // Override removeEventListener to update our registry.
-        EventTarget.prototype.removeEventListener = function (type, listener, options) {
-            if (registry.has(this)) {
-                const arr = registry.get(this);
-                for (let i = 0; i < arr.length; i++) {
-                    const item = arr[i];
-                    if (item.type === type && item.listener === listener && item.options === options) {
-                        arr.splice(i, 1);
-                        break;
-                    }
-                }
-            }
-            return origRemoveEventListener.call(this, type, listener, options);
-        };
-
-        // Helper to retrieve tracked event listeners.
-        const getTrackedEventListeners = (target, typeFilter) => {
-            const arr = registry.get(target) || [];
-            return typeFilter ? arr.filter(item => item.type === typeFilter) : arr;
-        };
-
-        // Remove all "visibilitychange" listeners from the document.
-        const removeVisibilityListeners = () => {
-            const visListeners = getTrackedEventListeners(document, 'visibilitychange');
-            visListeners.forEach(({ listener, options }) => {
-                document.removeEventListener('visibilitychange', listener, options);
-            });
-            console.log("Removed all 'visibilitychange' listeners from document using our tracker.");
-        };
-
-        // Function to extend the session by calling window.timeout.checkVisibility.
-        const extendSession = () => {
-
-            const realWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-            if (realWindow.timeout && typeof realWindow.timeout.checkVisibility === 'function') {
-                console.log("Extending session....");
-                realWindow.timeout.checkVisibility({ hidden: true });
-            }
-        };
-
-
-        // Public API.
-        return {
-            getTrackedEventListeners,
-            removeVisibilityListeners,
-            startSessionExtender: (interval = 60000) => setInterval(extendSession, interval)
-        };
-    })();
-
-    util_antiKickOff.removeVisibilityListeners();
-    util_antiKickOff.startSessionExtender(60000);
-
-    // Run tasks in batches to control concurrency
-    async function util_runTasksInBatches(tasks, limit) {
-        const results = [];
-        let i = 0;
-        while (i < tasks.length) {
-            const chunk = tasks.slice(i, i + limit);
-            // Each "task" returns a single object: { offerId, accountToken, result: boolean }
-            const chunkResults = await Promise.all(chunk.map(fn => fn()));
-            results.push(...chunkResults);
-            i += limit;
-        }
-        return results;
-    }
-
-
-    function util_formatDate(dateStr, roundUp = false) {
-        let d = new Date(dateStr);
-        if (roundUp && !isNaN(d)) {
-            d.setDate(d.getDate() + 1);
-        }
-        if (isNaN(d)) return 'N/A';
-        let mm = String(d.getMonth() + 1).padStart(2, '0');
-        let dd = String(d.getDate()).padStart(2, '0');
-        let yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-    }
-
-
-    function util_cleanValue(val) {
-        if (val === "N/A" || val === null || val === undefined || val === "" || val === 0) {
-            return "0";
-        }
-        return val;
-    }
-
-
-    // Parse card index into main and sub-index components
-    function util_parseCardIndex(indexStr) {
-        if (!indexStr) return [0, 0];
-        const parts = indexStr.split('-');
-        const main = parseInt(parts[0], 10) || 0;
-        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
-        return [main, sub];
-    }
-
-
-    // Utility to get the basic account ending for a supplementary account
-    function members_getParentCardNumber(suppAccount) {
-        const parts = suppAccount.cardIndex.split('-');
-        if (parts.length > 1) {
-            const mainIndex = parts[0];
-            // Find the basic account whose cardIndex equals mainIndex and has relationship "BASIC"
-            const basicAccount = glb_account.find(acc => acc.cardIndex === mainIndex && acc.relationship === "BASIC");
-            if (basicAccount) {
-                return basicAccount.cardEnding;
-            }
-        }
-        return "N/A";
-    }
-
-
-    function util_parseNumber(str) {
-        if (str === undefined || str === null || str === '' || str === 'N/A') return 0;
-        if (typeof str === 'number') return str;
-        const cleanedStr = String(str).replace(/[$,]/g, '');
-        if (cleanedStr.includes('%')) {
-            return parseFloat(cleanedStr.replace(/%/g, '')) || 0;
-        }
-        const parsed = parseFloat(cleanedStr);
-        return parsed;
-    }
-
-
-
-    // util_debounce function for input events
-    function util_debounce(func, wait) {
-        let timeout;
-        return function (...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-    }
-
     // =========================================================================
     // Section 3: UI Elements Creation
     // =========================================================================
@@ -1028,6 +775,81 @@
         });
     }
 
+    function ui_createFilterBar(options = {}) {
+        const {
+            searchPlaceholder = 'Search...',
+            resetCallback = () => { },
+            onSearch = () => { },
+            additionalControls = []
+        } = options;
+
+        const filtersCard = ui_createElement('div', {
+            styleString: `
+                    ${UI_STYLES.containers.card}
+                    display:flex; flex-wrap:wrap; gap:16px; 
+                    margin-bottom:8px; align-items:center; 
+                    justify-content:flex-end;
+                `
+        });
+
+        // Create search container
+        const searchContainer = ui_createElement('div', {
+            styleString: 'display:flex; gap:12px; align-items:center; flex-wrap:nowrap; margin-left:auto;'
+        });
+
+        // Search input container
+        const searchInputContainer = ui_createElement('div', {
+            styleString: 'position:relative; width:250px; max-width:300px; margin-right:4px; box-shadow:0 1px 3px rgba(0, 0, 0, 0.03); border-radius:10px;'
+        });
+
+        // Search icon
+        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        searchIcon.setAttribute('width', '16');
+        searchIcon.setAttribute('height', '16');
+        searchIcon.setAttribute('viewBox', '0 0 24 24');
+        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        searchIcon.appendChild(path);
+
+        // Create search input
+        const input = ui_createElement('input', {
+            props: {
+                type: 'text',
+                placeholder: searchPlaceholder,
+                className: 'ios-search-input',
+            },
+            styleString: UI_STYLES.controls.search,
+            events: {
+                input: util_debounce(() => {
+                    onSearch(input.value);
+                }, 300)
+            }
+        });
+
+        searchInputContainer.appendChild(input);
+        searchInputContainer.appendChild(searchIcon);
+        searchContainer.appendChild(searchInputContainer);
+
+        // Add additional controls
+        additionalControls.forEach(control => {
+            searchContainer.appendChild(control);
+        });
+
+        // Add reset button
+        const resetButton = ui_createBtn_v2({
+            label: 'Reset Filters',
+            type: 'secondary',
+            onClick: resetCallback
+        });
+
+        searchContainer.appendChild(resetButton);
+        filtersCard.appendChild(searchContainer);
+
+        return filtersCard;
+    }
 
     // Helper function to create stylized badge elements
     function ui_createBadge(config = {}) {
@@ -1182,417 +1004,13 @@
         };
     }
 
-    // Core table renderer with iOS styling and smaller text
-    function ui_renderDataTable(headers, colWidths, items, cellRenderer, sortHandler, sortableKeys) {
-        // Create main table with explicit styling using CSS variables
-        const tableElement = document.createElement('table');
-        tableElement.className = 'ios-table';
-        tableElement.style.cssText = `
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-size: var(--ios-table-cell-font-size);
-            color: var(--ios-text-secondary);
-            border-radius: var(--ios-table-border-radius);
-            overflow: hidden;
-            box-shadow: var(--ios-shadow-sm);
-            border: var(--ios-border-light);
-            background-color: var(--ios-background);
-            display: table;
-        `;
-
-        // Create header
-        const thead = document.createElement('thead');
-        thead.className = 'ios-table-head';
-        thead.style.cssText = `
-            background: var(--ios-header-bg);
-            border-bottom: var(--ios-border-light);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-        `;
-
-        const headerRow = document.createElement('tr');
-
-        headers.forEach(headerItem => {
-            const th = document.createElement('th');
-            th.textContent = headerItem.label;
-            th.style.cssText = `
-                padding: var(--ios-table-cell-padding);
-                font-size: var(--ios-table-header-font-size);
-                font-weight: 600;
-                color: var(--ios-text-secondary);
-                text-align: left;
-                border-right: var(--ios-border-light);  `;
-
-            // Apply column width if specified
-            if (colWidths && colWidths[headerItem.key]) {
-                th.style.width = colWidths[headerItem.key];
-            }
-
-            // Add sort functionality
-            if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
-                th.className = 'sortable';
-                th.setAttribute('data-sort-key', headerItem.key);
-                th.style.position = 'relative';
-                th.style.paddingRight = '28px';
-                th.style.cursor = 'pointer';
-
-                // Create sort button
-                const sortButton = document.createElement('div');
-                sortButton.className = 'ios-sort-button';
-                sortButton.style.cssText = `
-                    position: absolute;
-                    right: 8px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
-
-                // Create sort indicator with SVG
-                const sortIcon = document.createElement('div');
-                sortIcon.className = 'ios-sort-indicator';
-                sortIcon.style.cssText = `
-                    width: 8px;
-                    height: 8px;
-                    transition: all var(--ios-anim-fast) ease;
-                    opacity: 0.4;
-                `;
-
-                // Set current sort state
-                const isActive = window.glb_memberSortState?.key === headerItem.key ||
-                    window.glb_offerSortState?.key === headerItem.key;
-                const direction = isActive ?
-                    (window.glb_memberSortState?.key === headerItem.key ?
-                        window.glb_memberSortState.direction :
-                        window.glb_offerSortState?.direction) :
-                    1;
-
-                if (isActive) {
-                    sortIcon.classList.add('active');
-                    sortIcon.style.opacity = '1';
-                    sortIcon.classList.add(direction === 1 ? 'asc' : 'desc');
-                    sortIcon.innerHTML = direction === 1 ?
-                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
-                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
-                } else {
-                    sortIcon.innerHTML =
-                        `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
-                            <path d="M4 1v6M1 4h6"/>
-                        </svg>`;
-                }
-
-                sortButton.appendChild(sortIcon);
-                th.appendChild(sortButton);
-
-                // Handle click for sorting
-                th.addEventListener('click', () => {
-                    sortHandler(headerItem.key);
-
-                    // Reset all indicators
-                    th.closest('tr').querySelectorAll('.ios-sort-indicator').forEach(icon => {
-                        icon.classList.remove('active', 'asc', 'desc');
-                        icon.style.opacity = '0.4';
-                        icon.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
-                            <path d="M4 1v6M1 4h6"/>
-                        </svg>`;
-                    });
-
-                    // Update with animation
-                    setTimeout(() => {
-                        const updatedDirection = (window.glb_memberSortState?.key === headerItem.key)
-                            ? window.glb_memberSortState.direction
-                            : window.glb_offerSortState?.direction;
-
-                        sortIcon.classList.add('active');
-                        sortIcon.style.opacity = '1';
-                        sortIcon.classList.add(updatedDirection === 1 ? 'asc' : 'desc');
-                        sortIcon.innerHTML = updatedDirection === 1 ?
-                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
-                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
-
-                        // Add animation class
-                        sortIcon.classList.add('ios-sort-animation');
-                        setTimeout(() => sortIcon.classList.remove('ios-sort-animation'), 300);
-                    }, 0);
-                });
-            }
-
-            headerRow.appendChild(th);
-        });
-
-        thead.appendChild(headerRow);
-        tableElement.appendChild(thead);
-
-        // Create body
-        const tbody = document.createElement('tbody');
-
-        // Handle empty state
-        if (!items || items.length === 0) {
-            const emptyRow = document.createElement('tr');
-            const emptyCell = document.createElement('td');
-            emptyCell.colSpan = headers.length;
-            emptyCell.className = 'ios-empty-state';
-            emptyCell.style.cssText = `
-                padding: var(--ios-empty-padding);
-                text-align: center;
-                color: var(--ios-gray);`;
-
-            const emptyStateDiv = document.createElement('div');
-            emptyStateDiv.className = 'ios-empty-state-container';
-            emptyStateDiv.innerHTML = `
-                <div class="ios-empty-state-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                </div>
-                <div class="ios-empty-state-title">No Items Found</div>
-                <div class="ios-empty-state-message">Try adjusting your search or filters</div>`;
-
-            emptyCell.appendChild(emptyStateDiv);
-            emptyRow.appendChild(emptyCell);
-            tbody.appendChild(emptyRow);
-        } else {
-            // Create rows
-            items.forEach((item, idx) => {
-                const row = document.createElement('tr');
-                row.style.cssText = `transition: background-color var(--ios-anim-fast) ease;`;
-
-                if (idx % 2 === 1) {
-                    row.style.backgroundColor = 'var(--ios-secondary-bg)';
-                }
-
-                // Check for highlighting
-                function shouldHighlightItem(item) {
-                    if (!glb_filters?.memberMerchantSearch) return { shouldHighlight: false };
-
-                    const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
-                    if (!searchTerm) return { shouldHighlight: false };
-
-                    // Check direct matches
-                    const accountMatches =
-                        item.account_token.toLowerCase().includes(searchTerm) ||
-                        (item.embossed_name && item.embossed_name.toLowerCase().includes(searchTerm)) ||
-                        (item.description && item.description.toLowerCase().includes(searchTerm));
-
-                    if (accountMatches) return { shouldHighlight: true, matchType: 'account' };
-
-                    // Check related offers
-                    const matchingEnrolledOffers = glb_offer?.filter(offer => {
-                        const nameMatch = offer.name.toLowerCase().includes(searchTerm);
-                        const isEnrolled = Array.isArray(offer.enrolledCards) &&
-                            offer.enrolledCards.includes(item.account_token);
-                        return nameMatch && isEnrolled;
-                    });
-
-                    const matchingEligibleOffers = glb_offer?.filter(offer => {
-                        const nameMatch = offer.name.toLowerCase().includes(searchTerm);
-                        const isEligible = Array.isArray(offer.eligibleCards) &&
-                            offer.eligibleCards.includes(item.account_token);
-                        return nameMatch && isEligible;
-                    });
-
-                    return {
-                        shouldHighlight: matchingEnrolledOffers.length > 0 || matchingEligibleOffers.length > 0,
-                        matchType: matchingEnrolledOffers.length > 0 ? 'enrolled' :
-                            (matchingEligibleOffers.length > 0 ? 'eligible' : null),
-                        matchingEnrolledOffers,
-                        matchingEligibleOffers
-                    };
-                }
-
-                // Update where the function is used in row creation (inside the createVirtualScrollingTable function)
-                // Find this part in the code and replace with:
-
-                if (glb_view_page === "members" && glb_filters?.memberMerchantSearch) {
-                    const highlightData = shouldHighlightItem(item);
-
-                    if (highlightData.shouldHighlight) {
-                        row.classList.add('ios-highlight-row');
-                        row.dataset.highlighted = 'true';
-
-                        // Apply different highlight styles based on match type
-                        if (highlightData.matchType === 'enrolled') {
-                            // Green highlight for enrolled offers
-                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
-                            row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
-                        } else if (highlightData.matchType === 'eligible') {
-                            // Blue highlight for eligible offers
-                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                            row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
-                        } else {
-                            // Default yellow highlight for direct account matches
-                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
-                            row.style.borderLeft = '3px solid var(--ios-highlight-border)';
-                        }
-
-                        // Store match data for tooltips or additional UI features
-                        if (highlightData.matchingEnrolledOffers?.length > 0) {
-                            row.dataset.matchedEnrolledOffers = highlightData.matchingEnrolledOffers.length;
-                        }
-                        if (highlightData.matchingEligibleOffers?.length > 0) {
-                            row.dataset.matchedEligibleOffers = highlightData.matchingEligibleOffers.length;
-                        }
-                    }
-                }
-
-                // Update mouse event listeners to preserve highlight colors
-                row.addEventListener('mouseenter', () => {
-                    if (row.dataset.highlighted === 'true') {
-                        // Make hover slightly darker but preserve the color type
-                        if (row.dataset.matchedEnrolledOffers) {
-                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.25)';
-                        } else if (row.dataset.matchedEligibleOffers) {
-                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.25)';
-                        } else {
-                            row.style.backgroundColor = 'var(--ios-highlight-hover)';
-                        }
-                    } else {
-                        row.style.backgroundColor = 'var(--ios-table-row-hover)';
-                    }
-                });
-
-                row.addEventListener('mouseleave', () => {
-                    if (row.dataset.highlighted === 'true') {
-                        // Restore original highlight color
-                        if (row.dataset.matchedEnrolledOffers) {
-                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
-                        } else if (row.dataset.matchedEligibleOffers) {
-                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                        } else {
-                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
-                        }
-                    } else {
-                        row.style.backgroundColor = i % 2 === 1 ? 'var(--ios-secondary-bg)' : '';
-                    }
-                });
-
-                // Create cells
-                headers.forEach(headerItem => {
-                    const td = document.createElement('td');
-                    td.style.cssText = `
-                        padding: var(--ios-table-cell-padding);
-                        border-bottom: var(--ios-border-light);
-                        vertical-align: middle;
-                    `;
-
-                    // Apply column width if specified
-                    if (colWidths && colWidths[headerItem.key]) {
-                        td.style.width = colWidths[headerItem.key];
-                        td.style.maxWidth = colWidths[headerItem.key];
-                    }
-
-                    try {
-                        // Get content using cell renderer
-                        const content = cellRenderer(item, headerItem);
-
-                        // Handle different types of content
-                        if (content instanceof Node) {
-                            td.appendChild(content);
-                        } else if (typeof content === 'string') {
-                            // Format currency
-                            if (/^\$?\d+(\.\d{2})?$/.test(content)) {
-                                const span = document.createElement('span');
-                                span.className = 'ios-currency';
-                                span.style.cssText = `
-                                    font-variant-numeric: tabular-nums;
-                                    font-weight: 500;
-                                    text-align: right;
-                                `;
-                                span.textContent = content;
-                                td.appendChild(span);
-                            }
-                            // Format status indicators
-                            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
-                                const statusSpan = document.createElement('span');
-                                statusSpan.className = `ios-status ${content.toLowerCase()}`;
-                                statusSpan.textContent = content;
-
-                                let statusStyle = '';
-                                if (['active', 'success'].includes(content.toLowerCase())) {
-                                    statusStyle = `
-                                        background-color: var(--ios-status-active-bg);
-                                        color: var(--ios-green);
-                                        border: 1px solid rgba(52, 199, 89, 0.25);
-                                    `;
-                                } else if (content.toLowerCase() === 'pending') {
-                                    statusStyle = `
-                                        background-color: var(--ios-status-pending-bg);
-                                        color: var(--ios-orange);
-                                        border: 1px solid rgba(255, 149, 0, 0.25);
-                                    `;
-                                } else {
-                                    statusStyle = `
-                                        background-color: var(--ios-status-inactive-bg);
-                                        color: var(--ios-red);
-                                        border: 1px solid rgba(255, 59, 48, 0.25);
-                                    `;
-                                }
-
-                                statusSpan.style.cssText = `
-                                    display: inline-flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    padding: 4px 10px;
-                                    border-radius: 12px;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    ${statusStyle}
-                                `;
-                                td.appendChild(statusSpan);
-                            }
-                            // Regular text content
-                            else {
-                                td.textContent = content || '';
-                            }
-                        } else {
-                            td.textContent = content || '';
-                        }
-                    } catch (error) {
-                        console.error('Error rendering cell:', error);
-                        td.textContent = 'Error';
-                    }
-
-                    row.appendChild(td);
-                });
-
-                tbody.appendChild(row);
-            });
-        }
-
-        tableElement.appendChild(tbody);
-        return tableElement;
-
-
-    }
 
     // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
     function ui_createMain() {
-        // Get viewport dimensions
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // Calculate initial position (centered)
-        const initialLeft = (viewportWidth - 200) / 2;
-        const initialTop = viewportHeight * 0.1; // 10% from top
-
-        // Create the main container with better positioning
+        // Create the main container
         const container = ui_createElement('div', {
             props: { id: 'card-utility-overlay' },
-            className: 'amaxoffer-container amaxoffer-minimized',
-            styleString: `
-                left: ${initialLeft}px;
-                top: ${initialTop}px;
-                opacity: 0;
-                transform: scale(0.95);
-                transition: opacity 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease;
-            `
+            className: 'amaxoffer-container amaxoffer-minimized'
         });
 
         // Title element
@@ -1601,7 +1019,7 @@
             className: 'amaxoffer-title'
         });
 
-        // Navigation buttons
+        // Navigation buttons for different views (without Summary)
         const btnMembers = ui_createBtn_v1('Members', () => ui_changeTab('members', btnMembers));
         const btnOffers = ui_createBtn_v1('Offers', () => ui_changeTab('offers', btnOffers));
         const btnBenefits = ui_createBtn_v1('Benefits', () => ui_changeTab('benefits', btnBenefits));
@@ -1613,7 +1031,7 @@
             styleString: 'display:none; position:absolute; left:50%; transform:translateX(-50%); z-index:1;'
         });
 
-        // Create refresh button with SVG icon
+        // Create refresh button
         const refreshIcon = `<svg style="width:16px;height:16px;fill:white;margin-right:4px" viewBox="0 0 24 24">
             <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4C7.58 4 4 7.58 4 12s3.58 8 8 8a7.94 7.94 0 0 0 6.65-3.65l-1.42-1.42A5.973 5.973 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
         </svg>`;
@@ -1626,10 +1044,13 @@
                 try {
                     refreshStatusEl.textContent = "Refreshing accounts...";
                     await api_fetchAccounts();
+
                     refreshStatusEl.textContent = "Refreshing offers...";
                     await api_refreshOffersList();
+
                     refreshStatusEl.textContent = "Refreshing balances...";
                     await api_fetchAllBalances();
+
                     refreshStatusEl.textContent = "Refreshing benefits...";
                     await api_fetchAllBenefits();
 
@@ -1637,9 +1058,11 @@
                     storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
 
                     refreshStatusEl.textContent = "Refresh complete.";
-                    setTimeout(() => refreshStatusEl.textContent = "", 3000);
+                    setTimeout(() => {
+                        refreshStatusEl.textContent = "";
+                    }, 3000);
 
-                    await SmartRenderer.renderCurrentView();
+                    ViewRenderer.renderCurrentView();
                 } catch (e) {
                     console.error('Error refreshing data:', e);
                     refreshStatusEl.textContent = "Error refreshing data.";
@@ -1648,30 +1071,16 @@
             customStyle: 'display:none; align-items:center; justify-content:center;'
         });
 
-        // Create status element
+        // Create status element for refresh operations
         refreshStatusEl = ui_createElement('div', {
             className: 'refresh-status',
             props: { id: 'refresh-status' },
             styleString: 'font-size:12px; color:#8e8e93; margin-right:8px; display:none;'
         });
 
-        // Toggle button with SVG icon
-        const toggleBtn = ui_createElement('button', {
-            className: 'amaxoffer-toggle-btn',
-            props: {
-                innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
-            },
-            events: {
-                click: ui_toggleMinimize,
-                mouseenter: e => {
-                    e.target.style.backgroundColor = '#f0f0f0';
-                    e.target.style.borderColor = '#aaa';
-                },
-                mouseleave: e => {
-                    e.target.style.backgroundColor = 'transparent';
-                    e.target.style.borderColor = '#ccc';
-                }
-            }
+        // Toggle button for minimizing/expanding
+        const toggleBtn = ui_createBtn_v1('➕', ui_toggleMinimize, {
+            className: 'amaxoffer-toggle-btn'
         });
 
         // Right-side controls
@@ -1680,7 +1089,7 @@
             children: [refreshStatusEl, btnRefresh, toggleBtn]
         });
 
-        // Header with improved position styling
+        // Header with position relative for absolute positioning of navButtons
         const header = ui_createElement('div', {
             props: { id: 'card-utility-header' },
             className: 'amaxoffer-header',
@@ -1699,59 +1108,29 @@
         container.append(header, content);
         document.body.appendChild(container);
 
-        // Add window resize handler
-        window.addEventListener('resize', ui_handleWindowResize);
-
         // Make the header draggable
         ui_makeDraggable(header, container);
-
-        // Fade in the container
-        setTimeout(() => {
-            container.style.opacity = '1';
-            container.style.transform = 'scale(1)';
-        }, 50);
 
         return { container, content, viewBtns, toggleBtn, btnMembers, btnOffers, btnBenefits };
     }
 
     // Make an element draggable by tracking mouse movement.
     const ui_makeDraggable = (handle, container) => {
-        let shiftX = 0, shiftY = 0;
-        let latestX = 0, latestY = 0;
+        let shiftX = 0,
+            shiftY = 0;
+        let latestX = 0,
+            latestY = 0;
         let animationFrameId = null;
 
         const updatePosition = () => {
-            // Get viewport dimensions
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-
-            // Calculate new position
-            let newLeft = latestX - shiftX;
-            let newTop = latestY - shiftY;
-
-            // Get container size
-            const rect = container.getBoundingClientRect();
-            const isExpanded = container.classList.contains('amaxoffer-expanded');
-
-            // Keep container within viewport when expanded
-            if (isExpanded) {
-                newLeft = Math.max(5, Math.min(viewportWidth - rect.width - 5, newLeft));
-                newTop = Math.max(5, Math.min(viewportHeight - rect.height - 5, newTop));
-            }
-
-            // Apply position
-            container.style.transition = 'none'; // Disable transition during drag
-            container.style.left = `${newLeft}px`;
-            container.style.top = `${newTop}px`;
+            container.style.left = `${latestX - shiftX}px`;
+            container.style.top = `${latestY - shiftY}px`;
             animationFrameId = null;
         };
 
         const onMouseMove = e => {
-            e.preventDefault(); // Prevent text selection
             latestX = e.clientX;
             latestY = e.clientY;
-
-            // Use requestAnimationFrame for smoother animation
             if (!animationFrameId) {
                 animationFrameId = requestAnimationFrame(updatePosition);
             }
@@ -1760,91 +1139,30 @@
         const onMouseUp = () => {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
-
-            // Cancel any pending animation
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
                 animationFrameId = null;
             }
-
-            // Reset transition
-            setTimeout(() => {
-                container.style.transition = 'all 0.3s ease';
-            }, 0);
-
-            // Change cursor back
-            handle.style.cursor = 'grab';
-            document.body.style.cursor = 'default';
         };
 
         handle.addEventListener('mousedown', e => {
-            e.preventDefault();
-
-            // Get container position
+            e.preventDefault(); // Prevent text selection and other default actions.
             const rect = container.getBoundingClientRect();
             shiftX = e.clientX - rect.left;
             shiftY = e.clientY - rect.top;
-
-            // Change cursor during drag
-            handle.style.cursor = 'grabbing';
-            document.body.style.cursor = 'grabbing';
-
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
         });
     };
 
-    const ui_handleWindowResize = () => {
-        // Only adjust if expanded
-        if (!container.classList.contains('amaxoffer-expanded')) return;
-
-        // Get viewport dimensions
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // Get current position
-        const rect = container.getBoundingClientRect();
-
-        // Ensure container stays within viewport
-        let newLeft = parseFloat(container.style.left);
-        let newTop = parseFloat(container.style.top);
-
-        if (rect.right > viewportWidth) {
-            newLeft = Math.max(5, viewportWidth - rect.width - 5);
-        }
-
-        if (rect.bottom > viewportHeight) {
-            newTop = Math.max(5, viewportHeight - rect.height - 5);
-        }
-
-        // Apply new position if needed
-        if (newLeft !== parseFloat(container.style.left)) {
-            container.style.left = `${newLeft}px`;
-        }
-
-        if (newTop !== parseFloat(container.style.top)) {
-            container.style.top = `${newTop}px`;
-        }
-    };
-
     // Toggle the minimized/expanded state of the UI container.
     const ui_toggleMinimize = () => {
         glb_view_mini = !glb_view_mini;
-
-        // Get viewport dimensions for responsive sizing
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // Update UI visibility
         content.style.display = glb_view_mini ? 'none' : 'block';
         viewBtns.style.display = glb_view_mini ? 'none' : 'flex';
         btnRefresh.style.display = glb_view_mini ? 'none' : 'flex';
         refreshStatusEl.style.display = glb_view_mini ? 'none' : 'block';
-
-        // Use SVG icons for better appearance
-        toggleBtn.innerHTML = glb_view_mini ?
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>' :
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>';
+        toggleBtn.textContent = glb_view_mini ? '➕' : '➖';
 
         if (glb_view_mini) {
             container.classList.add('amaxoffer-minimized');
@@ -1852,182 +1170,404 @@
         } else {
             container.classList.remove('amaxoffer-minimized');
             container.classList.add('amaxoffer-expanded');
-
-            // Ensure container stays within viewport
-            const rect = container.getBoundingClientRect();
-            if (rect.right > viewportWidth || rect.bottom > viewportHeight) {
-                container.style.left = `${Math.max(5, (viewportWidth - rect.width) / 2)}px`;
-                container.style.top = `${Math.max(5, (viewportHeight - rect.height) / 2)}px`;
-            }
         }
 
-        // Use a more reliable method to trigger render after expansion
         if (!glb_view_mini) {
-            const renderAfterTransition = () => {
-                SmartRenderer.renderCurrentView();
-                container.removeEventListener('transitionend', renderAfterTransition);
-            };
-
-            container.addEventListener('transitionend', renderAfterTransition);
-
-            // Fallback if transition doesn't fire
-            setTimeout(() => {
-                SmartRenderer.renderCurrentView();
-            }, 350);
+            container.addEventListener('transitionend', function onTransitionEnd(e) {
+                if (e.propertyName === 'height') {
+                    ViewRenderer.renderCurrentView();
+                    container.removeEventListener('transitionend', onTransitionEnd);
+                }
+            });
         }
     };
 
     // Switch between views, update button styles, and trigger re-rendering.
-    const ui_changeTab = (view, activeBtn) => {
-        ui_saveScrollPos();
+    function ui_changeTab(view, activeBtn) {
+        ViewRenderer.saveScrollPosition();
         glb_view_page = view;
+
+        // Update active button state
         [btnMembers, btnOffers, btnBenefits].forEach(btn => {
             btn.classList.remove('active');
         });
         activeBtn.classList.add('active');
-        SmartRenderer.renderCurrentView();
-    };
 
-    // Save the current scroll position for the active view.
-    const ui_saveScrollPos = () => {
-        if (content) {
-            glb_view_scroll[glb_view_page].scrollTop = content.scrollTop;
+        // Render the new view
+        ViewRenderer.renderCurrentView();
+    }
+
+    // =========================================================================
+    // Section 4: General Helper Functions
+    // =========================================================================
+
+    const util_antiKickOff = (() => {
+        // Instead of overriding prototype methods, create a wrapper for the element
+        const managedElements = new Map();
+
+        const manage = (element) => {
+            if (managedElements.has(element)) return managedElements.get(element);
+
+            const listeners = [];
+            const originalAdd = element.addEventListener.bind(element);
+            const originalRemove = element.removeEventListener.bind(element);
+
+            const wrapper = {
+                addListener: (type, listener, options) => {
+                    listeners.push({ type, listener, options });
+                    return originalAdd(type, listener, options);
+                },
+                removeListener: (type, listener, options) => {
+                    const index = listeners.findIndex(l =>
+                        l.type === type && l.listener === listener && l.options === options);
+                    if (index !== -1) listeners.splice(index, 1);
+                    return originalRemove(type, listener, options);
+                },
+                getListeners: (typeFilter) => typeFilter ?
+                    listeners.filter(l => l.type === typeFilter) : [...listeners]
+            };
+
+            managedElements.set(element, wrapper);
+            return wrapper;
+        };
+        // Private registry to track event listeners.
+        const registry = new WeakMap();
+
+        // Preserve original methods.
+        const origAddEventListener = EventTarget.prototype.addEventListener;
+        const origRemoveEventListener = EventTarget.prototype.removeEventListener;
+
+        // Override addEventListener to store registrations.
+        EventTarget.prototype.addEventListener = function (type, listener, options) {
+            if (!registry.has(this)) {
+                registry.set(this, []);
+            }
+            registry.get(this).push({ type, listener, options });
+            return origAddEventListener.call(this, type, listener, options);
+        };
+
+        // Override removeEventListener to update our registry.
+        EventTarget.prototype.removeEventListener = function (type, listener, options) {
+            if (registry.has(this)) {
+                const arr = registry.get(this);
+                for (let i = 0; i < arr.length; i++) {
+                    const item = arr[i];
+                    if (item.type === type && item.listener === listener && item.options === options) {
+                        arr.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+            return origRemoveEventListener.call(this, type, listener, options);
+        };
+
+        // Helper to retrieve tracked event listeners.
+        const getTrackedEventListeners = (target, typeFilter) => {
+            const arr = registry.get(target) || [];
+            return typeFilter ? arr.filter(item => item.type === typeFilter) : arr;
+        };
+
+        // Remove all "visibilitychange" listeners from the document.
+        const removeVisibilityListeners = () => {
+            const visListeners = getTrackedEventListeners(document, 'visibilitychange');
+            visListeners.forEach(({ listener, options }) => {
+                document.removeEventListener('visibilitychange', listener, options);
+            });
+            console.log("Removed all 'visibilitychange' listeners from document using our tracker.");
+        };
+
+        // Function to extend the session by calling window.timeout.checkVisibility.
+        const extendSession = () => {
+
+            const realWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            if (realWindow.timeout && typeof realWindow.timeout.checkVisibility === 'function') {
+                console.log("Extending session....");
+                realWindow.timeout.checkVisibility({ hidden: true });
+            }
+        };
+
+
+        // Public API.
+        return {
+            getTrackedEventListeners,
+            removeVisibilityListeners,
+            startSessionExtender: (interval = 60000) => setInterval(extendSession, interval)
+        };
+    })();
+
+    util_antiKickOff.removeVisibilityListeners();
+    util_antiKickOff.startSessionExtender(60000);
+
+
+    function util_formatDate(dateStr, roundUp = false) {
+        let d = new Date(dateStr);
+        if (roundUp && !isNaN(d)) {
+            d.setDate(d.getDate() + 1);
         }
-    };
+        if (isNaN(d)) return 'N/A';
+        let mm = String(d.getMonth() + 1).padStart(2, '0');
+        let dd = String(d.getDate()).padStart(2, '0');
+        let yy = String(d.getFullYear()).slice(-2);
+        return `${mm}-${dd}-${yy}`;
+    }
 
-    function ui_returnLogo(logoUrl, altText) {
-        if (logoUrl && logoUrl !== "N/A") {
-            return ui_createElement('div', {
-                styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
-                children: [
-                    ui_createElement('img', {
-                        props: { src: logoUrl, alt: altText || "Logo" },
-                        styleString: 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;',
-                        events: {
-                            mouseenter: e => e.target.style.transform = 'scale(1.15)',
-                            mouseleave: e => e.target.style.transform = 'scale(1)'
-                        }
-                    })
-                ]
+
+    function util_cleanValue(val) {
+        if (val === "N/A" || val === null || val === undefined || val === "" || val === 0) {
+            return "0";
+        }
+        return val;
+    }
+
+
+    // Parse card index into main and sub-index components
+    function util_parseCardIndex(indexStr) {
+        if (!indexStr) return [0, 0];
+        const parts = indexStr.split('-');
+        const main = parseInt(parts[0], 10) || 0;
+        const sub = parts.length > 1 ? (parseInt(parts[1], 10) || 0) : 0;
+        return [main, sub];
+    }
+
+
+    // Parse a numeric value from a string, cleaning common symbols
+    function util_parseNumber(str) {
+        if (!str) return NaN;
+        const cleaned = str.replace(/[$,%]/g, '').replace(/\s*back\s*/i, '').trim();
+        return parseFloat(cleaned) || NaN;
+    }
+
+
+    // Run tasks in batches to control concurrency
+    async function util_runTasksInBatches(tasks, limit) {
+        const results = [];
+        let i = 0;
+        while (i < tasks.length) {
+            const chunk = tasks.slice(i, i + limit);
+            // Each "task" returns a single object: { offerId, accountToken, result: boolean }
+            const chunkResults = await Promise.all(chunk.map(fn => fn()));
+            results.push(...chunkResults);
+            i += limit;
+        }
+        return results;
+    }
+
+
+    // Utility to get the basic account ending for a supplementary account
+    function members_getParentCardNumber(suppAccount) {
+        const parts = suppAccount.cardIndex.split('-');
+        if (parts.length > 1) {
+            const mainIndex = parts[0];
+            // Find the basic account whose cardIndex equals mainIndex and has relationship "BASIC"
+            const basicAccount = glb_account.find(acc => acc.cardIndex === mainIndex && acc.relationship === "BASIC");
+            if (basicAccount) {
+                return basicAccount.cardEnding;
+            }
+        }
+        return "N/A";
+    }
+
+
+    // Utility to sort the account data based on a key
+    function members_sortTable(key) {
+        if (glb_memberSortState.key === key) {
+            glb_memberSortState.direction *= -1;
+        } else {
+            glb_memberSortState.key = key;
+            glb_memberSortState.direction = 1;
+        }
+        if (key === 'cardIndex') {
+            glb_account.sort((a, b) => {
+                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
+                if (aMain === bMain) {
+                    return glb_memberSortState.direction * (aSub - bSub);
+                }
+                return glb_memberSortState.direction * (aMain - bMain);
+            });
+        } else {
+            glb_account.sort((a, b) => {
+                const valA = a[key] || "";
+                const valB = b[key] || "";
+                return glb_memberSortState.direction * valA.toString().localeCompare(valB.toString());
             });
         }
-
-        return ui_createElement('div', {
-            styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
-            children: [
-                ui_createElement('div', {
-                    props: { innerHTML: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#ccc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>' },
-                    styleString: 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; background:#f5f5f5; border-radius:6px;'
-                })
-            ]
-        });
+        ViewRenderer.saveScrollPosition();
+        const container = document.getElementById('members-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(members_renderVirtualTableView());
+        }
     }
 
 
-    function ui_createReactiveFilter(container, options = {}) {
-        const {
-            searchPlaceholder = 'Search...',
-            onSearch = () => { },
-            initialValue = '',
-            onFilterChange = null,
-            debounceDelay = 200 // Add debounce delay parameter with default 300ms
-        } = options;
+    // Utility to sort the offer data based on a key
+    function offers_sortTable(key) {
+        if (glb_offerSortState.key === key) {
+            glb_offerSortState.direction *= -1;
+        } else {
+            glb_offerSortState.key = key;
+            glb_offerSortState.direction = (key === "favorite") ? -1 : 1;
+        }
 
-        const searchContainer = document.createElement('div');
-        searchContainer.className = 'ios-search-container';
-        searchContainer.style.cssText = 'position:relative; width:100%; max-width:300px;';
+        glb_offer.sort((a, b) => {
+            if (key === "favorite") {
+                if (a.favorite === b.favorite) return 0;
+                return a.favorite ? -1 * glb_offerSortState.direction : 1 * glb_offerSortState.direction;
+            }
 
-        // Create search input
-        const input = document.createElement('input');
-        input.className = 'ios-search-input';
-        input.type = 'text';
-        input.placeholder = searchPlaceholder;
-        input.value = initialValue;
-        input.style.cssText = UI_STYLES.controls.search;
+            const numericColumns = ["reward", "threshold", "percentage"];
 
-        // Add icon
-        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        searchIcon.setAttribute('width', '16');
-        searchIcon.setAttribute('height', '16');
-        searchIcon.setAttribute('viewBox', '0 0 24 24');
-        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+            if (numericColumns.includes(key)) {
+                const numA = util_parseNumber(a[key] || "");
+                const numB = util_parseNumber(b[key] || "");
 
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
-        path.setAttribute('fill', 'currentColor');
-        searchIcon.appendChild(path);
-
-        // Add clear button
-        const clearButton = document.createElement('button');
-        clearButton.innerHTML = '×';
-        clearButton.style.cssText = 'position:absolute; right:30px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:18px; cursor:pointer; color:#999; display:none;';
-
-        // Create debounced update function
-        let debounceTimeout;
-
-        const triggerFilterChange = (value) => {
-            if (onFilterChange) {
-                onFilterChange(value);
+                if (isNaN(numA) && isNaN(numB)) {
+                    return glb_offerSortState.direction * String(a[key] || "").localeCompare(String(b[key] || ""));
+                } else if (isNaN(numA)) {
+                    return 1 * glb_offerSortState.direction;
+                } else if (isNaN(numB)) {
+                    return -1 * glb_offerSortState.direction;
+                }
+                return glb_offerSortState.direction * (numA - numB);
+            } else if (key === "eligibleCards" || key === "enrolledCards") {
+                const lenA = Array.isArray(a[key]) ? a[key].length : 0;
+                const lenB = Array.isArray(b[key]) ? b[key].length : 0;
+                return glb_offerSortState.direction * (lenA - lenB);
             } else {
-                SmartRenderer.renderCurrentView(true);
+                return glb_offerSortState.direction * String(a[key] || "").localeCompare(String(b[key] || ""));
             }
+        });
+
+        ViewRenderer.saveScrollPosition();
+
+        const container = document.getElementById('offers-table-container');
+        if (container) {
+            container.innerHTML = "";
+            container.appendChild(offers_renderVirtualTableView());
+        } else {
+            // If we're in grid view, update the display container
+            const displayContainer = document.getElementById('offers-display-container');
+            displayContainer.innerHTML = "";
+            displayContainer.appendChild(offers_renderVirtualTableView());
+
+        }
+    }
+
+    // Utility to parse offer details from the description
+    function offers_parseDescription(description = "") {
+        const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
+        const toMoneyString = (num) => {
+            if (num == null || isNaN(num)) return null;
+            return `$${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
         };
 
-        // Handle input with debounce
-        input.addEventListener('input', function () {
-            const searchValue = this.value.toLowerCase();
+        let thresholdVal = null;
+        let rewardVal = null;
+        let percentageVal = null;
+        let threshold = null;
+        let reward = null;
+        let percentage = null;
+        let times = null;
+        let total = null;
 
-            // Update filter state immediately
-            glb_filters.memberMerchantSearch = searchValue;
-            glb_filters.offerMerchantSearch = searchValue;
-
-            // Show/hide clear button immediately
-            clearButton.style.display = searchValue ? 'block' : 'none';
-
-            // Call the search handler
-            onSearch(searchValue);
-
-            // Show visual feedback that something is happening
-            searchIcon.style.color = 'var(--ios-orange)';
-
-            // Debounce the actual filtering/rendering
-            clearTimeout(debounceTimeout);
-            debounceTimeout = setTimeout(() => {
-                triggerFilterChange(searchValue);
-                searchIcon.style.color = 'var(--ios-blue)';
-            }, debounceDelay);
-        });
-
-        // Clear button functionality
-        clearButton.addEventListener('click', () => {
-            input.value = '';
-            glb_filters.memberMerchantSearch = '';
-            glb_filters.offerMerchantSearch = '';
-            clearButton.style.display = 'none';
-
-            // Clear any pending debounce
-            clearTimeout(debounceTimeout);
-
-            // Immediately trigger update for clearing
-            triggerFilterChange('');
-            input.focus();
-        });
-
-        searchContainer.appendChild(input);
-        searchContainer.appendChild(searchIcon);
-        searchContainer.appendChild(clearButton);
-        container.appendChild(searchContainer);
-
-        return {
-            container: searchContainer,
-            input: input,
-            getValue: () => input.value.toLowerCase(),
-            setValue: (val) => {
-                input.value = val;
-                clearButton.style.display = val ? 'block' : 'none';
+        {
+            const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
+            const spendMatch = description.match(spendRegex);
+            if (spendMatch) {
+                thresholdVal = parseDollar(spendMatch[1]);
             }
+        }
+        {
+            const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
+            const percentMatch = description.match(percentRegex);
+            if (percentMatch) {
+                percentageVal = parseFloat(percentMatch[1]);
+            }
+        }
+        {
+            const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
+            const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
+            if (mrPointsPerDollarMatch) {
+                const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
+                if (!percentageVal) {
+                    percentageVal = mrPointsEachDollar;
+                }
+                const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
+                const mrPointsCapMatch = description.match(mrPointsCapRegex);
+                if (mrPointsCapMatch) {
+                    const capVal = parseDollar(mrPointsCapMatch[1]);
+                    rewardVal = capVal * 0.01;
+                }
+            }
+        }
+        {
+            const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
+            const earnGetMatch = description.match(earnGetRegex);
+            if (earnGetMatch) {
+                rewardVal = parseDollar(earnGetMatch[1]);
+            }
+            const upToTotalRegex = /up to (?:a total of )?\$(\d[\d,\.]*)/i;
+            const upToTotalMatch = description.match(upToTotalRegex);
+            if (upToTotalMatch) {
+                rewardVal = parseDollar(upToTotalMatch[1]);
+            }
+        }
+        {
+            const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
+            const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
+            if (mrPointsRewardMatch) {
+                const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
+                rewardVal = points * 0.01;
+            }
+        }
+        {
+            const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
+            const upToTimesMatch = description.match(upToTimesRegex);
+            if (upToTimesMatch) {
+                times = upToTimesMatch[1];
+            }
+        }
+        {
+            const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
+            const totalOfMatch = description.match(totalOfRegex);
+            if (totalOfMatch) {
+                total = toMoneyString(parseDollar(totalOfMatch[1]));
+            }
+        }
+        const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
+        const haveReward = (rewardVal != null && !isNaN(rewardVal));
+        const havePercent = (percentageVal != null && !isNaN(percentageVal));
+
+        if (haveThreshold && haveReward && !havePercent && thresholdVal > 0) {
+            percentageVal = (rewardVal / thresholdVal) * 100;
+        } else if (haveThreshold && havePercent && !haveReward) {
+            rewardVal = thresholdVal * (percentageVal / 100);
+        } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
+            thresholdVal = rewardVal / (percentageVal / 100);
+        } else if (havePercent && !haveThreshold && !haveReward) {
+            thresholdVal = 10000;
+            rewardVal = thresholdVal * (percentageVal / 100);
+        }
+        if (thresholdVal != null) threshold = toMoneyString(thresholdVal);
+        if (rewardVal != null) reward = toMoneyString(rewardVal);
+        if (percentageVal != null) {
+            const rounded = Math.round(percentageVal * 10) / 10;
+            percentage = `${rounded}%`;
+        }
+        return { threshold, reward, percentage, times, total };
+    }
+
+    // util_debounce function for input events
+    function util_debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
+
+
 
     // =========================================================================
     // Section 5: Data Fetching Functions
@@ -2105,7 +1645,7 @@
             return true;
         }
 
-        SmartRenderer.markChanged('members');
+        ViewRenderer.markChanged('members');
         return false;
     }
 
@@ -2289,114 +1829,10 @@
 
         storage_manageData("set", storage_accToken, ["account", "offer", "offer_expired", "offer_redeemed"]);
 
-        SmartRenderer.markChanged('offers');
+        ViewRenderer.markChanged('offers');
 
         return changeStats;
-
-        function offers_parseDescription(description = "") {
-            const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
-            const toMoneyString = (num) => {
-                if (num == null || isNaN(num)) return null;
-                return `$${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-            };
-
-            let thresholdVal = null;
-            let rewardVal = null;
-            let percentageVal = null;
-            let threshold = null;
-            let reward = null;
-            let percentage = null;
-            let times = null;
-            let total = null;
-
-            {
-                const spendRegex = /Spend\s*\$(\d[\d,\.]*)/i;
-                const spendMatch = description.match(spendRegex);
-                if (spendMatch) {
-                    thresholdVal = parseDollar(spendMatch[1]);
-                }
-            }
-            {
-                const percentRegex = /(?:Earn|Get)\s+(\d+(\.\d+)?)%\s*back/i;
-                const percentMatch = description.match(percentRegex);
-                if (percentMatch) {
-                    percentageVal = parseFloat(percentMatch[1]);
-                }
-            }
-            {
-                const mrPointsPerDollarRegex = /Earn\s*\+?(\d+)\s*Membership Rewards(?:®)?\s*points?\s*per\s*(?:eligible\s*)?dollar spent/i;
-                const mrPointsPerDollarMatch = description.match(mrPointsPerDollarRegex);
-                if (mrPointsPerDollarMatch) {
-                    const mrPointsEachDollar = parseFloat(mrPointsPerDollarMatch[1]);
-                    if (!percentageVal) {
-                        percentageVal = mrPointsEachDollar;
-                    }
-                    const mrPointsCapRegex = /up to\s*(\d[\d,\.]*)\s*(points|pts)/i;
-                    const mrPointsCapMatch = description.match(mrPointsCapRegex);
-                    if (mrPointsCapMatch) {
-                        const capVal = parseDollar(mrPointsCapMatch[1]);
-                        rewardVal = capVal * 0.01;
-                    }
-                }
-            }
-            {
-                const earnGetRegex = /(?:earn|get)\s*\$(\d[\d,\.]*)/i;
-                const earnGetMatch = description.match(earnGetRegex);
-                if (earnGetMatch) {
-                    rewardVal = parseDollar(earnGetMatch[1]);
-                }
-                const upToTotalRegex = /up to (?:a total of )?\$(\d[\d,\.]*)/i;
-                const upToTotalMatch = description.match(upToTotalRegex);
-                if (upToTotalMatch) {
-                    rewardVal = parseDollar(upToTotalMatch[1]);
-                }
-            }
-            {
-                const mrPointsRewardRegex = /Earn\s+([\d,]+)\s*Membership Rewards(?:®)?\s*points(?!\s*per)/i;
-                const mrPointsRewardMatch = description.match(mrPointsRewardRegex);
-                if (mrPointsRewardMatch) {
-                    const points = parseInt(mrPointsRewardMatch[1].replace(/,/g, ""), 10);
-                    rewardVal = points * 0.01;
-                }
-            }
-            {
-                const upToTimesRegex = /up to\s+(\d+)\s+times?/i;
-                const upToTimesMatch = description.match(upToTimesRegex);
-                if (upToTimesMatch) {
-                    times = upToTimesMatch[1];
-                }
-            }
-            {
-                const totalOfRegex = /\(total of\s*\$(\d[\d,\.]*)\)/i;
-                const totalOfMatch = description.match(totalOfRegex);
-                if (totalOfMatch) {
-                    total = toMoneyString(parseDollar(totalOfMatch[1]));
-                }
-            }
-            const haveThreshold = (thresholdVal != null && !isNaN(thresholdVal));
-            const haveReward = (rewardVal != null && !isNaN(rewardVal));
-            const havePercent = (percentageVal != null && !isNaN(percentageVal));
-
-            if (haveThreshold && haveReward && !havePercent && thresholdVal > 0) {
-                percentageVal = (rewardVal / thresholdVal) * 100;
-            } else if (haveThreshold && havePercent && !haveReward) {
-                rewardVal = thresholdVal * (percentageVal / 100);
-            } else if (haveReward && havePercent && !haveThreshold && percentageVal !== 0) {
-                thresholdVal = rewardVal / (percentageVal / 100);
-            } else if (havePercent && !haveThreshold && !haveReward) {
-                thresholdVal = 10000;
-                rewardVal = thresholdVal * (percentageVal / 100);
-            }
-            if (thresholdVal != null) threshold = toMoneyString(thresholdVal);
-            if (rewardVal != null) reward = toMoneyString(rewardVal);
-            if (percentageVal != null) {
-                const rounded = Math.round(percentageVal * 10) / 10;
-                percentage = `${rounded}%`;
-            }
-            return { threshold, reward, percentage, times, total };
-        }
     }
-
 
     async function offers_processChanges(oldOffers, newOffers) {
         const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
@@ -2519,7 +1955,6 @@
 
         return stats;
     }
-
 
     async function api_fetchAccountBalance(accountToken) {
         if (!accountToken) {
@@ -2704,7 +2139,7 @@
             storage_manageData("set", storage_accToken, "benefit");
         }
 
-        SmartRenderer.markChanged('benefits')
+        ViewRenderer.markChanged('benefits')
 
     }
 
@@ -2926,6 +2361,435 @@
     // =========================================================================
     // Section 6: UI Rendering Functions
     // =========================================================================
+    // Optimized cached renderer for members view
+    const filteredMembers = (() => {
+        let cachedFilters = null;
+        let cachedResults = null;
+        let lastMemberIds = null;
+        let virtualTable = null;
+
+        return {
+            /**
+             * Gets filtered members list with memoization
+             * @returns {Array} - Filtered members
+             */
+            getFilteredMembers() {
+                const currentFilterHash = JSON.stringify(glb_filters);
+                const currentMemberIds = glb_account.length > 0 ?
+                    glb_account.map(m => m.account_token).join(',') : 'empty';
+
+                // Check if we need to invalidate cache
+                if (!cachedResults ||
+                    cachedFilters !== currentFilterHash ||
+                    lastMemberIds !== currentMemberIds) {
+
+                    // Apply filters
+                    cachedResults = glb_account.filter(member => {
+                        const statusMatch = glb_filters.memberStatus === 'all' ||
+                            member.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
+
+                        const typeMatch = glb_filters.memberCardtype === 'all' ||
+                            member.relationship === glb_filters.memberCardtype;
+
+                        return statusMatch && typeMatch;
+                    });
+
+                    // Update cache keys
+                    cachedFilters = currentFilterHash;
+                    lastMemberIds = currentMemberIds;
+
+                    // Notify ViewRenderer that members view needs updating
+                    ViewRenderer.markViewChanged('members');
+
+                    // Update virtual table if available
+                    if (virtualTable && typeof virtualTable.updateData === 'function') {
+                        virtualTable.updateData(cachedResults);
+                    }
+                }
+
+                return cachedResults;
+            },
+
+            /**
+             * Invalidates the cache, forcing a refresh on next request
+             */
+            invalidateCache() {
+                cachedResults = null;
+                cachedFilters = null;
+                ViewRenderer.markViewChanged('members');
+            },
+
+            /**
+             * Stores reference to the virtual table
+             * @param {Object} table - Virtual table instance
+             */
+            setVirtualTable(table) {
+                virtualTable = table;
+                ViewRenderer.setVirtualTable('members', table);
+            },
+
+            /**
+             * Gets the current virtual table instance
+             * @returns {Object|null} - Virtual table instance or null
+             */
+            getVirtualTable() {
+                return virtualTable || ViewRenderer.getVirtualTable('members');
+            },
+
+            /**
+             * Updates the virtual table with new data
+             * @param {Array} newData - New data for the table
+             */
+            updateVirtualTable(newData) {
+                if (virtualTable && typeof virtualTable.updateData === 'function') {
+                    virtualTable.updateData(newData);
+                }
+            },
+
+            /**
+             * Refreshes the virtual table view
+             */
+            refreshVirtualTable() {
+                setTimeout(() => {
+                    if (virtualTable && typeof virtualTable.refresh === 'function') {
+                        virtualTable.refresh();
+                    }
+                }, 100);
+            }
+        };
+    })();
+
+
+    // Create virtual table view for members page
+    function members_renderVirtualTableView() {
+        const filteredMembers = filteredMembers.getFilteredMembers();
+
+        if (filteredMembers.length === 0) {
+            return ui_createEmptyState(document.createElement('div'), {
+                title: 'No Members Found',
+                message: 'No members match your current filters',
+                buttonText: 'Reset Filters',
+                callback: () => {
+                    glb_filters.memberStatus = 'Active';
+                    glb_filters.memberCardtype = 'all';
+                    glb_filters.memberMerchantSearch = '';
+                    filteredMembers.invalidateCache();
+                    ViewRenderer.renderCurrentView(true);
+                }
+            });
+        }
+
+        const headers = [
+            { label: "Index", key: "cardIndex" },
+            { label: "Logo", key: "small_card_art" },
+            { label: "Ending", key: "cardEnding" },
+            { label: "User Name", key: "embossed_name" },
+            { label: "Type", key: "relationship" },
+            { label: "Opened", key: "account_setup_date" },
+            { label: "Status", key: "account_status" },
+            { label: "Balance", key: "StatementBalance" },
+            { label: "Pending", key: "pending" },
+            { label: "Remaining", key: "remainingStaBal" },
+            { label: "Eligible", key: "eligibleOffers" },
+            { label: "Enrolled", key: "enrolledOffers" },
+            { label: "Priority", key: "priority" },
+            { label: "Exclude", key: "exclude" }
+        ];
+
+        const colWidths = {
+            cardIndex: "60px", small_card_art: "70px", cardEnding: "110px",
+            embossed_name: "180px", relationship: "85px", account_setup_date: "100px",
+            account_status: "90px", StatementBalance: "100px", pending: "100px",
+            remainingStaBal: "110px", eligibleOffers: "90px", enrolledOffers: "90px",
+            priority: "80px", exclude: "80px"
+        };
+
+        // Container for virtual table
+        const container = document.createElement('div');
+        container.id = 'members-virtual-table-container';
+        container.style.cssText = 'width:100%;';
+
+        // Create virtual table after container is in DOM
+        setTimeout(() => {
+            const sortableKeys = [
+                "cardIndex", "cardEnding", "embossed_name", "relationship",
+                "account_setup_date", "account_status", "StatementBalance", "pending",
+                "remainingStaBal", "eligibleOffers", "enrolledOffers"
+            ];
+
+            const members_cellRenderer = (item, headerItem) => {
+                const key = headerItem.key;
+
+                switch (key) {
+                    case 'small_card_art':
+                        return createCardLogo(item.small_card_art, item.description || "Card Logo");
+
+                    case 'cardIndex':
+                        const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
+                        const span = document.createElement('span');
+                        span.style.cssText = UI_STYLES.tableCells.index;
+                        span.innerHTML = subIndex ?
+                            `<strong>${mainIndex}</strong>-${subIndex}` :
+                            `<strong>${mainIndex}</strong>`;
+                        return span;
+
+                    case 'cardEnding':
+                        const div = document.createElement('div');
+                        div.textContent = item[key];
+                        div.style.cssText = UI_STYLES.tableCells.card;
+                        return div;
+
+                    case 'embossed_name':
+                        const nameDiv = document.createElement('div');
+                        nameDiv.textContent = item[key];
+                        nameDiv.style.cssText = UI_STYLES.tableCells.name;
+                        nameDiv.title = item[key];
+                        return nameDiv;
+
+                    case 'account_setup_date':
+                        return (item[key] && item[key] !== 'N/A') ?
+                            util_formatDate(item[key]) : 'N/A';
+
+                    case 'relationship':
+                        if (item.relationship === "SUPP") {
+                            const parentCardNum = members_getParentCardNumber(item);
+                            const suppDiv = document.createElement('div');
+                            suppDiv.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:2px;';
+                            suppDiv.innerHTML = `
+                        <span style="font-size:12px; color:var(--ios-blue); font-weight:600;">SUPP</span>
+                        <span style="font-size:11px; color:var(--ios-gray);">→ ${parentCardNum}</span>
+                    `;
+                            return suppDiv;
+                        }
+                        const basicSpan = document.createElement('span');
+                        basicSpan.textContent = 'BASIC';
+                        basicSpan.style.cssText = 'font-size:12px; font-weight:600; color:var(--ios-green);';
+                        return basicSpan;
+
+                    case 'account_status':
+                        const status = item[key].toLowerCase();
+                        const statusStyle = UI_STYLES.status[status] || UI_STYLES.status.pending;
+                        const statusSpan = document.createElement('span');
+                        statusSpan.textContent = item[key];
+                        statusSpan.style.cssText = `
+                    display:inline-block; padding:4px 10px; border-radius:12px; 
+                    font-size:12px; font-weight:600; text-transform:capitalize;
+                    background-color:${statusStyle.bgColor}; 
+                    color:${statusStyle.color}; 
+                    border:1px solid ${statusStyle.borderColor};
+                `;
+                        return statusSpan;
+
+                    case 'eligibleOffers':
+                    case 'enrolledOffers':
+                        const count = parseInt(item[key] || 0);
+                        const container = document.createElement('div');
+                        container.style.cssText = 'height:32px; display:flex; align-items:center; justify-content:center;';
+
+                        if (count > 0) {
+                            const isEligible = key === 'eligibleOffers';
+                            const statusStyle = isEligible ? UI_STYLES.status.inProgress : UI_STYLES.status.active;
+                            const icon = isEligible ?
+                                `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9.5 16.5v-9l7 4.5-7 4.5z"/></svg>` :
+                                `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>`;
+
+                            const button = document.createElement('button');
+                            button.className = isEligible ? 'eligible-badge' : 'enrolled-badge';
+                            button.innerHTML = icon + count;
+                            button.style.cssText = `
+                        border-radius:16px; 
+                        background-color:${statusStyle.bgColor}; 
+                        color:${statusStyle.color}; 
+                        border:1px solid ${statusStyle.borderColor}; 
+                        padding:4px 10px; 
+                        font-weight:600; 
+                        font-size:11px; 
+                        cursor:pointer; 
+                        transition:all 0.2s ease; 
+                        display:flex; 
+                        align-items:center; 
+                        justify-content:center; 
+                        min-width:40px;
+                    `;
+                            button.dataset.accountToken = item.account_token;
+                            button.dataset.offerType = isEligible ? 'eligible' : 'enrolled';
+
+                            // Add click handler using event delegation (handled at container level)
+                            return button;
+                        }
+
+                        // Zero count indicator
+                        const zeroSpan = document.createElement('span');
+                        zeroSpan.textContent = '0';
+                        zeroSpan.style.cssText = 'color:var(--ios-gray); font-size:11px; font-weight:400; opacity:0.6;';
+                        return zeroSpan;
+
+                    case 'StatementBalance':
+                        return createFinancialValue(item, 'statement_balance_amount');
+
+                    case 'pending':
+                        return createFinancialValue(item, 'debits_credits_payments_total_amount');
+
+                    case 'remainingStaBal':
+                        return createFinancialValue(item, 'remaining_statement_balance_amount');
+
+                    case 'priority':
+                    case 'exclude':
+                        return createToggleSwitch(item, key);
+
+                    default:
+                        return util_cleanValue(item[key]) || '';
+                }
+            };
+
+            // Helper for financial values
+            function createFinancialValue(item, fieldName) {
+                if (item.relationship === "BASIC") {
+                    if (item.financialData) {
+                        const value = item.financialData[fieldName];
+                        const sanitizedValue = util_cleanValue(value);
+                        const numValue = parseFloat(sanitizedValue);
+
+                        const div = document.createElement('div');
+                        div.style.cssText = `
+                            ${UI_STYLES.tableCells.money}
+                            font-weight:${numValue > 0 ? '600' : '400'};
+                            color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
+                            text-align: center; /* Override text-align to ensure center alignment */
+                            width: 100%; /* Ensure div takes full width of cell */
+                            display: flex; /* Use flexbox for better centering */
+                            justify-content: center; /* Center horizontally */
+                            align-items: center; /* Center vertically */
+                            height: 100%; /* Ensure div takes full height for vertical centering */
+                        `;
+                        div.textContent = numValue.toLocaleString('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                            minimumFractionDigits: 2
+                        });
+                        return div;
+                    }
+
+                    // Loading spinner for data being fetched
+                    const spinner = document.createElement('div');
+                    spinner.className = 'loading-spinner';
+                    spinner.style.cssText = 'width:16px; height:16px; border:2px solid rgba(0, 122, 255, 0.2); border-top:2px solid var(--ios-blue); border-radius:50%; margin:0 auto; animation:spin 1s linear infinite;';
+                    return spinner;
+                }
+                return document.createTextNode("");
+            }
+
+            // Helper for toggle switches
+            function createToggleSwitch(account, type) {
+                const isChecked = type === 'priority'
+                    ? glb_priorityCards.includes(account.account_token)
+                    : glb_excludedCards.includes(account.account_token);
+
+                const color = type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)';
+
+                const wrapper = document.createElement('div');
+                wrapper.style.cssText = 'display:flex; justify-content:center; align-items:center;';
+
+                const toggle = document.createElement('div');
+                toggle.style.cssText = `
+            display:inline-block; position:relative; width:36px; height:22px; 
+            border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
+            box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
+            background-color:${isChecked ? color : '#e9e9ea'};
+        `;
+                toggle.title = type === 'priority' ? 'Priority Card (Enroll First)' : 'Exclude Card (Skip Enrollment)';
+
+                const knob = document.createElement('div');
+                knob.style.cssText = `
+            position:absolute; width:18px; height:18px; border-radius:9px; 
+            background-color:#ffffff; box-shadow:0 1px 3px rgba(0, 0, 0, 0.15); 
+            top:2px; left:${isChecked ? '16px' : '2px'}; transition:left 0.3s ease;
+        `;
+
+                toggle.appendChild(knob);
+                wrapper.appendChild(toggle);
+
+                // Store data for event delegation
+                toggle.dataset.accountToken = account.account_token;
+                toggle.dataset.toggleType = type;
+                toggle.dataset.checked = isChecked ? 'true' : 'false';
+
+                return wrapper;
+            }
+
+            const virtualTable = ui_createTable({
+                container,
+                data: filteredMembers,
+                rowHeight: 50,
+                headers,
+                colWidths,
+                cellRenderer: members_cellRenderer,
+                sortHandler: members_sortTable,
+                sortableKeys,
+                rowIdKey: 'account_token'
+            });
+
+            // Store table reference
+            filteredMembers.setVirtualTable(virtualTable);
+
+            // Add event delegation for all interactive elements
+            container.addEventListener('click', (e) => {
+                // Handle offer count badges
+                const offerBadge = e.target.closest('.eligible-badge, .enrolled-badge');
+                if (offerBadge) {
+                    const accountToken = offerBadge.dataset.accountToken;
+                    const offerType = offerBadge.dataset.offerType;
+                    if (accountToken && offerType) {
+                        members_popCard(accountToken, offerType);
+                        return;
+                    }
+                }
+
+                // Handle toggle switches
+                const toggle = e.target.closest('[data-toggle-type]');
+                if (toggle) {
+                    const accountToken = toggle.dataset.accountToken;
+                    const type = toggle.dataset.toggleType;
+                    const isChecked = toggle.dataset.checked === 'true';
+
+                    if (accountToken && type) {
+                        const newState = !isChecked;
+                        const knob = toggle.firstChild;
+
+                        // Update visual state
+                        knob.style.left = newState ? '16px' : '2px';
+                        toggle.style.backgroundColor = newState ?
+                            (type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)') :
+                            '#e9e9ea';
+                        toggle.dataset.checked = newState ? 'true' : 'false';
+
+                        // Update data state
+                        if (type === 'priority') {
+                            if (newState) {
+                                if (!glb_priorityCards.includes(accountToken)) {
+                                    glb_priorityCards.push(accountToken);
+                                }
+                            } else {
+                                glb_priorityCards = glb_priorityCards.filter(token => token !== accountToken);
+                            }
+                            storage_manageData("set", storage_accToken, ["priorityCards"]);
+                        } else {
+                            if (newState) {
+                                if (!glb_excludedCards.includes(accountToken)) {
+                                    glb_excludedCards.push(accountToken);
+                                }
+                            } else {
+                                glb_excludedCards = glb_excludedCards.filter(token => token !== accountToken);
+                            }
+                            storage_manageData("set", storage_accToken, ["excludedCards"]);
+                        }
+                    }
+                }
+            });
+        }, 0);
+
+        return container;
+    }
 
     // Enhanced members page with optimized rendering
     function members_renderPage() {
@@ -2933,14 +2797,18 @@
             styleString: UI_STYLES.pageContainer
         });
 
+        // Add stats and filter bars
         containerDiv.appendChild(members_renderStatsBar());
-        containerDiv.appendChild(members_renderFilterBar());
+        containerDiv.appendChild(members_renderControlBar());
 
+        // Create wrapper for table and add virtual table
         const tableWrapper = ui_createElement('div', {
             props: { id: 'members-table-container' },
             styleString: 'overflow-x:auto;'
         });
-        tableWrapper.appendChild(members_renderTable());
+
+        // Use optimized virtual table rendering
+        tableWrapper.appendChild(members_renderVirtualTableView());
 
         containerDiv.appendChild(tableWrapper);
         return containerDiv;
@@ -3058,363 +2926,117 @@
         if (statusFilter) statusFilter.value = glb_filters.memberStatus;
         if (typeFilter) typeFilter.value = glb_filters.memberCardtype;
 
-        SmartRenderer.renderCurrentView();
+        ViewRenderer.renderCurrentView();
     }
 
     // Streamlined filter bar with enhanced search
-    function members_renderFilterBar() {
-        const filtersCard = document.createElement('div');
-        filtersCard.style.cssText = UI_STYLES.containers.card + ' margin-bottom:8px;';
+    function members_renderControlBar() {
+        const filtersCard = ui_createElement('div', {
+            styleString: UI_STYLES.containers.card + ' margin-bottom:8px;'
+        });
 
-        const searchContainer = document.createElement('div');
-        searchContainer.style.cssText = 'display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;';
+        const searchContainer = ui_createElement('div', {
+            styleString: 'display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;'
+        });
 
         // Create reactive search with direct update callback
-        const searchFilter = ui_createReactiveFilter(searchContainer, {
+        const searchFilter = createReactiveFilter(searchContainer, {
             searchPlaceholder: 'Search members or offers...',
             initialValue: glb_filters.memberMerchantSearch || '',
             onFilterChange: (value) => {
-                // Force immediate table update with highlighting
-                const tableContainer = document.getElementById('members-table-container');
-                if (tableContainer) {
-                    tableContainer.innerHTML = "";
-                    tableContainer.appendChild(members_renderTable());
+                // Update filter and invalidate cache
+                glb_filters.memberMerchantSearch = value;
+                filteredMembers.invalidateCache();
+
+                // Force immediate table update
+                const container = document.getElementById('members-table-container');
+                if (container) {
+                    container.innerHTML = '';
+                    container.appendChild(members_renderVirtualTableView());
                 }
             }
         });
 
-        // Add reset button
-        const resetButton = document.createElement('button');
-        resetButton.textContent = 'Reset Filters';
-        resetButton.style.cssText = 'padding:10px 16px; border:none; border-radius:8px; background:rgba(0,0,0,0.05); cursor:pointer;';
-        resetButton.addEventListener('click', () => {
-            searchFilter.setValue('');
-            glb_filters.memberMerchantSearch = '';
-            glb_filters.memberStatus = 'Active';
-            glb_filters.memberCardtype = 'all';
-            SmartRenderer.renderCurrentView(true);
+        // Add status filter
+        const statusFilter = ui_createElement('select', {
+            props: { id: 'status-filter' },
+            styleString: UI_STYLES.controls.select,
+            events: {
+                change: (e) => {
+                    glb_filters.memberStatus = e.target.value;
+                    filteredMembers.invalidateCache();
+
+                    // Update just the table instead of the whole view
+                    const container = document.getElementById('members-table-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        container.appendChild(members_renderVirtualTableView());
+                    }
+                }
+            },
+            children: [
+                ui_createElement('option', { props: { value: 'all' }, text: 'All Statuses' }),
+                ui_createElement('option', { props: { value: 'Active', selected: glb_filters.memberStatus === 'Active' }, text: 'Active' }),
+                ui_createElement('option', { props: { value: 'Canceled' }, text: 'Canceled' })
+            ]
         });
+        searchContainer.appendChild(statusFilter);
 
+        // Add card type filter
+        const typeFilter = ui_createElement('select', {
+            props: { id: 'type-filter' },
+            styleString: UI_STYLES.controls.select,
+            events: {
+                change: (e) => {
+                    glb_filters.memberCardtype = e.target.value;
+                    filteredMembers.invalidateCache();
+
+                    // Update just the table instead of the whole view
+                    const container = document.getElementById('members-table-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        container.appendChild(members_renderVirtualTableView());
+                    }
+                }
+            },
+            children: [
+                ui_createElement('option', { props: { value: 'all' }, text: 'All Cards' }),
+                ui_createElement('option', { props: { value: 'BASIC' }, text: 'BASIC Cards' }),
+                ui_createElement('option', { props: { value: 'SUPP' }, text: 'SUPP Cards' })
+            ]
+        });
+        searchContainer.appendChild(typeFilter);
+
+        // Add reset button
+        const resetButton = ui_createBtn_v2({
+            label: 'Reset Filters',
+            type: 'secondary',
+            onClick: () => {
+                searchFilter.setValue('');
+                glb_filters.memberMerchantSearch = '';
+                glb_filters.memberStatus = 'Active';
+                glb_filters.memberCardtype = 'all';
+                statusFilter.value = 'Active';
+                typeFilter.value = 'all';
+                filteredMembers.invalidateCache();
+
+                // Update just the table instead of the whole view
+                const container = document.getElementById('members-table-container');
+                if (container) {
+                    container.innerHTML = '';
+                    container.appendChild(members_renderVirtualTableView());
+                }
+            }
+        });
         searchContainer.appendChild(resetButton);
-        filtersCard.appendChild(searchContainer);
 
+        filtersCard.appendChild(searchContainer);
         return filtersCard;
     }
 
-    // Optimized members table renderer
-    function members_renderTable() {
-        const headers = [
-            { label: "Index", key: "cardIndex" },
-            { label: "Logo", key: "small_card_art" },
-            { label: "Ending", key: "cardEnding" },
-            { label: "User Name", key: "embossed_name" },
-            { label: "Type", key: "relationship" },
-            { label: "Opened", key: "account_setup_date" },
-            { label: "Status", key: "account_status" },
-            { label: "Balance", key: "StatementBalance" },
-            { label: "Pending", key: "pending" },
-            { label: "Remaining", key: "remainingStaBal" },
-            { label: "Eligible", key: "eligibleOffers" },
-            { label: "Enrolled", key: "enrolledOffers" },
-            { label: "Priority", key: "priority" },
-            { label: "Exclude", key: "exclude" }
-        ];
 
-        const colWidths = {
-            cardIndex: "60px", small_card_art: "70px", cardEnding: "110px",
-            embossed_name: "180px", relationship: "85px", account_setup_date: "100px",
-            account_status: "90px", StatementBalance: "100px", pending: "100px",
-            remainingStaBal: "110px", eligibleOffers: "90px", enrolledOffers: "90px",
-            priority: "80px", exclude: "80px"
-        };
 
-        // Apply filters
-        const filteredAccounts = glb_account.filter(acc => {
-            const statusMatch = glb_filters.memberStatus === 'all' ||
-                acc.account_status.trim().toLowerCase() === glb_filters.memberStatus.toLowerCase();
-            const typeMatch = glb_filters.memberCardtype === 'all' ||
-                acc.relationship === glb_filters.memberCardtype;
-            return statusMatch && typeMatch;
-        });
-
-        // Cell renderer with organized handlers for each column type
-        const cellRenderer = (item, headerItem) => {
-            const key = headerItem.key;
-
-            if (key === 'small_card_art') {
-                return ui_returnLogo(item.small_card_art, item.description || "Card Logo");
-            }
-
-            // Cell rendering methods organized by column type
-            const renderers = {
-                small_card_art: () => {
-                    if (item.small_card_art && item.small_card_art !== 'N/A') {
-                        return ui_createElement('div', {
-                            styleString: 'display:flex; justify-content:center; align-items:center; height:40px;',
-                            children: [
-                                ui_createElement('img', {
-                                    props: { src: item.small_card_art, alt: "Card Logo" },
-                                    styleString: 'max-width:40px; max-height:40px; border-radius:4px; transition:transform 0.2s ease;',
-                                    events: {
-                                        mouseenter: e => e.target.style.transform = 'scale(1.15)',
-                                        mouseleave: e => e.target.style.transform = 'scale(1)'
-                                    }
-                                })
-                            ]
-                        });
-                    }
-                    return 'N/A';
-                },
-
-                cardIndex: () => {
-                    const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
-                    return ui_createElement('span', {
-                        styleString: UI_STYLES.tableCells.index,
-                        props: {
-                            innerHTML: subIndex ?
-                                `<strong>${mainIndex}</strong>-${subIndex}` :
-                                `<strong>${mainIndex}</strong>`
-                        }
-                    });
-                },
-
-                cardEnding: () => {
-                    return ui_createElement('div', {
-                        text: item[key],
-                        styleString: UI_STYLES.tableCells.card
-                    });
-                },
-
-                embossed_name: () => {
-                    return ui_createElement('div', {
-                        text: item[key],
-                        styleString: UI_STYLES.tableCells.name,
-                        props: { title: item[key] }
-                    });
-                },
-
-                account_setup_date: () => {
-                    return (item[key] && item[key] !== 'N/A') ?
-                        util_formatDate(item[key]) : 'N/A';
-                },
-
-                eligibleOffers: () => createOfferBadge(item[key], 'eligible', item.account_token),
-                enrolledOffers: () => createOfferBadge(item[key], 'enrolled', item.account_token),
-
-                relationship: () => {
-                    if (item.relationship === "SUPP") {
-                        const parentCardNum = members_getParentCardNumber(item);
-                        return ui_createElement('div', {
-                            styleString: 'display:flex; flex-direction:column; align-items:center; gap:2px;',
-                            children: [
-                                ui_createElement('span', {
-                                    text: 'SUPP',
-                                    styleString: 'font-size:12px; color:var(--ios-blue); font-weight:600;'
-                                }),
-                                ui_createElement('span', {
-                                    text: `→ ${parentCardNum}`,
-                                    styleString: 'font-size:11px; color:var(--ios-gray);'
-                                })
-                            ]
-                        });
-                    }
-
-                    return ui_createElement('span', {
-                        text: 'BASIC',
-                        styleString: 'font-size:12px; font-weight:600; color:var(--ios-green);'
-                    });
-                },
-
-                account_status: () => {
-                    const status = item[key].toLowerCase();
-                    const statusStyle = UI_STYLES.status[status] || UI_STYLES.status.pending;
-
-                    return ui_createElement('span', {
-                        text: item[key],
-                        styleString: `
-                            display:inline-block; padding:4px 10px; border-radius:12px; 
-                            font-size:12px; font-weight:600; text-transform:capitalize;
-                            background-color:${statusStyle.bgColor}; 
-                            color:${statusStyle.color}; 
-                            border:1px solid ${statusStyle.borderColor};
-                        `
-                    });
-                },
-
-                pending: () => createFinancialValue(item, 'debits_credits_payments_total_amount'),
-                remainingStaBal: () => createFinancialValue(item, 'remaining_statement_balance_amount'),
-                StatementBalance: () => createFinancialValue(item, 'statement_balance_amount'),
-
-                priority: () => createToggleSwitch(item, 'priority'),
-                exclude: () => createToggleSwitch(item, 'exclude')
-            };
-
-            // Use the appropriate handler or default
-            return renderers[key] ? renderers[key]() : (util_cleanValue(item[key]) || '');
-        };
-
-        // Helper function for offer badges
-        function createOfferBadge(count, type, accountToken) {
-            const parsedCount = parseInt(count || 0);
-            const container = ui_createElement('div', {
-                styleString: 'height:32px; display:flex; align-items:center; justify-content:center;'
-            });
-
-            if (parsedCount > 0) {
-                const isEligible = type === 'eligible';
-                const statusStyle = isEligible ? UI_STYLES.status.inProgress : UI_STYLES.status.active;
-                const icon = isEligible ?
-                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9.5 16.5v-9l7 4.5-7 4.5z"/></svg>` :
-                    `<svg width="12" height="12" viewBox="0 0 24 24" fill="${statusStyle.color}" style="margin-right:4px"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>`;
-
-                return ui_createElement('button', {
-                    className: isEligible ? 'eligible-badge' : 'enrolled-badge',
-                    props: { innerHTML: icon + parsedCount },
-                    styleString: `
-                        border-radius:16px; 
-                        background-color:${statusStyle.bgColor}; 
-                        color:${statusStyle.color}; 
-                        border:1px solid ${statusStyle.borderColor}; 
-                        padding:5px 12px; 
-                        font-weight:600; 
-                        font-size:13px; 
-                        cursor:pointer; 
-                        transition:all 0.2s ease; 
-                        display:flex; 
-                        align-items:center; 
-                        justify-content:center; 
-                        min-width:40px;
-                    `,
-                    events: {
-                        mouseover: e => {
-                            e.target.style.transform = 'scale(1.05) translateY(-2px)';
-                            e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                        },
-                        mouseout: e => {
-                            e.target.style.transform = 'scale(1) translateY(0)';
-                            e.target.style.boxShadow = 'none';
-                        },
-                        click: e => members_popCard(accountToken, type)
-                    }
-                });
-            }
-
-            // Zero count indicator
-            return ui_createElement('span', {
-                text: '0',
-                styleString: 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6;'
-            });
-        }
-
-        // Helper function for financial values
-        function createFinancialValue(item, fieldName) {
-            if (item.relationship === "BASIC") {
-                if (item.financialData) {
-                    const value = item.financialData[fieldName];
-                    const sanitizedValue = util_cleanValue(value);
-                    const numValue = parseFloat(sanitizedValue);
-
-                    return ui_createElement('div', {
-                        styleString: `
-                            ${UI_STYLES.tableCells.money}
-                            font-weight:${numValue > 0 ? '600' : '400'}; 
-                            color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
-                        `,
-                        text: numValue.toLocaleString('en-US', {
-                            style: 'currency',
-                            currency: 'USD',
-                            minimumFractionDigits: 2
-                        })
-                    });
-                }
-
-                // Loading spinner for data being fetched
-                return ui_createElement('div', {
-                    className: 'loading-spinner',
-                    styleString: 'width:16px; height:16px; border:2px solid rgba(0, 122, 255, 0.2); border-top:2px solid var(--ios-blue); border-radius:50%; margin:0 auto; animation:spin 1s linear infinite;'
-                });
-            }
-            return "";
-        }
-
-        // Helper function for toggle switches
-        function createToggleSwitch(account, type) {
-            const isChecked = type === 'priority'
-                ? glb_priorityCards.includes(account.account_token)
-                : glb_excludedCards.includes(account.account_token);
-
-            const color = type === 'priority' ? 'var(--ios-blue)' : 'var(--ios-red)';
-
-            return ui_createElement('div', {
-                styleString: 'display:flex; justify-content:center; align-items:center;',
-                children: [
-                    ui_createElement('div', {
-                        styleString: `
-                            display:inline-block; position:relative; width:36px; height:22px; 
-                            border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
-                            box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
-                            background-color:${isChecked ? color : '#e9e9ea'};
-                        `,
-                        children: [
-                            ui_createElement('div', {
-                                styleString: `
-                                    position:absolute; width:18px; height:18px; border-radius:9px; 
-                                    background-color:#ffffff; box-shadow:0 1px 3px rgba(0, 0, 0, 0.15); 
-                                    top:2px; left:${isChecked ? '16px' : '2px'}; transition:left 0.3s ease;
-                                `
-                            })
-                        ],
-                        props: {
-                            title: type === 'priority' ? 'Priority Card (Enroll First)' : 'Exclude Card (Skip Enrollment)'
-                        },
-                        events: {
-                            click: e => {
-                                const newState = !isChecked;
-                                const toggle = e.currentTarget;
-                                const knob = toggle.firstChild;
-
-                                // Update visual state
-                                knob.style.left = newState ? '16px' : '2px';
-                                toggle.style.backgroundColor = newState ? color : '#e9e9ea';
-
-                                // Update data state
-                                if (type === 'priority') {
-                                    if (newState) {
-                                        if (!glb_priorityCards.includes(account.account_token)) {
-                                            glb_priorityCards.push(account.account_token);
-                                        }
-                                    } else {
-                                        glb_priorityCards = glb_priorityCards.filter(token => token !== account.account_token);
-                                    }
-                                    storage_manageData("set", storage_accToken, ["priorityCards"]);
-                                } else {
-                                    if (newState) {
-                                        if (!glb_excludedCards.includes(account.account_token)) {
-                                            glb_excludedCards.push(account.account_token);
-                                        }
-                                    } else {
-                                        glb_excludedCards = glb_excludedCards.filter(token => token !== account.account_token);
-                                    }
-                                    storage_manageData("set", storage_accToken, ["excludedCards"]);
-                                }
-                            }
-                        }
-                    })
-                ]
-            });
-        }
-
-        // Define sortable columns
-        const sortableKeys = [
-            "cardIndex", "cardEnding", "embossed_name", "relationship",
-            "account_setup_date", "account_status", "StatementBalance", "pending",
-            "remainingStaBal", "eligibleOffers", "enrolledOffers"
-        ];
-
-        // Create and return the table
-        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
-    }
-
+    // Enhanced render for the offer-on-card popup
     // Enhanced render for the offer-on-card popup
     function members_popCard(accountToken, offerType) {
         const account = glb_account.find(acc => acc.account_token === accountToken);
@@ -3422,14 +3044,12 @@
 
         const { overlay, content, closeBtn } = ui_createModal({
             id: 'card-offers-modal',
-            width: '800px',
+            width: '680px',
             title: 'Card Offers',
             onClose: () => { }
         });
 
-        // Set fixed height for modal content
-        content.style.maxHeight = '75vh';
-        content.style.overflowY = 'auto';
+
 
         // Add offer type badge to header
         content.parentNode.appendChild(ui_createBadge({
@@ -3444,9 +3064,9 @@
         // Get relevant offers
         const relevantOffers = getOffersForCard(account, offerType);
 
-        // Content area
+        // Main content area with fixed height
         const contentArea = ui_createElement('div', {
-            styleString: UI_STYLES.text.body
+            styleString: `${UI_STYLES.text.body} height:650px; overflow-y:auto;`
         });
 
         // Add "Enroll All" button for eligible offers
@@ -3479,7 +3099,7 @@
                 styleString: `${UI_STYLES.containers.flexRow} margin-bottom:16px;`,
                 children: [
                     // Card logo if available
-                    ui_returnLogo(account.small_card_art, account.description),
+                    createCardLogo(account.small_card_art, account.description),
 
                     // Card details
                     ui_createElement('div', {
@@ -3492,6 +3112,27 @@
                             ui_createElement('div', {
                                 text: `${account.cardEnding} - ${account.embossed_name || ''}`,
                                 styleString: 'font-size:15px; color:#666;'
+                            }),
+                            // Add card index display
+                            ui_createElement('div', {
+                                styleString: 'margin-top:6px;',
+                                children: [
+                                    ui_createElement('span', {
+                                        text: 'Card Index: ',
+                                        styleString: 'font-size:13px; color:#888;'
+                                    }),
+                                    ui_createElement('span', {
+                                        styleString: UI_STYLES.tableCells.index,
+                                        props: {
+                                            innerHTML: (() => {
+                                                const [mainIndex, subIndex] = util_parseCardIndex(account.cardIndex);
+                                                return subIndex ?
+                                                    `<strong>${mainIndex}</strong>-${subIndex}` :
+                                                    `<strong>${mainIndex}</strong>`;
+                                            })()
+                                        }
+                                    })
+                                ]
                             })
                         ]
                     })
@@ -3527,7 +3168,7 @@
 
                         setTimeout(() => {
                             closeBtn.click();
-                            SmartRenderer.renderCurrentView();
+                            ViewRenderer.renderCurrentView();
                         }, 1500);
                     } catch (err) {
                         console.error('Error enrolling all:', err);
@@ -3646,20 +3287,20 @@
                     title: 'Enroll in this offer'
                 },
                 styleString: `
-                    background-color: rgba(0, 122, 255, 0.1);
-                    color: var(--ios-blue);
-                    border: none;
-                    border-radius: 50%;
-                    width: 36px;
-                    height: 36px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    align-self: center;
-                    flex-shrink: 0;
-                    ${UI_STYLES.utils.transition}
-                `,
+                background-color: rgba(0, 122, 255, 0.1);
+                color: var(--ios-blue);
+                border: none;
+                border-radius: 50%;
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                align-self: center;
+                flex-shrink: 0;
+                ${UI_STYLES.utils.transition}
+            `,
                 events: {
                     mouseenter: e => {
                         e.target.style.backgroundColor = 'var(--ios-blue)';
@@ -3737,107 +3378,137 @@
         }
     }
 
-    function members_sortTable(key) {
-        if (glb_memberSortState.key === key) {
-            glb_memberSortState.direction *= -1;
-        } else {
-            glb_memberSortState.key = key;
-            glb_memberSortState.direction = 1;
-        }
-
-        const numericColumns = ['StatementBalance', 'pending', 'remainingStaBal', 'eligibleOffers', 'enrolledOffers', 'days_past_due'];
-
-        glb_account.sort((a, b) => {
-            if (key === 'cardIndex') {
-                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
-                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
-                if (aMain === bMain) {
-                    return glb_memberSortState.direction * (aSub - bSub);
-                }
-                return glb_memberSortState.direction * (aMain - bMain);
-            }
-            else if (numericColumns.includes(key)) {
-                const numA = util_parseNumber(a[key]);
-                const numB = util_parseNumber(b[key]);
-                return glb_memberSortState.direction * (numA - numB);
-            }
-            else if (key === 'account_setup_date') {
-                const dateA = a[key] ? new Date(a[key]) : new Date(0);
-                const dateB = b[key] ? new Date(b[key]) : new Date(0);
-                return glb_memberSortState.direction * (dateA - dateB);
-            }
-            else {
-                const valA = a[key] || "";
-                const valB = b[key] || "";
-                return glb_memberSortState.direction * valA.toString().localeCompare(valB.toString());
-            }
-        });
-
-        ui_saveScrollPos();
-        const container = document.getElementById('members-table-container');
-        if (container) {
-            container.innerHTML = "";
-            container.appendChild(members_renderTable());
-        }
-    }
-
-
 
     //-------------------------------------------------------------------------
 
     /* Memoized offer filtering with cache invalidation and virtual table management*/
+    const filteredOffers = (() => {
+        let cachedFilters = null;
+        let cachedResults = null;
+        let lastOfferId = null;
+        let virtualTable = null;
 
-    function getFilteredOffers() {
-        // Simply filter the offers based on current filters
-        return glb_offer.filter(offer => {
-            // Filter by favorites
-            if (glb_filters.offerFav && !offer.favorite) return false;
+        return {
+            /**
+             * Gets filtered offers list with memoization
+             * @returns {Array} - Filtered offers
+             */
+            getFilteredOffers() {
+                const currentFilterHash = JSON.stringify(glb_filters);
+                const currentOfferId = glb_offer.length > 0 ?
+                    glb_offer.map(o => o.offerId).join(',') : 'empty';
 
-            // Filter by merchant search
-            if (glb_filters.offerMerchantSearch) {
-                const searchTerm = glb_filters.offerMerchantSearch.toLowerCase();
-                if (!offer.name.toLowerCase().includes(searchTerm)) return false;
+                // Check if we need to invalidate cache
+                if (!cachedResults ||
+                    cachedFilters !== currentFilterHash ||
+                    lastOfferId !== currentOfferId) {
+
+                    // Apply filters
+                    cachedResults = glb_offer.filter(offer => {
+                        if (glb_filters.offerFav && !offer.favorite) return false;
+                        if (glb_filters.offerMerchantSearch) {
+                            const searchTerm = glb_filters.offerMerchantSearch.toLowerCase();
+                            if (!offer.name.toLowerCase().includes(searchTerm)) return false;
+                        }
+
+                        if (glb_filters.offerCardEnding) {
+                            const matchingAccounts = glb_account.filter(acc =>
+                                acc.cardEnding.includes(glb_filters.offerCardEnding)
+                            ).map(acc => acc.account_token);
+
+                            const isEligible = offer.eligibleCards?.some(token => matchingAccounts.includes(token));
+                            const isEnrolled = offer.enrolledCards?.some(token => matchingAccounts.includes(token));
+
+                            if (!isEligible && !isEnrolled) return false;
+                        }
+
+                        if (glb_filters.enrollmentStatus === 'fully') {
+                            const eligible = offer.eligibleCards?.length || 0;
+                            const enrolled = offer.enrolledCards?.length || 0;
+                            if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
+                        } else if (glb_filters.enrollmentStatus === 'pending') {
+                            const eligible = offer.eligibleCards?.length || 0;
+                            const enrolled = offer.enrolledCards?.length || 0;
+                            if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
+                        }
+
+                        if (glb_filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
+                        if (glb_filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
+                        if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
+                            if (!glb_filters.customFilter(offer)) return false;
+                        }
+
+                        return true;
+                    });
+
+                    // Update cache keys
+                    cachedFilters = currentFilterHash;
+                    lastOfferId = currentOfferId;
+
+                    // Notify ViewRenderer that offers view needs updating
+                    ViewRenderer.markViewChanged('offers');
+
+                    // Update virtual table if available
+                    if (virtualTable && typeof virtualTable.updateData === 'function') {
+                        virtualTable.updateData(cachedResults);
+                    }
+                }
+
+                return cachedResults;
+            },
+
+            /**
+             * Invalidates the cache, forcing a refresh on next request
+             */
+            invalidateCache() {
+                cachedResults = null;
+                cachedFilters = null;
+                ViewRenderer.markViewChanged('offers');
+            },
+
+            /**
+             * Stores reference to the virtual table
+             * @param {Object} table - Virtual table instance
+             */
+            setVirtualTable(table) {
+                virtualTable = table;
+                ViewRenderer.setVirtualTable('offers', table);
+            },
+
+            /**
+             * Gets the current virtual table instance
+             * @returns {Object|null} - Virtual table instance or null
+             */
+            getVirtualTable() {
+                return virtualTable || ViewRenderer.getVirtualTable('offers');
+            },
+
+            /**
+             * Updates the virtual table with new data
+             * @param {Array} newData - New data for the table
+             */
+            updateVirtualTable(newData) {
+                if (virtualTable && typeof virtualTable.updateData === 'function') {
+                    virtualTable.updateData(newData);
+                }
+            },
+
+            /**
+             * Refreshes the virtual table view
+             */
+            refreshVirtualTable() {
+                if (virtualTable && typeof virtualTable.refresh === 'function') {
+                    virtualTable.refresh();
+                }
             }
+        };
+    })();
 
-            // Filter by card ending
-            if (glb_filters.offerCardEnding) {
-                const matchingAccounts = glb_account.filter(acc =>
-                    acc.cardEnding.includes(glb_filters.offerCardEnding)
-                ).map(acc => acc.account_token);
-
-                const isEligible = offer.eligibleCards?.some(token => matchingAccounts.includes(token));
-                const isEnrolled = offer.enrolledCards?.some(token => matchingAccounts.includes(token));
-
-                if (!isEligible && !isEnrolled) return false;
-            }
-
-            // Filter by enrollment status
-            if (glb_filters.enrollmentStatus === 'fully') {
-                const eligible = offer.eligibleCards?.length || 0;
-                const enrolled = offer.enrolledCards?.length || 0;
-                if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
-            } else if (glb_filters.enrollmentStatus === 'pending') {
-                const eligible = offer.eligibleCards?.length || 0;
-                const enrolled = offer.enrolledCards?.length || 0;
-                if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
-            }
-
-            // Filter by eligibility
-            if (glb_filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
-            if (glb_filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
-
-            // Custom filter
-            if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
-                if (!glb_filters.customFilter(offer)) return false;
-            }
-
-            return true;
-        });
+    // Updated offers_filterOffersList function
+    function offers_filterOffersList() {
+        return filteredOffers.getFilteredOffers();
     }
-
-
-
-
+    // Enhanced offers_renderPage with better structure
     function offers_renderPage() {
         const containerDiv = document.createElement('div');
         containerDiv.style.cssText = UI_STYLES.pageContainer;
@@ -3859,7 +3530,7 @@
 
         const displayContainer = document.createElement('div');
         displayContainer.id = 'offers-display-container';
-        displayContainer.appendChild(offers_renderTableView());
+        displayContainer.appendChild(offers_renderVirtualTableView());
 
         // Tab click handlers
         currentTab.addEventListener('click', () => {
@@ -3869,7 +3540,7 @@
             historyTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(offers_renderTableView());
+            displayContainer.appendChild(offers_renderVirtualTableView());
         });
 
         historyTab.addEventListener('click', () => {
@@ -4099,43 +3770,43 @@
         // Add all stats with click handlers
         statsBar.appendChild(createStatItem('Total Offers', stats.totalOffers, ICONS.TOTAL, '52, 152, 219', () => {
             offers_resetAllFilters();
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         statsBar.appendChild(createStatItem('Favorites', stats.favoriteOffers, ICONS.FAVORITE, '255, 149, 0', () => {
             offers_resetAllFilters();
             glb_filters.offerFav = true;
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         statsBar.appendChild(createStatItem('Expiring Soon', stats.expiringSoon, ICONS.EXPIRING, '244, 67, 54', () => {
             offers_resetAllFilters();
             glb_filters.customFilter = offers_expiringFilter();
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         // statsBar.appendChild(createStatItem('Fully Enrolled', stats.distinctFullyEnrolled, ICONS.ENROLLED, '88, 86, 214', () => {
         //     offers_resetAllFilters();
         //     glb_filters.enrollmentStatus = 'fully';
-        //     SmartRenderer.renderCurrentView();
+        //     ViewRenderer.renderCurrentView();
         // }));
 
         statsBar.appendChild(createStatItem('Pending Enrollment', stats.distinctNotFullyEnrolled, ICONS.PENDING, '255, 204, 0', () => {
             offers_resetAllFilters();
             glb_filters.enrollmentStatus = 'pending';
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         statsBar.appendChild(createStatItem('Total Eligible', stats.totalEligible, ICONS.ELIGIBLE, '142, 142, 147', () => {
             offers_resetAllFilters();
             glb_filters.eligibleOnly = true;
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         statsBar.appendChild(createStatItem('Total Enrolled', stats.totalEnrolled, ICONS.TOTAL, '50, 173, 230', () => {
             offers_resetAllFilters();
             glb_filters.enrolledOnly = true;
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }));
 
         return statsBar;
@@ -4225,7 +3896,7 @@
             onClick: async () => {
                 try {
                     await api_batchEnrollOffers();
-                    SmartRenderer.renderCurrentView();
+                    ViewRenderer.renderCurrentView();
                 } catch (e) {
                     console.error('Error enrolling all:', e);
                 }
@@ -4246,19 +3917,20 @@
         const merchantSearchContainer = document.createElement('div');
         merchantSearchContainer.style.cssText = 'flex:1; min-width:180px; max-width:300px;';
 
-        const reactiveSearch = ui_createReactiveFilter(merchantSearchContainer, {
+        const reactiveSearch = createReactiveFilter(merchantSearchContainer, {
             searchPlaceholder: 'Search merchants...',
             initialValue: glb_filters.offerMerchantSearch || '',
             onFilterChange: (value) => {
                 // Update filter and invalidate cache
                 glb_filters.offerMerchantSearch = value;
+                filteredOffers.invalidateCache();
 
                 // Force immediate table update
                 const container = document.getElementById('offers-table-container') ||
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offers_renderVirtualTableView());
                 }
             }
         });
@@ -4268,17 +3940,18 @@
         const cardSearchContainer = document.createElement('div');
         cardSearchContainer.style.cssText = 'position:relative; min-width:150px; max-width:200px; flex:0.7;';
 
-        const cardFilter = ui_createReactiveFilter(cardSearchContainer, {
+        const cardFilter = createReactiveFilter(cardSearchContainer, {
             searchPlaceholder: 'Card ending...',
             initialValue: glb_filters.offerCardEnding || '',
             onFilterChange: (value) => {
                 glb_filters.offerCardEnding = value;
+                filteredOffers.invalidateCache();
 
                 const container = document.getElementById('offers-table-container') ||
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offers_renderVirtualTableView());
                 }
             }
         });
@@ -4293,7 +3966,8 @@
                 reactiveSearch.setValue('');
                 cardFilter.setValue('');
                 offers_resetAllFilters();
-                SmartRenderer.renderCurrentView(true);
+                filteredOffers.invalidateCache();
+                ViewRenderer.renderCurrentView(true);
             }
         });
         searchContainer.appendChild(resetButton);
@@ -4302,200 +3976,11 @@
         return filterCard;
     }
 
+    // Optimized virtual table rendering for offers
+    function offers_renderVirtualTableView() {
+        const filteredOffers = offers_filterOffersList();
 
-    function getProcessedOffers() {
-        // Apply filters
-        const filteredOffers = glb_offer.filter(offer => {
-            if (glb_filters.offerFav && !offer.favorite) return false;
-
-            if (glb_filters.offerMerchantSearch) {
-                const searchTerm = glb_filters.offerMerchantSearch.toLowerCase();
-                if (!offer.name.toLowerCase().includes(searchTerm)) return false;
-            }
-
-            if (glb_filters.offerCardEnding) {
-                const matchingAccounts = glb_account.filter(acc =>
-                    acc.cardEnding.includes(glb_filters.offerCardEnding)
-                ).map(acc => acc.account_token);
-
-                const isEligible = offer.eligibleCards?.some(token => matchingAccounts.includes(token));
-                const isEnrolled = offer.enrolledCards?.some(token => matchingAccounts.includes(token));
-
-                if (!isEligible && !isEnrolled) return false;
-            }
-
-            if (glb_filters.enrollmentStatus === 'fully') {
-                const eligible = offer.eligibleCards?.length || 0;
-                const enrolled = offer.enrolledCards?.length || 0;
-                if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
-            } else if (glb_filters.enrollmentStatus === 'pending') {
-                const eligible = offer.eligibleCards?.length || 0;
-                const enrolled = offer.enrolledCards?.length || 0;
-                if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
-            }
-
-            if (glb_filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
-            if (glb_filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
-            if (glb_filters.customFilter && typeof glb_filters.customFilter === 'function') {
-                if (!glb_filters.customFilter(offer)) return false;
-            }
-
-            return true;
-        });
-
-        // Process the filtered offers with TableDataProcessor
-        return TableDataProcessor.processTableData('offers-table', filteredOffers, {
-            processFunctions: {
-                // Pre-compute favorite cell
-                favorite: offer => {
-                    const buttonHtml = offer.favorite ?
-                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
-                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
-
-                    return buttonHtml;
-                },
-
-                // Pre-compute logo cell
-                logo: offer => {
-                    return ui_returnLogo(offer.logo, offer.name);
-                },
-
-                // Pre-compute achievement type
-                achievement_type: offer => {
-                    const achievementType = offer.achievement_type;
-                    const text = achievementType === "STATEMENT_CREDIT" ? "Cash" :
-                        achievementType === "MEMBERSHIP_REWARDS" ? "MR" : achievementType;
-
-                    const color = achievementType === "STATEMENT_CREDIT" ? '#2e7d32' :
-                        achievementType === "MEMBERSHIP_REWARDS" ? '#1976d2' : '#2c3e50';
-
-                    return `<div style="font-weight:500; font-size:13px; color:${color};">${text}</div>`;
-                },
-
-                // Pre-compute category
-                category: offer => {
-                    if (offer.category && offer.category !== "N/A") {
-                        const cat = offer.category.toString().toLowerCase().trim();
-                        const categoryMap = {
-                            "default": { icon: "🔰", color: "#9e9e9e" },
-                            "dining": { icon: "🍽️", color: "#d32f2f" },
-                            "entertainment": { icon: "🎭", color: "#7b1fa2" },
-                            "services": { icon: "⚙️", color: "#616161" },
-                            "shopping": { icon: "🛍️", color: "#1976d2" },
-                            "travel": { icon: "✈️", color: "#0288d1" }
-                        };
-
-                        const config = categoryMap[cat] || { icon: "•", color: "#757575" };
-                        return `<div style="display:flex; align-items:center; justify-content:center; gap:6px;">
-                        <span>${config.icon}</span>
-                        <span style="color:${config.color}; font-size:13px;">${cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
-                      </div>`;
-                    }
-                    return 'N/A';
-                },
-
-                redemption_types: offer => {
-                    const types = (offer.redemption_types || "").toLowerCase();
-
-                    // Define SVG icons
-                    const icons = {
-                        online: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1976d2" stroke-width="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg>',
-                        instore: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d32f2f" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9"/></svg>',
-                        both: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7b1fa2" stroke-width="2"><path d="M20 7h-7l-3 3-3-3H3v13h17z"/><path d="M7 7V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3"/></svg>'
-                    };
-
-                    // Determine which icon to use
-                    let icon = '';
-                    if (types.includes('online') && types.includes('instore')) {
-                        icon = icons.both;
-                    } else if (types.includes('online')) {
-                        icon = icons.online;
-                    } else if (types.includes('instore')) {
-                        icon = icons.instore;
-                    }
-
-                    // Create element with appropriate styling and tooltip
-                    return icon ? `<div style="display:flex; justify-content:center;" title="${offer.redemption_types}">${icon}</div>` :
-                        `<span style="font-size:12px; color:#777;">${offer.redemption_types || ""}</span>`;
-                },
-
-                // Pre-compute expiry
-                expiry_date: offer => {
-                    if (offer.expiry_date && offer.expiry_date !== 'N/A') {
-                        const d = new Date(offer.expiry_date);
-                        if (!isNaN(d)) {
-                            const now = new Date();
-                            const daysUntilExpiry = Math.floor((d - now) / (1000 * 60 * 60 * 24));
-
-                            return `<div style="display:flex; flex-direction:column; align-items:center;">
-                          <span style="font-size:13px;">${util_formatDate(offer.expiry_date)}</span>
-                          <span style="font-size:${daysUntilExpiry > 30 ? '11px' : '12px'}; color:${daysUntilExpiry < 0 ? 'var(--ios-red)' :
-                                    daysUntilExpiry <= 30 ? 'var(--ios-orange)' : 'var(--ios-gray)'
-                                };">${daysUntilExpiry < 0 ? 'Expired' : `${daysUntilExpiry} days left`}</span>
-                        </div>`;
-                        }
-                    }
-                    return 'N/A';
-                },
-
-                // Pre-compute card badges
-                eligibleCards: offer => {
-                    const count = offer.eligibleCards?.length || 0;
-                    if (count > 0) {
-                        return `<button class="eligible-badge" style="border-radius:16px; background-color:rgba(0, 122, 255, 0.1); color:var(--ios-blue); border:1px solid rgba(0, 122, 255, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
-                          <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
-                        </svg>
-                        ${count}
-                      </button>`;
-                    }
-                    return `<span style="color:rgba(0,0,0,0.3);">0</span>`;
-                },
-
-                enrolledCards: offer => {
-                    const count = offer.enrolledCards?.length || 0;
-                    if (count > 0) {
-                        return `<button class="enrolled-badge" style="border-radius:16px; background-color:rgba(52, 199, 89, 0.1); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                          <path d="M22 4L12 14.01l-3-3"/>
-                        </svg>
-                        ${count}
-                      </button>`;
-                    }
-                    return `<span style="color:rgba(0,0,0,0.3);">0</span>`;
-                },
-
-                // Pre-compute formatted values
-                threshold: offer => renderFormattedValue(offer.threshold, '#1c1c1e'),
-                reward: offer => renderFormattedValue(offer.reward, 'var(--ios-green)'),
-                percentage: offer => renderFormattedValue(offer.percentage, 'var(--ios-blue)'),
-
-
-                // Pre-compute description
-                short_description: offer => {
-                    return `<div style="font-size:13px; color:var(--ios-text-secondary); max-width:220px; max-height:60px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; line-height:1.3;">${offer.short_description || 'No description available'}</div>`;
-                }
-            },
-            sortState: glb_offerSortState
-        });
-        function renderFormattedValue(value, color) {
-            if (value && value !== 'N/A') {
-                return `<div style="font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color};">${value}</div>`;
-            }
-            return '';
-        }
-
-    }
-
-    // Updated render function that uses getProcessedOffers
-    function offers_renderTableView() {
-        // Get processed offers
-        const processedOffers = getProcessedOffers();
-
-        // Handle empty state
-        if (processedOffers.length === 0) {
+        if (filteredOffers.length === 0) {
             return ui_createEmptyState(document.createElement('div'), {
                 title: 'No Offers Found',
                 message: glb_filters.offerFav ? 'No favorite offers found' :
@@ -4504,12 +3989,11 @@
                 buttonText: 'Reset Filters',
                 callback: () => {
                     offers_resetAllFilters();
-                    SmartRenderer.renderCurrentView();
+                    ViewRenderer.renderCurrentView();
                 }
             });
         }
 
-        // Define table headers and column widths
         const headers = [
             { label: "★", key: "favorite" },
             { label: "Logo", key: "logo" },
@@ -4533,208 +4017,276 @@
             percentage: "80px", eligibleCards: "80px", enrolledCards: "80px"
         };
 
-        // Cell renderer that handles pre-processed cells
-        const cellRenderer = (offer, headerItem) => {
-            const key = headerItem.key;
-            const processedKey = `__processed_${key}`;
+        // Container for virtual table
+        const container = document.createElement('div');
+        container.id = 'offers-virtual-table-container';
+        container.style.cssText = 'width:100%;';
 
-            // Use pre-processed value if available
-            if (offer[processedKey] !== undefined) {
-                const content = offer[processedKey];
-
-                if (key === 'favorite') {
-                    const favoriteButton = document.createElement('button');
-                    favoriteButton.innerHTML = content;
-                    favoriteButton.style.cssText = 'background:none; border:none; cursor:pointer; padding:5px; border-radius:50%; transition:all 0.2s ease;';
-
-                    // Add event listeners for hover effects
-                    favoriteButton.addEventListener('mouseenter', () => {
-                        favoriteButton.style.transform = 'scale(1.2)';
-                        favoriteButton.style.backgroundColor = 'rgba(0,0,0,0.05)';
-                    });
-
-                    favoriteButton.addEventListener('mouseleave', () => {
-                        favoriteButton.style.transform = 'scale(1)';
-                        favoriteButton.style.backgroundColor = 'transparent';
-                    });
-
-                    // Add click handler to toggle favorite status
-                    favoriteButton.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Prevent row click from triggering
-                        offers_toggleFavorite(offer);
-                    });
-
-                    return favoriteButton;
-                }
-
-                // Handle HTML string
-                if (typeof content === 'string' && content.trim().startsWith('<')) {
-                    const wrapper = document.createElement('div');
-                    wrapper.innerHTML = content;
-                    return wrapper.firstChild || wrapper;
-                }
-
-                return content;
-            }
-
-            // Fallback for any unprocessed cells
-            if (key === 'name') {
-                return ui_createElement('div', {
-                    text: offer.name,
-                    styleString: 'max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500; font-size:13px; color:var(--ios-text-primary); padding:8px 4px; font-weight:600; font-size:14px;',
-                    props: { title: offer.name }
-                });
-            }
-
-            // Return raw value for any other fields
-            return offer[key] || 'N/A';
-        };
-
-        // Define sortable columns
-        const sortableKeys = [
-            "favorite", "name", "achievement_type", "category",
-            "expiry_date", "threshold", "reward", "percentage",
-            "eligibleCards", "enrolledCards"
-        ];
-
-        // Create the table
-        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offers_sortTable, sortableKeys);
-
-        // Make rows clickable
+        // Create virtual table after the container is in the DOM
         setTimeout(() => {
-            tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
-                if (index < processedOffers.length) {
-                    row.style.cursor = 'pointer';
-                    row.addEventListener('click', () => {
-                        offers_popCard(processedOffers[index].offerId);
-                    });
+            const sortableKeys = [
+                "favorite", "name", "achievement_type", "category",
+                "expiry_date", "threshold", "reward", "percentage",
+                "eligibleCards", "enrolledCards"
+            ];
+
+            const offers_cellRenderer = (item, headerItem) => {
+                const key = headerItem.key;
+
+                switch (key) {
+                    case 'logo':
+                        return createCardLogo(item.logo, item.name);
+
+                    case 'favorite':
+                        const buttonHtml = item.favorite ?
+                            '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+
+                        const btn = document.createElement('button');
+                        btn.style.cssText = 'background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;';
+                        btn.innerHTML = buttonHtml;
+                        btn.dataset.offerId = item.offerId;
+                        btn.dataset.action = 'toggleFavorite';
+                        return btn;
+
+                    case 'achievement_type':
+                        const achievementType = item.achievement_type;
+                        const text = achievementType === "STATEMENT_CREDIT" ? "Cash" :
+                            achievementType === "MEMBERSHIP_REWARDS" ? "MR" : achievementType;
+
+                        const color = achievementType === "STATEMENT_CREDIT" ? '#2e7d32' :
+                            achievementType === "MEMBERSHIP_REWARDS" ? '#1976d2' : '#2c3e50';
+
+                        const div = document.createElement('div');
+                        div.style.cssText = `font-weight:500; font-size:11px; color:${color};`;
+                        div.textContent = text;
+                        return div;
+
+                    case 'category':
+                        if (item.category && item.category !== "N/A") {
+                            const cat = item.category.toString().toLowerCase().trim();
+                            const categoryMap = {
+                                "default": { icon: "🔰", color: "#9e9e9e" },
+                                "dining": { icon: "🍽️", color: "#d32f2f" },
+                                "entertainment": { icon: "🎭", color: "#7b1fa2" },
+                                "services": { icon: "⚙️", color: "#616161" },
+                                "shopping": { icon: "🛍️", color: "#1976d2" },
+                                "travel": { icon: "✈️", color: "#0288d1" }
+                            };
+
+                            const config = categoryMap[cat] || { icon: "•", color: "#757575" };
+                            const categoryDiv = document.createElement('div');
+                            categoryDiv.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:6px;';
+                            categoryDiv.innerHTML = `
+                        <span>${config.icon}</span>
+                        <span style="color:${config.color}; font-size:11px;">${cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
+                    `;
+                            return categoryDiv;
+                        }
+                        return 'N/A';
+
+                    case 'expiry_date':
+                        if (item.expiry_date && item.expiry_date !== 'N/A') {
+                            const d = new Date(item.expiry_date);
+                            if (!isNaN(d)) {
+                                const now = new Date();
+                                const daysUntilExpiry = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+
+                                const expiryDiv = document.createElement('div');
+                                expiryDiv.style.cssText = 'display:flex; flex-direction:column; align-items:center;';
+                                expiryDiv.innerHTML = `
+                            <span style="font-size:11px;">${util_formatDate(item.expiry_date)}</span>
+                            <span style="font-size:${daysUntilExpiry > 30 ? '10px' : '10px'}; color:${daysUntilExpiry < 0 ? 'var(--ios-red)' :
+                                        daysUntilExpiry <= 30 ? 'var(--ios-orange)' : 'var(--ios-gray)'
+                                    };">${daysUntilExpiry < 0 ? 'Expired' : `${daysUntilExpiry} days left`}</span>
+                        `;
+                                return expiryDiv;
+                            }
+                        }
+                        return 'N/A';
+
+                    case 'redemption_types':
+                        if (item.redemption_types && item.redemption_types !== "N/A") {
+                            let parts = item.redemption_types.toString().split(",");
+
+                            const redemptionDiv = document.createElement('div');
+                            redemptionDiv.style.cssText = 'display:flex; justify-content:center; gap:8px;';
+
+                            parts.forEach(val => {
+                                let trimmed = val.trim().toLowerCase();
+
+                                let iconContent, title;
+                                if (trimmed.includes("instore")) {
+                                    iconContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1976d2" stroke-width="2">
+                                <path d="M3 3h18v7H3z"/>
+                                <path d="M21 10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10"/>
+                                <path d="M11 14h.01M6 14h.01M16 14h.01M4 11v-1h16v1"/>
+                            </svg>`;
+                                    title = "In-Store";
+                                } else if (trimmed.includes("online")) {
+                                    iconContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V4l-8-2-8 2v8c0 6 8 10 8 10z"/>
+                            </svg>`;
+                                    title = "Online";
+                                } else {
+                                    iconContent = trimmed.toUpperCase().slice(0, 1);
+                                    title = trimmed;
+                                }
+
+                                const span = document.createElement('span');
+                                span.innerHTML = iconContent;
+                                span.title = title;
+                                span.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background-color:rgba(0,0,0,0.05);';
+                                redemptionDiv.appendChild(span);
+                            });
+
+                            return redemptionDiv;
+                        }
+                        return 'N/A';
+
+                    case 'eligibleCards':
+                        const eligibleCount = item.eligibleCards?.length || 0;
+                        if (eligibleCount > 0) {
+                            const button = document.createElement('button');
+                            button.className = 'eligible-badge';
+                            button.style.cssText = 'border-radius:16px; background-color:rgba(0, 122, 255, 0.1); color:var(--ios-blue); border:1px solid rgba(0, 122, 255, 0.25); padding:4px 10px; font-weight:600; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;';
+                            button.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+                          <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+                        </svg>
+                        ${eligibleCount}
+                    `;
+                            button.dataset.offerId = item.offerId;
+                            button.dataset.action = 'viewEligible';
+                            return button;
+                        }
+                        const zeroEligibleSpan = document.createElement('span');
+                        zeroEligibleSpan.style.cssText = 'color:rgba(0,0,0,0.3);';
+                        zeroEligibleSpan.textContent = '0';
+                        return zeroEligibleSpan;
+
+                    case 'enrolledCards':
+                        const enrolledCount = item.enrolledCards?.length || 0;
+                        if (enrolledCount > 0) {
+                            const button = document.createElement('button');
+                            button.className = 'enrolled-badge';
+                            button.style.cssText = 'border-radius:16px; background-color:rgba(52, 199, 89, 0.1); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25); padding:4px 10px; font-weight:600; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;';
+                            button.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                          <path d="M22 4L12 14.01l-3-3"/>
+                        </svg>
+                        ${enrolledCount}
+                    `;
+                            button.dataset.offerId = item.offerId;
+                            button.dataset.action = 'viewEnrolled';
+                            return button;
+                        }
+                        const zeroEnrolledSpan = document.createElement('span');
+                        zeroEnrolledSpan.style.cssText = 'color:rgba(0,0,0,0.3);';
+                        zeroEnrolledSpan.textContent = '0';
+                        return zeroEnrolledSpan;
+
+                    case 'threshold':
+                    case 'reward':
+                    case 'percentage':
+                        if (item[key] && item[key] !== 'N/A') {
+                            const color = key === 'threshold' ? '#1c1c1e' :
+                                key === 'reward' ? 'var(--ios-green)' : 'var(--ios-blue)';
+                            const valueDiv = document.createElement('div');
+                            valueDiv.style.cssText = `font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color}; font-size:12px;`;
+                            valueDiv.textContent = item[key];
+                            return valueDiv;
+                        }
+                        return 'N/A';
+
+                    case 'short_description':
+                        const descDiv = document.createElement('div');
+                        descDiv.style.cssText = 'font-size:12px; color:var(--ios-text-secondary); max-width:220px; max-height:60px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; line-height:1.3;';
+                        descDiv.textContent = item.short_description || 'No description available';
+                        return descDiv;
+
+                    case 'name':
+                        const nameDiv = document.createElement('div');
+                        nameDiv.style.cssText = 'max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500; font-size:12px; color:var(--ios-text-primary); padding:8px 4px;';
+                        nameDiv.textContent = item.name;
+                        nameDiv.title = item.name;
+                        return nameDiv;
+
+                    default:
+                        return item[key] || 'N/A';
+                }
+            };
+
+            const virtualTable = ui_createTable({
+                container,
+                data: filteredOffers,
+                rowHeight: 50,
+                headers,
+                colWidths,
+                cellRenderer: offers_cellRenderer,
+                sortHandler: offers_sortTable,
+                sortableKeys,
+                rowIdKey: 'offerId'
+            });
+
+            // Store the virtual table reference
+            filteredOffers.setVirtualTable(virtualTable);
+
+            // Use event delegation for handling clicks
+            container.addEventListener('click', (e) => {
+                // Handle row clicks for offer details
+                const row = e.target.closest('tr');
+                if (row && row.dataset.offerId) {
+                    // Check if we clicked a specific action button
+                    const actionButton = e.target.closest('[data-action]');
+                    if (actionButton) {
+                        const action = actionButton.dataset.action;
+                        const offerId = actionButton.dataset.offerId;
+
+                        if (action === 'toggleFavorite') {
+                            e.stopPropagation(); // Don't open offer details
+
+                            // Find offer and toggle favorite
+                            const offer = filteredOffers.find(o => o.offerId === offerId);
+                            if (offer) {
+                                offer.favorite = !offer.favorite;
+                                storage_manageData("set", storage_accToken, ["offer"]);
+
+                                // Update button appearance
+                                actionButton.innerHTML = offer.favorite ?
+                                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
+                                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
+                            }
+                        } else if (action === 'viewEligible' || action === 'viewEnrolled') {
+                            offers_popCard(row.dataset.offerId);
+                        }
+
+                        return;
+                    }
+
+                    // Default action: open offer details
+                    const offer = filteredOffers.find(o => o.offerId === row.dataset.offerId);
+                    if (offer) {
+                        offers_popCard(row.dataset.offerId);
+                    }
                 }
             });
         }, 0);
 
-        return tableElement;
+        return container;
     }
 
-    function offers_toggleFavorite(offer) {
-        // Toggle favorite status
-        offer.favorite = !offer.favorite;
-
-        const originalOffer = glb_offer.find(o => o.offerId === offer.offerId);
-        if (originalOffer) {
-            originalOffer.favorite = offer.favorite;
-        }
-        // Update pre-processed favorite icon 
-        const isFavorite = offer.favorite;
-        offer.__processed_favorite = isFavorite ?
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
-
-        // Update TableDataProcessor data
-        const favoriteBtn = event.target.closest('button');
-        if (favoriteBtn) {
-            favoriteBtn.innerHTML = offer.__processed_favorite;
-
-            // Add animation effect
-            favoriteBtn.classList.add('ios-sort-animation');
-            setTimeout(() => favoriteBtn.classList.remove('ios-sort-animation'), 300);
-        }
-
-        // Save to localStorage
-        storage_manageData("set", storage_accToken, ["offer"]);
-
-        // Update stats to reflect favorite changes
-        const statsBar = document.querySelector('.amaxoffer-content > div > div:first-child');
-        if (statsBar) {
-            const favoriteStats = statsBar.querySelectorAll('div')[1];
-            if (favoriteStats) {
-                const countElement = favoriteStats.querySelector('div > div:first-child');
-                if (countElement) {
-                    const favoriteCount = glb_offer.filter(o => o.favorite).length;
-                    countElement.textContent = favoriteCount;
-                }
-            }
-        }
-    }
-
-    // Simplified sort function that updates state and triggers re-render
-    function offers_sortTable(key) {
-        // Update sort state
-        if (glb_offerSortState.key === key) {
-            glb_offerSortState.direction *= -1;
-        } else {
-            glb_offerSortState.key = key;
-            glb_offerSortState.direction = (key === "favorite") ? -1 : 1;
-        }
-
-        // Save scroll position and update UI
-        ui_saveScrollPos();
-        const displayContainer = document.getElementById('offers-display-container');
-        if (displayContainer) {
-            displayContainer.innerHTML = "";
-            displayContainer.appendChild(offers_renderTableView());
-        }
-    }
-
-    // Data processor without caching
-    const TableDataProcessor = {
-        processTableData(tableId, rawData, options = {}) {
-            const {
-                processFunctions = {},
-                computeDerivedFields = [],
-                sortState = null,
-                filterFn = null
-            } = options;
-
-            // Apply filter if needed
-            let processedItems = filterFn ? rawData.filter(filterFn) : [...rawData];
-
-            // Apply sorting
-            if (sortState && sortState.key) {
-                const numericColumns = ['threshold', 'reward', 'percentage', 'eligibleCards', 'enrolledCards'];
-
-                processedItems.sort((a, b) => {
-                    if (numericColumns.includes(sortState.key)) {
-                        const numA = util_parseNumber(a[sortState.key]);
-                        const numB = util_parseNumber(b[sortState.key]);
-                        return sortState.direction * (numA - numB);
-                    } else if (sortState.key === "favorite") {
-                        if (a.favorite === b.favorite) return 0;
-                        return a.favorite ? -1 * sortState.direction : 1 * sortState.direction;
-                    } else if (sortState.key === "expiry_date") {
-                        const dateA = a[sortState.key] ? new Date(a[sortState.key]) : new Date(0);
-                        const dateB = b[sortState.key] ? new Date(b[sortState.key]) : new Date(0);
-                        return sortState.direction * (dateA - dateB);
-                    } else {
-                        const valA = String(a[sortState.key] || "");
-                        const valB = String(b[sortState.key] || "");
-                        return sortState.direction * valA.localeCompare(valB);
-                    }
-                });
-            }
-
-            // Process items with additional functions if provided
-            return processedItems.map(item => {
-                const result = { ...item };
-
-                if (computeDerivedFields.length > 0) {
-                    computeDerivedFields.forEach(deriveFn => {
-                        Object.assign(result, deriveFn(item));
-                    });
-                }
-
-                Object.entries(processFunctions).forEach(([key, processFn]) => {
-                    result[`__processed_${key}`] = processFn(item);
-                });
-
-                return result;
-            });
-        }
-    };
 
     // Enhanced enrollment card modal
     function offers_popCard(offerId) {
+        console.log("offers_popCard called with offerId:", offerId);
         const offer = glb_offer.find(o => o.offerId === offerId);
-        if (!offer) return;
+        if (!offer) {
+            console.error("Offer not found:", offerId);
+            return;
+        }
 
         const { overlay, content, closeBtn } = ui_createModal({
             id: 'offer-details-modal',
@@ -4743,76 +4295,89 @@
             onClose: () => { }
         });
 
+        // Set fixed height for modal content
         content.style.maxHeight = '75vh';
         content.style.overflowY = 'auto';
 
-        // Create tabs container and content areas
+        // Create tabs container
         const tabContainer = ui_createElement('div', {
             styleString: UI_STYLES.modal.tabContainer
         });
-
-        const tabContents = setupTabs(['Cards', 'Details', 'Terms'], tabContainer);
 
         // Add offer header with details
         const headerInfo = createOfferHeaderInfo(offer);
         content.appendChild(headerInfo);
         content.appendChild(tabContainer);
 
-        // Add content containers
-        Object.values(tabContents).forEach(el => content.appendChild(el));
+        // Create tab content containers first
+        const cardsContent = ui_createElement('div', {
+            styleString: 'padding:20px; display:block; height:650px; overflow-y:auto;'
+        });
+        const detailsContent = ui_createElement('div', {
+            styleString: 'padding:20px; display:none; height:650px; overflow-y:auto;'
+        });
+        const termsContent = ui_createElement('div', {
+            styleString: 'padding:20px; display:none; height:650px; overflow-y:auto;'
+        });
+
+        // Create the tabs and attach click handlers
+        const tabNames = ['Cards', 'Details', 'Terms'];
+        const tabContents = {
+            'cards': cardsContent,
+            'details': detailsContent,
+            'terms': termsContent
+        };
+
+        tabNames.forEach((name, index) => {
+            // Create tab button
+            const tab = ui_createElement('button', {
+                text: name,
+                styleString: `${UI_STYLES.modal.tab} ${index === 0 ? UI_STYLES.modal.tabActive : ''}`,
+                events: {
+                    click: e => {
+                        // Deactivate all tabs
+                        Array.from(e.target.parentNode.children).forEach(btn => {
+                            btn.style.borderBottomColor = 'transparent';
+                            btn.style.color = '#555';
+                        });
+
+                        // Activate this tab
+                        e.target.style.borderBottomColor = 'var(--ios-blue)';
+                        e.target.style.color = 'var(--ios-blue)';
+
+                        // Show selected content
+                        Object.keys(tabContents).forEach(key => {
+                            tabContents[key].style.display = 'none';
+                        });
+                        tabContents[name.toLowerCase()].style.display = 'block';
+                    }
+                }
+            });
+            tabContainer.appendChild(tab);
+        });
+
+        // Add content containers to modal
+        content.appendChild(cardsContent);
+        content.appendChild(detailsContent);
+        content.appendChild(termsContent);
 
         // Populate tabs
-        populateCardsTab(tabContents.cards, offer);
-        populateDetailsTab(tabContents.details, offer);
-        populateTermsTab(tabContents.terms, offer);
+        try {
+            populateCardsTab(cardsContent, offer);
+            populateDetailsTab(detailsContent, offer);
+            populateTermsTab(termsContent, offer);
+        } catch (error) {
+            console.error("Error populating offer tabs:", error);
+        }
 
         document.body.appendChild(overlay);
-
-        // Helper function to setup tabs
-        function setupTabs(tabNames, container) {
-            const contents = {};
-
-            tabNames.forEach((name, index) => {
-                // Create tab button
-                const tab = ui_createElement('button', {
-                    text: name,
-                    styleString: `${UI_STYLES.modal.tab} ${index === 0 ? UI_STYLES.modal.tabActive : ''}`,
-                    events: {
-                        click: e => {
-                            // Deactivate all tabs
-                            Array.from(e.target.parentNode.children).forEach(btn => {
-                                btn.style.borderBottomColor = 'transparent';
-                                btn.style.color = '#555';
-                            });
-
-                            // Activate this tab
-                            e.target.style.borderBottomColor = 'var(--ios-blue)';
-                            e.target.style.color = 'var(--ios-blue)';
-
-                            // Show selected content
-                            Object.keys(contents).forEach(key => {
-                                contents[key].style.display = key === name.toLowerCase() ? 'block' : 'none';
-                            });
-                        }
-                    }
-                });
-                container.appendChild(tab);
-
-                // Create content container
-                contents[name.toLowerCase()] = ui_createElement('div', {
-                    styleString: `padding:20px; display:${index === 0 ? 'block' : 'none'};`
-                });
-            });
-
-            return contents;
-        }
 
         // Create offer header with logo and details
         function createOfferHeaderInfo(offer) {
             return ui_createElement('div', {
                 styleString: `${UI_STYLES.containers.flexRow} padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.08);`,
                 children: [
-                    ui_returnLogo(offer.logo, offer.name),
+                    createCardLogo(offer.logo, offer.name),
 
                     // Offer details
                     ui_createElement('div', {
@@ -4840,7 +4405,7 @@
         // Cards tab content
         function populateCardsTab(container, offer) {
             // Add "Enroll All" button for eligible offers
-            if (offer.eligibleCards.length > 0) {
+            if (offer.eligibleCards && offer.eligibleCards.length > 0) {
                 container.appendChild(ui_createBtn_v2({
                     label: `Enroll All Eligible Cards (${offer.eligibleCards.length})`,
                     icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
@@ -4852,10 +4417,21 @@
             }
 
             // Create combined table with all cards
-            const allCards = [
-                ...offer.eligibleCards.map(token => ({ token, status: 'eligible' })),
-                ...offer.enrolledCards.map(token => ({ token, status: 'enrolled' }))
-            ];
+            const allCards = [];
+
+            // Add eligible cards
+            if (Array.isArray(offer.eligibleCards)) {
+                offer.eligibleCards.forEach(token => {
+                    allCards.push({ token, status: 'eligible' });
+                });
+            }
+
+            // Add enrolled cards
+            if (Array.isArray(offer.enrolledCards)) {
+                offer.enrolledCards.forEach(token => {
+                    allCards.push({ token, status: 'enrolled' });
+                });
+            }
 
             // Add table header
             container.appendChild(ui_createElement('h3', {
@@ -4864,7 +4440,14 @@
             }));
 
             // Create and add cards table
-            container.appendChild(createCardsTable(allCards, offer));
+            if (allCards.length > 0) {
+                container.appendChild(createCardsTable(allCards, offer));
+            } else {
+                container.appendChild(ui_createElement('div', {
+                    text: 'No cards available for this offer',
+                    styleString: 'text-align:center; padding:20px; color:#888; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                }));
+            }
         }
 
         // Handle enrollment of all cards for an offer
@@ -4892,8 +4475,11 @@
                     }
                 });
 
-                // Update table UI
-                updateTableAfterEnrollment();
+                // Close modal and refresh view after a delay
+                setTimeout(() => {
+                    closeBtn.click();
+                    ViewRenderer.renderCurrentView();
+                }, 1500);
             } catch (err) {
                 console.error('Error:', err);
                 btn.innerHTML = '× Error - Try Again';
@@ -4905,236 +4491,168 @@
                     btn.style.backgroundColor = 'var(--ios-blue)';
                 }, 2000);
             }
-
-            // Update UI after enrollment
-            function updateTableAfterEnrollment() {
-                const table = tabContents.cards.querySelector('table');
-                if (!table) return;
-
-                // Update rows
-                const rows = table.querySelectorAll('tbody tr');
-                rows.forEach(row => {
-                    const actionCell = row.querySelector('td:last-child');
-                    const actionBtn = actionCell?.querySelector('button');
-
-                    if (actionBtn && actionBtn.textContent === 'Enroll') {
-                        // Update button
-                        actionBtn.innerHTML = 'Enrolled';
-                        actionBtn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                        actionBtn.style.color = 'var(--ios-green)';
-                        actionBtn.disabled = true;
-
-                        // Highlight row briefly
-                        row.style.transition = 'background-color 1.5s ease';
-                        row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                        setTimeout(() => row.style.backgroundColor = '', 1500);
-                    }
-                });
-            }
         }
 
         // Create cards table
         function createCardsTable(cardItems, offer) {
-            const headers = [
-                { label: "Index", key: "cardIndex" },
-                { label: "Card", key: "card" },
-                { label: "Card Ending", key: "cardEnding" },
-                { label: "Name", key: "name" },
-                { label: "Type", key: "type" },
-                { label: "Action", key: "action" }
-            ];
+            const container = document.createElement('div');
+            container.style.overflow = 'auto';
 
-            const colWidths = {
-                cardIndex: "60px",
-                card: "60px",
-                cardEnding: "100px",
-                name: "180px",
-                type: "80px",
-                action: "80px"
-            };
+            const table = document.createElement('table');
+            table.className = 'ios-table';
+            table.style.width = '100%';
 
-            // Map card tokens to table items
-            const items = cardItems.map(item => {
-                const account = glb_account.find(acc => acc.account_token === item.token);
-                if (!account) return null;
+            // Create table header
+            const thead = document.createElement('thead');
+            thead.className = 'ios-table-head';
 
-                return {
-                    _token: item.token,
-                    _account: account,
-                    status: item.status,
-                    cardEnding: account.cardEnding,
-                    name: account.embossed_name || '',
-                    type: account.relationship || '',
-                    card: account.small_card_art || '',
-                    cardIndex: account.cardIndex || ''
-                };
-            }).filter(Boolean);
-
-            // Sort: eligible first, then by cardIndex
-            items.sort((a, b) => {
-                if (a.status !== b.status) {
-                    return a.status === 'eligible' ? -1 : 1;
-                }
-
-                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
-                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
-
-                if (aMain === bMain) {
-                    return aSub - bSub;
-                }
-                return aMain - bMain;
+            const headerRow = document.createElement('tr');
+            ['Index', 'Card', 'Card Ending', 'Name', 'Type', 'Action'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
             });
 
-            // Cell renderer for table
-            const cellRenderer = (item, header) => {
-                const key = header.key;
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
 
-                switch (key) {
-                    case 'card':
-                        return ui_returnLogo(item.card, `Card ${item.cardEnding}`);
+            // Create table body
+            const tbody = document.createElement('tbody');
 
-                    case 'cardIndex':
-                        const [mainIndex, subIndex] = util_parseCardIndex(item.cardIndex);
-                        return ui_createElement('span', {
-                            styleString: UI_STYLES.tableCells.index,
-                            props: {
-                                innerHTML: subIndex ?
-                                    `<strong>${mainIndex}</strong>-${subIndex}` :
-                                    `<strong>${mainIndex}</strong>`
-                            }
-                        });
+            // Map card tokens to accounts
+            cardItems.forEach((item, idx) => {
+                const account = glb_account.find(acc => acc.account_token === item.token);
+                if (!account) return;
 
-                    case 'action':
-                        return item.status === 'eligible' ?
-                            createEnrollButton(item, offer) :
-                            createEnrolledLabel();
+                const row = document.createElement('tr');
 
-                    default:
-                        return item[key] || '';
+                // Style for alternate rows
+                if (idx % 2 === 1) {
+                    row.style.backgroundColor = 'var(--ios-secondary-bg)';
                 }
-            };
 
-            return ui_renderDataTable(headers, colWidths, items, cellRenderer);
+                // Index cell - mimicking members page style
+                const indexCell = document.createElement('td');
+                const [mainIndex, subIndex] = util_parseCardIndex(account.cardIndex);
+                const indexSpan = document.createElement('span');
+                indexSpan.style.cssText = UI_STYLES.tableCells.index;
+                indexSpan.innerHTML = subIndex ?
+                    `<strong>${mainIndex}</strong>-${subIndex}` :
+                    `<strong>${mainIndex}</strong>`;
+                indexCell.appendChild(indexSpan);
+                row.appendChild(indexCell);
 
-            // Create enroll button for eligible card
-            function createEnrollButton(item, offer) {
-                return ui_createElement('button', {
-                    text: 'Enroll',
-                    styleString: `
-                        padding: 4px 10px;
-                        background-color: rgba(0, 122, 255, 0.1);
-                        color: var(--ios-blue);
-                        border: none;
-                        border-radius: 8px;
-                        font-size: 12px;
-                        cursor: pointer;
-                        transition: all 0.2s ease;
-                    `,
-                    events: {
-                        mouseenter: e => {
-                            e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.2)';
-                        },
-                        mouseleave: e => {
-                            e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                        },
-                        click: async e => {
-                            await handleSingleEnrollment(e, item._token, offer);
-                        }
-                    }
-                });
-            }
+                // Card logo cell
+                const logoCell = document.createElement('td');
+                logoCell.appendChild(createCardLogo(account.small_card_art, `Card ${account.cardEnding}`));
+                row.appendChild(logoCell);
 
-            // Create enrolled label
-            function createEnrolledLabel() {
-                return ui_createElement('span', {
-                    text: 'Enrolled',
-                    styleString: `
-                        display: inline-block;
-                        padding: 4px 10px;
-                        background-color: rgba(52, 199, 89, 0.1);
-                        color: var(--ios-green);
-                        border-radius: 8px;
-                        font-size: 12px;
-                    `
-                });
-            }
+                // Card ending cell - mimicking members page style
+                const endingCell = document.createElement('td');
+                const endingDiv = document.createElement('div');
+                endingDiv.textContent = account.cardEnding;
+                endingDiv.style.cssText = UI_STYLES.tableCells.card;
+                endingCell.appendChild(endingDiv);
+                row.appendChild(endingCell);
 
-            // Handle enrollment of a single card
-            async function handleSingleEnrollment(e, token, offer) {
-                const btn = e.target;
-                const originalHTML = btn.innerHTML;
+                // Name cell - mimicking members page style
+                const nameCell = document.createElement('td');
+                const nameDiv = document.createElement('div');
+                nameDiv.textContent = account.embossed_name || '';
+                nameDiv.style.cssText = UI_STYLES.tableCells.name;
+                nameDiv.title = account.embossed_name || '';
+                nameCell.appendChild(nameDiv);
+                row.appendChild(nameCell);
 
-                btn.innerHTML = '<div class="spinner" style="width:10px;height:10px;border:1px solid rgba(0,122,255,0.3);border-top:1px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>';
-                btn.disabled = true;
-
-                try {
-                    const result = await api_enrollInOffer(token, offer.offerId);
-
-                    if (result.result) {
-                        // Success
-                        btn.innerHTML = '✓';
-                        btn.style.backgroundColor = 'var(--ios-green)';
-                        btn.style.color = 'white';
-
-                        // Update offer data
-                        const idx = offer.eligibleCards.indexOf(token);
-                        if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                        if (!offer.enrolledCards.includes(token)) {
-                            offer.enrolledCards.push(token);
-                        }
-
-                        // Update the row
-                        const row = btn.closest('tr');
-                        if (row) {
-                            btn.innerHTML = 'Enrolled';
-                            btn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                            btn.style.color = 'var(--ios-green)';
-                            btn.disabled = true;
-
-                            // Highlight row briefly
-                            row.style.transition = 'background-color 1.5s ease';
-                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                            setTimeout(() => row.style.backgroundColor = '', 1500);
-                        }
-
-                        // Update enroll all button if needed
-                        updateEnrollAllButton();
-                    } else {
-                        handleEnrollmentError(btn, originalHTML);
-                    }
-                } catch (error) {
-                    console.error('Error enrolling card:', error);
-                    handleEnrollmentError(btn, originalHTML);
-                }
-            }
-
-            // Update enroll all button based on remaining eligible cards
-            function updateEnrollAllButton() {
-                const enrollAllBtn = tabContents.cards.querySelector('button');
-                if (!enrollAllBtn) return;
-
-                if (offer.eligibleCards.length === 0) {
-                    enrollAllBtn.innerHTML = 'All Cards Enrolled';
-                    enrollAllBtn.style.background = 'var(--ios-green)';
-                    enrollAllBtn.disabled = true;
+                // Type cell - mimicking members page style
+                const typeCell = document.createElement('td');
+                if (account.relationship === "SUPP") {
+                    const parentCardNum = members_getParentCardNumber(account);
+                    const suppDiv = document.createElement('div');
+                    suppDiv.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:2px;';
+                    suppDiv.innerHTML = `
+                    <span style="font-size:12px; color:var(--ios-blue); font-weight:600;">SUPP</span>
+                    <span style="font-size:11px; color:var(--ios-gray);">→ ${parentCardNum}</span>
+                `;
+                    typeCell.appendChild(suppDiv);
                 } else {
-                    enrollAllBtn.innerHTML = `Enroll All Eligible Cards (${offer.eligibleCards.length})`;
+                    const basicSpan = document.createElement('span');
+                    basicSpan.textContent = 'BASIC';
+                    basicSpan.style.cssText = 'font-size:12px; font-weight:600; color:var(--ios-green);';
+                    typeCell.appendChild(basicSpan);
                 }
-            }
+                row.appendChild(typeCell);
 
-            // Handle enrollment error
-            function handleEnrollmentError(btn, originalHTML) {
-                btn.innerHTML = '×';
-                btn.style.backgroundColor = 'var(--ios-red)';
-                btn.style.color = 'white';
+                // Action cell
+                const actionCell = document.createElement('td');
+                if (item.status === 'eligible') {
+                    const enrollBtn = document.createElement('button');
+                    enrollBtn.textContent = 'Enroll';
+                    enrollBtn.style.cssText = `
+                    padding: 4px 10px;
+                    background-color: rgba(0, 122, 255, 0.1);
+                    color: var(--ios-blue);
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 12px;
+                    cursor: pointer;
+                `;
+                    enrollBtn.onclick = async () => {
+                        enrollBtn.innerHTML = '<div class="spinner" style="width:10px;height:10px;border:1px solid rgba(0,122,255,0.3);border-top:1px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>';
+                        enrollBtn.disabled = true;
 
-                setTimeout(() => {
-                    btn.innerHTML = originalHTML;
-                    btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                    btn.style.color = 'var(--ios-blue)';
-                    btn.disabled = false;
-                }, 2000);
-            }
+                        try {
+                            const result = await api_enrollInOffer(item.token, offer.offerId);
+                            if (result.result) {
+                                enrollBtn.innerHTML = '✓';
+                                enrollBtn.style.backgroundColor = 'var(--ios-green)';
+                                enrollBtn.style.color = 'white';
+
+                                // Update offer data
+                                const idx = offer.eligibleCards.indexOf(item.token);
+                                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                                if (!offer.enrolledCards.includes(item.token)) {
+                                    offer.enrolledCards.push(item.token);
+                                }
+                            } else {
+                                throw new Error(result.explanationMessage || "Enrollment failed");
+                            }
+                        } catch (error) {
+                            enrollBtn.innerHTML = '×';
+                            enrollBtn.style.backgroundColor = 'var(--ios-red)';
+                            enrollBtn.style.color = 'white';
+
+                            setTimeout(() => {
+                                enrollBtn.textContent = 'Retry';
+                                enrollBtn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                                enrollBtn.style.color = 'var(--ios-blue)';
+                                enrollBtn.disabled = false;
+                            }, 2000);
+                        }
+                    };
+                    actionCell.appendChild(enrollBtn);
+                } else {
+                    const label = document.createElement('span');
+                    label.textContent = 'Enrolled';
+                    label.style.cssText = `
+                    display: inline-block;
+                    padding: 4px 10px;
+                    background-color: rgba(52, 199, 89, 0.1);
+                    color: var(--ios-green);
+                    border-radius: 8px;
+                    font-size: 12px;
+                `;
+                    actionCell.appendChild(label);
+                }
+
+                row.appendChild(actionCell);
+                tbody.appendChild(row);
+            });
+
+            table.appendChild(tbody);
+            container.appendChild(table);
+
+            return container;
         }
 
         // Details tab content
@@ -5144,7 +4662,7 @@
                     label: 'Load Detailed Information',
                     type: 'primary',
                     customStyle: 'margin:40px auto; display:block;',
-                    onClick: async e => loadDetailedInfo(e, offer)
+                    onClick: async e => loadDetailedInfo(e, offer, container, termsContent)
                 }));
             } else if (offer.long_description) {
                 container.appendChild(ui_createElement('h3', {
@@ -5162,44 +4680,78 @@
                     styleString: 'text-align:center; padding:30px; color:#888; background-color:rgba(0,0,0,0.02); border-radius:12px;'
                 }));
             }
+        }
 
-            // Load detailed information
-            async function loadDetailedInfo(e, offer) {
-                const btn = e.currentTarget;
-                btn.textContent = 'Loading...';
-                btn.disabled = true;
+        // Load detailed information
+        async function loadDetailedInfo(e, offer, detailsContainer, termsContainer) {
+            const btn = e.currentTarget;
+            btn.textContent = 'Loading...';
+            btn.disabled = true;
 
-                try {
-                    const account = glb_account.find(acc =>
-                        acc.account_status?.trim().toLowerCase() === "active" &&
-                        (offer.eligibleCards?.includes(acc.account_token) || offer.enrolledCards?.includes(acc.account_token))
-                    );
+            try {
+                const account = glb_account.find(acc =>
+                    acc.account_status?.trim().toLowerCase() === "active" &&
+                    (offer.eligibleCards?.includes(acc.account_token) || offer.enrolledCards?.includes(acc.account_token))
+                );
 
-                    if (account) {
-                        const details = await api_fetchOfferDetails(account.account_token, offer.offerId);
+                if (account) {
+                    const details = await api_fetchOfferDetails(account.account_token, offer.offerId);
 
-                        if (details && (details.terms || details.long_description)) {
-                            // Update offer data
-                            offer.terms = details.terms;
-                            offer.long_description = details.long_description;
-                            storage_manageData("set", storage_accToken, ["offer"]);
+                    if (details && (details.terms || details.long_description)) {
+                        // Update offer data
+                        offer.terms = details.terms;
+                        offer.long_description = details.long_description;
+                        storage_manageData("set", storage_accToken, ["offer"]);
 
-                            // Update UI
-                            populateDetailsTab(container, offer);
-                            populateTermsTab(tabContents.terms, offer);
+                        // Update UI
+                        detailsContainer.innerHTML = '';
+                        if (details.long_description) {
+                            detailsContainer.appendChild(ui_createElement('h3', {
+                                text: 'Offer Details',
+                                styleString: UI_STYLES.text.subtitle
+                            }));
+
+                            detailsContainer.appendChild(ui_createElement('div', {
+                                text: details.long_description,
+                                styleString: 'font-size:15px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                            }));
                         } else {
-                            throw new Error("No detailed information available");
+                            detailsContainer.appendChild(ui_createElement('div', {
+                                text: 'No detailed description available for this offer.',
+                                styleString: 'text-align:center; padding:30px; color:#888; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                            }));
+                        }
+
+                        // Update terms tab
+                        termsContainer.innerHTML = '';
+                        if (details.terms) {
+                            termsContainer.appendChild(ui_createElement('div', {
+                                props: { innerHTML: details.terms },
+                                styleString: 'font-size:14px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                            }));
+                        } else {
+                            termsContainer.appendChild(ui_createElement('div', {
+                                text: 'No terms and conditions available for this offer.',
+                                styleString: 'text-align:center; padding:40px 20px; color:#666; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                            }));
                         }
                     } else {
-                        throw new Error("No active card found for this offer");
+                        throw new Error("No detailed information available");
                     }
-                } catch (error) {
-                    btn.textContent = 'Unable to Load Details';
-                    setTimeout(() => {
-                        btn.textContent = 'Try Again';
-                        btn.disabled = false;
-                    }, 2000);
+                } else {
+                    throw new Error("No active card found for this offer");
                 }
+            } catch (error) {
+                btn.textContent = 'Unable to Load Details';
+                detailsContainer.appendChild(ui_createElement('div', {
+                    text: 'Error loading offer details. Please try again later.',
+                    styleString: 'text-align:center; padding:20px; color:#ff3b30; margin-top:20px;'
+                }));
+
+                setTimeout(() => {
+                    btn.textContent = 'Try Again';
+                    btn.disabled = false;
+                }, 2000);
             }
         }
 
@@ -5218,7 +4770,6 @@
             }
         }
     }
-
 
     //----------------------------  Benefits Page  ----------------------------//
 
@@ -5299,7 +4850,7 @@
                         type: 'primary',
                         onClick: async () => {
                             await api_fetchAllBenefits();
-                            SmartRenderer.renderCurrentView();
+                            ViewRenderer.renderCurrentView();
                         }
                     })
                 ]
@@ -6127,13 +5678,13 @@
                 styleString: 'display:flex; align-items:center; gap:12px;'
             });
 
-            // Use ui_returnLogo for caching and consistent rendering
+            // Use createCardLogo for caching and consistent rendering
             const logoContainer = ui_createElement('div', {
                 styleString: 'width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center;'
             });
 
             // Get either the logo or a placeholder through the caching mechanism
-            const logoElement = ui_returnLogo(
+            const logoElement = createCardLogo(
                 account?.small_card_art,
                 account?.description || `Card ${tracker.cardEnding}`
             );
@@ -6368,142 +5919,1304 @@
         }
     }
 
-    // ----------------------------  ui_renderCurrentView  ----------------------------//
+    // ----------------------------  ViewRenderer.renderCurrentView  ----------------------------//
 
 
+    function batchedRender(container, elements) {
+        const fragment = document.createDocumentFragment();
+        elements.forEach(el => fragment.appendChild(el));
+        container.appendChild(fragment);
+    }
 
 
-    const SmartRenderer = (() => {
-        // Track render state and changes
-        const state = {
-            currentView: null,
-            lastRenderTime: {},
-            isLoading: false,
-            componentsChanged: {
-                offers: false,
-                members: false,
-                benefits: false
-            }
-        };
-
-        // Cache rendered components
-        const viewCache = {
-            offers: null,
-            members: null,
-            benefits: null
-        };
+    const ElementCache = (() => {
+        const cache = new Map();
 
         return {
 
-            markChanged(component) {
-                if (state.componentsChanged.hasOwnProperty(component)) {
-                    state.componentsChanged[component] = true;
+            getElement(key, creator) {
+                if (!cache.has(key)) {
+                    cache.set(key, creator());
+                }
+                return cache.get(key).cloneNode(true);
+            },
 
-                    // Also invalidate cache
-                    if (viewCache.hasOwnProperty(component)) {
-                        viewCache[component] = null;
-                    }
+            clearCache(keys) {
+                if (!keys) {
+                    cache.clear();
+                } else if (Array.isArray(keys)) {
+                    keys.forEach(key => cache.delete(key));
+                } else {
+                    cache.delete(keys);
+                }
+            }
+        };
+    })();
+
+    // Example usage for commonly created elements
+    function createCardLogo(logoUrl, altText) {
+        const cacheKey = `logo-${logoUrl || 'default'}`;
+
+        return ElementCache.getElement(cacheKey, () => {
+            if (logoUrl && logoUrl !== "N/A") {
+                return ui_createElement('div', {
+                    styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
+                    children: [
+                        ui_createElement('img', {
+                            props: { src: logoUrl, alt: altText || "Logo" },
+                            styleString: 'max-width:50px; max-height:50px; border-radius:6px; transition:transform 0.2s ease;',
+                            events: {
+                                mouseenter: e => e.target.style.transform = 'scale(1.15)',
+                                mouseleave: e => e.target.style.transform = 'scale(1)'
+                            }
+                        })
+                    ]
+                });
+            }
+
+            return ui_createElement('div', {
+                styleString: 'display:flex; justify-content:center; align-items:center; height:50px;',
+                children: [
+                    ui_createElement('div', {
+                        props: { innerHTML: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#ccc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>' },
+                        styleString: 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; background:#f5f5f5; border-radius:6px;'
+                    })
+                ]
+            });
+        });
+    }
+
+    const ViewRenderer = (() => {
+        // Enhanced state tracking for each view
+        const viewState = {
+            offers: {
+                lastRenderTime: 0,
+                isChanged: true,
+                cachedView: null,
+                virtualTable: null
+            },
+            members: {
+                lastRenderTime: 0,
+                isChanged: true,
+                cachedView: null,
+                virtualTable: null
+            },
+            benefits: {
+                lastRenderTime: 0,
+                isChanged: true,
+                cachedView: null
+            }
+        };
+
+        // Scroll position memory
+        const scrollPositions = {
+            offers: 0,
+            members: 0,
+            benefits: 0
+        };
+
+        // Track loading state
+        let isLoading = false;
+        let currentView = null;
+
+        return {
+            /**
+             * Mark a view as needing to be rendered
+             * @param {string} viewName - Name of the view to mark changed
+             */
+            markViewChanged(viewName) {
+                if (viewState[viewName]) {
+                    viewState[viewName].isChanged = true;
+                    viewState[viewName].cachedView = null;
                 }
             },
 
 
-            renderCurrentView(forceFullRender = false) {
-                if (!content) return;
+            markChanged(component) {
+                if (viewState.hasOwnProperty(component)) {
+                    viewState[component].isChanged = true;
+                    viewState[component].cachedView = null;
 
-                // Show loading state for full renders or new views
-                const isNewView = state.currentView !== glb_view_page;
-                if (forceFullRender || isNewView || state.isLoading) {
-                    content.innerHTML = '';
-                    const loader = createLoaderElement();
-                    content.appendChild(loader);
-                    state.isLoading = true;
+                    // Invalidate the appropriate memoization cache
+                    if (component === 'members' && typeof filteredMembers !== 'undefined') {
+                        filteredMembers.invalidateCache();
+                    } else if (component === 'offers' && typeof filteredOffers !== 'undefined') {
+                        filteredOffers.invalidateCache();
+                    }
+                }
+            },
+
+            /**
+             * Store virtual table reference for a view
+             */
+            setVirtualTable(viewName, tableRef) {
+                if (viewState[viewName]) {
+                    viewState[viewName].virtualTable = tableRef;
+                }
+            },
+
+            /**
+             * Get virtual table reference for a view
+             */
+            getVirtualTable(viewName) {
+                return viewState[viewName]?.virtualTable || null;
+            },
+
+            /**
+             * Save current scroll position for active view
+             */
+            saveScrollPosition() {
+                if (content && currentView) {
+                    scrollPositions[currentView] = content.scrollTop;
+                }
+            },
+
+            /**
+             * Restore saved scroll position for a view
+             */
+            restoreScrollPosition(viewName) {
+                if (content && scrollPositions[viewName] !== undefined) {
+                    setTimeout(() => {
+                        content.scrollTop = scrollPositions[viewName];
+                    }, 0);
+                }
+            },
+
+            /**
+             * Create a loading indicator element
+             */
+            createLoadingIndicator() {
+                return ui_createElement('div', {
+                    styleString: 'display:flex; justify-content:center; align-items:center; height:200px;',
+                    children: [
+                        ui_createElement('div', {
+                            styleString: 'width:40px; height:40px; border:3px solid rgba(0,122,255,0.2); border-top:3px solid var(--ios-blue); border-radius:50%; animation:spin 1s linear infinite;'
+                        })
+                    ]
+                });
+            },
+
+            /**
+             * Gets the current rendering state information
+             */
+            getState() {
+                const componentsChanged = {};
+                for (const key in viewState) {
+                    componentsChanged[key] = viewState[key].isChanged;
                 }
 
-                // Update current view tracking
-                state.currentView = glb_view_page;
+                return {
+                    currentView,
+                    lastRenderTime: Object.keys(viewState).reduce((acc, key) => {
+                        acc[key] = viewState[key].lastRenderTime || 0;
+                        return acc;
+                    }, {}),
+                    isLoading,
+                    componentsChanged
+                };
+            },
 
-                // Determine if this component needs updating
-                const needsUpdate = forceFullRender ||
-                    isNewView ||
-                    state.componentsChanged[glb_view_page] ||
-                    !viewCache[glb_view_page];
+            /**
+             * Main function to render the current view with optimizations
+             */
+            renderCurrentView(forceRender = false) {
+                if (!content) return;
 
-                // Render in a non-blocking way
+                // Save scroll position of previous view
+                this.saveScrollPosition();
+
+                // Set current view
+                const viewName = glb_view_page;
+                currentView = viewName;
+
+                // Show loading indicator if necessary
+                const needsLoading = forceRender ||
+                    viewState[viewName].isChanged ||
+                    !viewState[viewName].cachedView;
+
+                if (needsLoading && !isLoading) {
+                    content.innerHTML = '';
+                    content.appendChild(this.createLoadingIndicator());
+                    isLoading = true;
+                }
+
+                // Preload common logos to optimize rendering
+                const commonLogos = glb_account
+                    .filter(acc => acc.small_card_art && acc.small_card_art !== 'N/A')
+                    .slice(0, 5);
+
+                commonLogos.forEach(acc => {
+                    createCardLogo(acc.small_card_art, acc.description);
+                });
+
+                // Perform the rendering in a non-blocking way
                 setTimeout(async () => {
                     try {
-                        if (needsUpdate) {
-                            // Render appropriate view
+                        // Check if we need a fresh render
+                        if (forceRender || viewState[viewName].isChanged || !viewState[viewName].cachedView) {
+                            // Get appropriate view content
                             let viewContent;
 
-                            switch (glb_view_page) {
-                                case 'members':
-                                    viewContent = members_renderPage();
-                                    state.componentsChanged.members = false;
-                                    break;
+                            switch (viewName) {
                                 case 'offers':
                                     viewContent = offers_renderPage();
-                                    state.componentsChanged.offers = false;
+                                    if (typeof filteredOffers !== 'undefined') {
+                                        filteredOffers.invalidateCache();
+                                    }
                                     break;
+
+                                case 'members':
+                                    viewContent = members_renderPage();
+                                    if (typeof filteredMembers !== 'undefined') {
+                                        filteredMembers.invalidateCache();
+                                    }
+                                    break;
+
                                 case 'benefits':
                                     viewContent = await benefits_renderPage();
-                                    state.componentsChanged.benefits = false;
                                     break;
+
                                 default:
                                     viewContent = members_renderPage();
-                                    state.componentsChanged.members = false;
                             }
 
-                            // Handle async content
+                            // Handle potential promise return
                             if (viewContent && typeof viewContent.then === 'function') {
                                 viewContent = await viewContent;
                             }
 
-                            // Cache the rendered view
-                            viewCache[glb_view_page] = viewContent;
+                            // Cache the result
+                            viewState[viewName].cachedView = viewContent;
+                            viewState[viewName].isChanged = false;
+                            viewState[viewName].lastRenderTime = Date.now();
 
-                            // Replace content
+                            // Update DOM
                             content.innerHTML = '';
                             content.appendChild(viewContent);
                         } else {
-                            // Use cached view if available
+                            // Use cached view
                             content.innerHTML = '';
-                            content.appendChild(viewCache[glb_view_page]);
+                            content.appendChild(viewState[viewName].cachedView);
+
+                            // Refresh virtual table if needed
+                            const table = viewState[viewName].virtualTable;
+                            if (table && typeof table.refresh === 'function') {
+                                table.refresh();
+                            }
                         }
 
                         // Restore scroll position
-                        if (glb_view_scroll[glb_view_page]?.scrollTop) {
-                            content.scrollTop = glb_view_scroll[glb_view_page].scrollTop;
-                        }
+                        this.restoreScrollPosition(viewName);
 
-                        // Update timestamp
-                        state.lastRenderTime[glb_view_page] = Date.now();
-                        state.isLoading = false;
+                        // Reset loading state
+                        isLoading = false;
+
                     } catch (error) {
-                        console.error('Error rendering view:', error);
+                        console.error(`Error rendering ${viewName} view:`, error);
                         content.innerHTML = '';
                         content.appendChild(ui_createElement('div', {
                             styleString: 'color:var(--ios-red); text-align:center; padding:40px;',
                             text: `Error rendering view: ${error.message}`
                         }));
-                        state.isLoading = false;
+                        isLoading = false;
                     }
                 }, 0);
+            },
+
+            /**
+             * Invalidate all view caches to force fresh rendering
+             */
+            invalidateAllCaches() {
+                Object.keys(viewState).forEach(view => {
+                    viewState[view].isChanged = true;
+                    viewState[view].cachedView = null;
+                });
+
+                // Reset memoization caches
+                if (typeof filteredMembers !== 'undefined') {
+                    filteredMembers.invalidateCache();
+                }
+
+                if (typeof filteredOffers !== 'undefined') {
+                    filteredOffers.invalidateCache();
+                }
+
+                if (typeof ElementCache !== 'undefined' && typeof ElementCache.clearCache === 'function') {
+                    ElementCache.clearCache();
+                }
+
+                if (typeof TableDataProcessor !== 'undefined' && typeof TableDataProcessor.clearCache === 'function') {
+                    TableDataProcessor.clearCache();
+                }
+            },
+
+
+            clearAllCaches() {
+                this.invalidateAllCaches();
+            }
+        };
+    })();
+
+
+
+    /**
+    * Performance utilities for controlling execution frequency
+    */
+    const PerformanceUtils = (() => {
+        return {
+            /**
+             * Throttles a function to run at most once in a specified interval
+             * @param {Function} func - Function to throttle
+             * @param {number} limit - Minimum milliseconds between executions
+             * @returns {Function} - Throttled function
+             */
+            throttle(func, limit) {
+                let lastCall = 0;
+                let lastResult;
+
+                return function (...args) {
+                    const now = Date.now();
+                    if (now - lastCall >= limit) {
+                        lastResult = func.apply(this, args);
+                        lastCall = now;
+                    }
+                    return lastResult;
+                };
+            },
+
+            /**
+             * Debounces a function to run only after wait period with no calls
+             * @param {Function} func - Function to debounce
+             * @param {number} wait - Milliseconds to wait
+             * @returns {Function} - Debounced function
+             */
+            debounce(func, wait) {
+                let timeout;
+                return function (...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            },
+
+            /**
+             * Runs a function on the next animation frame
+             * @param {Function} func - Function to run
+             * @returns {Function} - RAF-wrapped function
+             */
+            animFrame(func) {
+                return function (...args) {
+                    const context = this;
+                    return new Promise(resolve => {
+                        requestAnimationFrame(() => {
+                            const result = func.apply(context, args);
+                            resolve(result);
+                        });
+                    });
+                };
+            }
+        };
+    })();
+
+
+
+
+    function ui_createTable(config) {
+        const {
+            container,
+            data,
+            rowHeight = 50,
+            bufferRows = 10,
+            headers,
+            colWidths,
+            cellRenderer,
+            sortHandler,
+            sortableKeys,
+            rowIdKey = 'id'
+        } = config;
+
+        // Create table elements
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'virtual-table-wrapper';
+        tableWrapper.style.cssText = 'position:relative; overflow-y:auto; width:100%; height:100%;';
+
+        const table = document.createElement('table');
+        table.className = 'ios-table virtual-table';
+        table.style.cssText = `
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: var(--ios-font);
+        border-radius: var(--ios-table-border-radius);
+        overflow: hidden;
+        background-color: var(--ios-background);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: var(--ios-shadow-sm);
+        border: 1px solid var(--ios-border);
+    `;
+
+        // Create header
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+        thead.style.cssText = `
+        background: var(--ios-header-bg);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    `;
+
+        const headerRow = document.createElement('tr');
+        headers.forEach(headerItem => {
+            const th = document.createElement('th');
+            th.textContent = headerItem.label;
+            th.dataset.key = headerItem.key;
+            th.style.cssText = `
+            padding: var(--ios-table-cell-padding);
+            font-weight: 600;
+            color: var(--ios-text-primary);
+            border-bottom: 1px solid rgba(60, 60, 67, 0.12);
+            text-align: center;
+        `;
+
+            // Apply column width
+            if (colWidths && colWidths[headerItem.key]) {
+                th.style.width = colWidths[headerItem.key];
+            }
+
+            // Add sorting
+            if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
+                th.className = 'sortable';
+                th.style.cursor = 'pointer';
+                th.style.position = 'relative';
+                th.style.paddingRight = '28px';
+
+                // Sort button
+                const sortButton = document.createElement('div');
+                sortButton.className = 'ios-sort-button';
+                sortButton.style.cssText = `
+                position: absolute;
+                right: 8px;
+                top: 50%;
+                transform: translateY(-50%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+
+                // Sort indicator
+                const sortIcon = document.createElement('div');
+                sortIcon.className = 'ios-sort-indicator';
+                sortIcon.style.cssText = `
+                width: 8px;
+                height: 8px;
+                transition: all var(--ios-anim-fast) ease;
+                opacity: 0.4;
+            `;
+
+                // Set current sort state
+                const isActive = (glb_view_page === 'members' && glb_memberSortState?.key === headerItem.key) ||
+                    (glb_view_page === 'offers' && glb_offerSortState?.key === headerItem.key);
+
+                const direction = isActive ?
+                    (glb_view_page === 'members' ? glb_memberSortState.direction : glb_offerSortState.direction) : 1;
+
+                if (isActive) {
+                    sortIcon.classList.add('active');
+                    sortIcon.style.opacity = '1';
+                    sortIcon.classList.add(direction === 1 ? 'asc' : 'desc');
+                    sortIcon.innerHTML = direction === 1 ?
+                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
+                        `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
+                } else {
+                    sortIcon.innerHTML = `
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
+                        <path d="M4 1v6M1 4h6"/>
+                    </svg>`;
+                }
+
+                sortButton.appendChild(sortIcon);
+                th.appendChild(sortButton);
+
+                // Add sort click handler
+                th.addEventListener('click', () => {
+                    const handler = PerformanceUtils?.throttle?.(sortHandler, 300) || sortHandler;
+                    handler(headerItem.key);
+
+                    // Reset all indicators
+                    headerRow.querySelectorAll('.ios-sort-indicator').forEach(icon => {
+                        icon.classList.remove('active', 'asc', 'desc');
+                        icon.style.opacity = '0.4';
+                        icon.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
+                        <path d="M4 1v6M1 4h6"/>
+                    </svg>`;
+                    });
+
+                    // Update this icon after a small delay
+                    setTimeout(() => {
+                        const updatedDirection = (glb_view_page === 'members')
+                            ? glb_memberSortState?.direction
+                            : glb_offerSortState?.direction;
+
+                        sortIcon.classList.add('active');
+                        sortIcon.style.opacity = '1';
+                        sortIcon.classList.add(updatedDirection === 1 ? 'asc' : 'desc');
+                        sortIcon.innerHTML = updatedDirection === 1 ?
+                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 0L8 8H0z" fill="var(--ios-blue)"/></svg>` :
+                            `<svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 8L0 0H8z" fill="var(--ios-blue)"/></svg>`;
+
+                        // Add animation class
+                        sortIcon.classList.add('ios-sort-animation');
+                        setTimeout(() => sortIcon.classList.remove('ios-sort-animation'), 300);
+                    }, 10);
+                });
+            }
+
+            headerRow.appendChild(th);
+        });
+
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Create table body
+        const tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+
+        // Create spacers for virtual scrolling
+        const topSpacer = document.createElement('tr');
+        topSpacer.className = 'virtual-spacer top-spacer';
+        topSpacer.style.height = '0px';
+
+        const bottomSpacer = document.createElement('tr');
+        bottomSpacer.className = 'virtual-spacer bottom-spacer';
+
+        tbody.appendChild(topSpacer);
+        tbody.appendChild(bottomSpacer);
+
+        tableWrapper.appendChild(table);
+        container.appendChild(tableWrapper);
+
+        // State management
+        const state = {
+            firstVisibleRow: 0,
+            lastVisibleRow: 0,
+            totalRows: data.length,
+            renderedRows: new Map(),
+            scrollTop: 0,
+            data: [...data],
+            initialized: false
+        };
+
+        // Initial calculation
+        function calculateVisibleRows() {
+            const scrollTop = tableWrapper.scrollTop;
+            const viewportHeight = tableWrapper.clientHeight || container.clientHeight || 500; // Fallback height
+
+            // Calculate visible range with buffer
+            const firstVisible = Math.floor(scrollTop / rowHeight);
+            const visibleCount = Math.ceil(viewportHeight / rowHeight);
+
+            state.firstVisibleRow = Math.max(0, firstVisible - bufferRows);
+            state.lastVisibleRow = Math.min(
+                state.totalRows - 1,
+                firstVisible + visibleCount + bufferRows
+            );
+
+            // Update spacers
+            topSpacer.style.height = `${state.firstVisibleRow * rowHeight}px`;
+            const bottomSpacerHeight = Math.max(
+                0,
+                (state.totalRows - state.lastVisibleRow - 1) * rowHeight
+            );
+            bottomSpacer.style.height = `${bottomSpacerHeight}px`;
+        }
+
+        // Render visible rows
+        function renderVisibleRows() {
+            if (state.totalRows === 0) {
+                // Show empty state
+                tbody.innerHTML = '';
+                tbody.appendChild(topSpacer);
+
+                const emptyRow = document.createElement('tr');
+                const emptyCell = document.createElement('td');
+                emptyCell.colSpan = headers.length;
+                emptyCell.className = 'ios-empty-state';
+                emptyCell.style.cssText = `
+                text-align: center;
+                vertical-align: middle;
+                color: var(--ios-gray);
+            `;
+
+                const emptyStateDiv = document.createElement('div');
+                emptyStateDiv.className = 'ios-empty-state-container';
+                emptyStateDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;';
+                emptyStateDiv.innerHTML = `
+                <div class="ios-empty-state-icon" style="margin-bottom: 16px;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ios-gray)" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="ios-empty-state-title" style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">No Items Found</div>
+                <div class="ios-empty-state-message" style="color: var(--ios-gray); font-size: 14px;">Try adjusting your search or filters</div>
+            `;
+
+                emptyCell.appendChild(emptyStateDiv);
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
+                tbody.appendChild(bottomSpacer);
+                return;
+            }
+
+            // Track currently visible rows
+            const currentRows = new Set(state.renderedRows.keys());
+            const newRows = new Set();
+
+            // Create fragment for batch insertion
+            const fragment = document.createDocumentFragment();
+
+            // Process each visible row
+            for (let i = state.firstVisibleRow; i <= state.lastVisibleRow; i++) {
+                if (i >= state.data.length) break;
+
+                newRows.add(i);
+
+                // Skip if already rendered
+                if (state.renderedRows.has(i)) {
+                    currentRows.delete(i);
+                    continue;
+                }
+
+                // Create new row
+                const item = state.data[i];
+                const row = document.createElement('tr');
+                row.dataset.index = i;
+                row.dataset.id = item[rowIdKey] || i;
+                row.dataset.offerId = item.offerId; // For offer-specific features
+                row.style.cssText = `transition: background-color var(--ios-anim-fast) ease;`;
+
+                // Style for alternate rows
+                if (i % 2 === 1) {
+                    row.style.backgroundColor = 'var(--ios-secondary-bg)';
+                }
+
+                // Add hover effects
+                row.addEventListener('mouseenter', () => {
+                    row.style.backgroundColor = 'var(--ios-table-row-hover)';
+                });
+
+                row.addEventListener('mouseleave', () => {
+                    if (i % 2 === 1) {
+                        row.style.backgroundColor = 'var(--ios-secondary-bg)';
+                    } else {
+                        row.style.backgroundColor = '';
+                    }
+                });
+
+                headers.forEach(headerItem => {
+                    const td = document.createElement('td');
+                    td.style.cssText = `
+                    padding: var(--ios-table-cell-padding);
+                    color: var(--ios-text-secondary);
+                    border-bottom: 1px solid rgba(60, 60, 67, 0.04);
+                    vertical-align: middle;
+                    text-align: center;
+                `;
+
+                    // Apply width if specified
+                    if (colWidths && colWidths[headerItem.key]) {
+                        td.style.width = colWidths[headerItem.key];
+                        td.style.maxWidth = colWidths[headerItem.key];
+                    }
+
+                    // Render cell content
+                    try {
+                        const cellContent = cellRenderer(item, headerItem);
+
+                        if (cellContent instanceof Node) {
+                            td.appendChild(cellContent);
+                        } else if (typeof cellContent === 'string') {
+                            // Format currency values
+                            if (/^\$?\d+(\.\d{2})?$/.test(cellContent)) {
+                                const span = document.createElement('span');
+                                span.className = 'ios-currency';
+                                span.style.cssText = `
+                                font-variant-numeric: tabular-nums;
+                                font-weight: 500;
+                                text-align: center;
+                            `;
+                                span.textContent = cellContent;
+                                td.appendChild(span);
+                            }
+                            // Format status indicators
+                            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(cellContent.toLowerCase())) {
+                                const statusSpan = document.createElement('span');
+                                statusSpan.className = `ios-status ${cellContent.toLowerCase()}`;
+                                statusSpan.textContent = cellContent;
+
+                                let statusStyle = '';
+                                if (['active', 'success'].includes(cellContent.toLowerCase())) {
+                                    statusStyle = `
+                                    background-color: var(--ios-status-active-bg);
+                                    color: var(--ios-green);
+                                    border: 1px solid rgba(52, 199, 89, 0.25);
+                                `;
+                                } else if (cellContent.toLowerCase() === 'pending') {
+                                    statusStyle = `
+                                    background-color: var(--ios-status-pending-bg);
+                                    color: var(--ios-orange);
+                                    border: 1px solid rgba(255, 149, 0, 0.25);
+                                `;
+                                } else {
+                                    statusStyle = `
+                                    background-color: var(--ios-status-inactive-bg);
+                                    color: var(--ios-red);
+                                    border: 1px solid rgba(255, 59, 48, 0.25);
+                                `;
+                                }
+
+                                statusSpan.style.cssText = `
+                                display: inline-flex;
+                                align-items: center;
+                                justify-content: center;
+                                padding: 4px 10px;
+                                border-radius: 12px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                text-align: center;
+                                ${statusStyle}
+                            `;
+                                td.appendChild(statusSpan);
+                            }
+                            // Regular text content
+                            else {
+                                td.textContent = cellContent;
+                            }
+                        } else {
+                            td.textContent = String(cellContent || '');
+                        }
+                    } catch (error) {
+                        console.error(`Error rendering cell for ${headerItem.key}:`, error);
+                        td.textContent = 'Error';
+                    }
+
+                    row.appendChild(td);
+                });
+
+                function shouldHighlightItem(item) {
+                    if (!glb_filters?.memberMerchantSearch) return { shouldHighlight: false };
+
+                    const searchTerm = glb_filters.memberMerchantSearch.trim().toLowerCase();
+                    if (!searchTerm) return { shouldHighlight: false };
+
+                    // Check direct matches
+                    const accountMatches =
+                        item.account_token.toLowerCase().includes(searchTerm) ||
+                        (item.embossed_name && item.embossed_name.toLowerCase().includes(searchTerm)) ||
+                        (item.description && item.description.toLowerCase().includes(searchTerm));
+
+                    if (accountMatches) return { shouldHighlight: true, matchType: 'account' };
+
+                    // Check related offers
+                    const matchingEnrolledOffers = glb_offer?.filter(offer => {
+                        const nameMatch = offer.name.toLowerCase().includes(searchTerm);
+                        const isEnrolled = Array.isArray(offer.enrolledCards) &&
+                            offer.enrolledCards.includes(item.account_token);
+                        return nameMatch && isEnrolled;
+                    });
+
+                    const matchingEligibleOffers = glb_offer?.filter(offer => {
+                        const nameMatch = offer.name.toLowerCase().includes(searchTerm);
+                        const isEligible = Array.isArray(offer.eligibleCards) &&
+                            offer.eligibleCards.includes(item.account_token);
+                        return nameMatch && isEligible;
+                    });
+
+                    return {
+                        shouldHighlight: matchingEnrolledOffers.length > 0 || matchingEligibleOffers.length > 0,
+                        matchType: matchingEnrolledOffers.length > 0 ? 'enrolled' :
+                            (matchingEligibleOffers.length > 0 ? 'eligible' : null),
+                        matchingEnrolledOffers,
+                        matchingEligibleOffers
+                    };
+                }
+
+                // Update where the function is used in row creation (inside the createVirtualScrollingTable function)
+                // Find this part in the code and replace with:
+
+                if (glb_view_page === "members" && glb_filters?.memberMerchantSearch) {
+                    const highlightData = shouldHighlightItem(item);
+
+                    if (highlightData.shouldHighlight) {
+                        row.classList.add('ios-highlight-row');
+                        row.dataset.highlighted = 'true';
+
+                        // Apply different highlight styles based on match type
+                        if (highlightData.matchType === 'enrolled') {
+                            // Green highlight for enrolled offers
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
+                        } else if (highlightData.matchType === 'eligible') {
+                            // Blue highlight for eligible offers
+                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
+                        } else {
+                            // Default yellow highlight for direct account matches
+                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                            row.style.borderLeft = '3px solid var(--ios-highlight-border)';
+                        }
+
+                        // Store match data for tooltips or additional UI features
+                        if (highlightData.matchingEnrolledOffers?.length > 0) {
+                            row.dataset.matchedEnrolledOffers = highlightData.matchingEnrolledOffers.length;
+                        }
+                        if (highlightData.matchingEligibleOffers?.length > 0) {
+                            row.dataset.matchedEligibleOffers = highlightData.matchingEligibleOffers.length;
+                        }
+                    }
+                }
+
+                // Update mouse event listeners to preserve highlight colors
+                row.addEventListener('mouseenter', () => {
+                    if (row.dataset.highlighted === 'true') {
+                        // Make hover slightly darker but preserve the color type
+                        if (row.dataset.matchedEnrolledOffers) {
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.25)';
+                        } else if (row.dataset.matchedEligibleOffers) {
+                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.25)';
+                        } else {
+                            row.style.backgroundColor = 'var(--ios-highlight-hover)';
+                        }
+                    } else {
+                        row.style.backgroundColor = 'var(--ios-table-row-hover)';
+                    }
+                });
+
+                row.addEventListener('mouseleave', () => {
+                    if (row.dataset.highlighted === 'true') {
+                        // Restore original highlight color
+                        if (row.dataset.matchedEnrolledOffers) {
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
+                        } else if (row.dataset.matchedEligibleOffers) {
+                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                        } else {
+                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                        }
+                    } else {
+                        row.style.backgroundColor = i % 2 === 1 ? 'var(--ios-secondary-bg)' : '';
+                    }
+                });
+
+                // Store in rendering map
+                state.renderedRows.set(i, row);
+                fragment.appendChild(row);
+            }
+
+            // Remove rows no longer visible
+            currentRows.forEach(index => {
+                const row = state.renderedRows.get(index);
+                if (row && row.parentNode) {
+                    row.parentNode.removeChild(row);
+                }
+                state.renderedRows.delete(index);
+            });
+
+            // Insert new rows
+            if (fragment.childNodes.length > 0) {
+                tbody.insertBefore(fragment, bottomSpacer);
+            }
+        }
+
+        // Add scroll handler with throttling
+        const scrollHandler = function () {
+            if (tableWrapper.scrollTop !== state.scrollTop) {
+                state.scrollTop = tableWrapper.scrollTop;
+                calculateVisibleRows();
+                renderVisibleRows();
             }
         };
 
-        // Helper function to create loader
-        function createLoaderElement() {
-            return ui_createElement('div', {
-                styleString: 'display:flex; justify-content:center; align-items:center; height:200px;',
-                children: [
-                    ui_createElement('div', {
-                        styleString: 'width:40px; height:40px; border:3px solid rgba(0,122,255,0.2); border-top:3px solid var(--ios-blue); border-radius:50%; animation:spin 1s linear infinite;'
-                    })
-                ]
+        // Use PerformanceUtils throttle if available, otherwise create simple throttle
+        const throttledScrollHandler = PerformanceUtils?.throttle?.(scrollHandler, 16) || // ~60fps
+            function () {
+                let lastCall = 0;
+                return function () {
+                    const now = Date.now();
+                    if (now - lastCall >= 16) {
+                        lastCall = now;
+                        scrollHandler();
+                    }
+                };
+            }();
+
+        tableWrapper.addEventListener('scroll', throttledScrollHandler);
+
+        // Add resize observer to recalculate on container size changes
+        if (typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(() => {
+                calculateVisibleRows();
+                renderVisibleRows();
             });
+
+            resizeObserver.observe(tableWrapper);
+            resizeObserver.observe(container);
         }
+
+        // Initial render with delay to ensure container has dimensions
+        setTimeout(() => {
+            calculateVisibleRows();
+            renderVisibleRows();
+            state.initialized = true;
+        }, 100);
+
+        // Force another refresh after a longer delay to catch any missed renders
+        setTimeout(() => {
+            if (state.renderedRows.size < Math.min(20, state.data.length)) {
+                calculateVisibleRows();
+                renderVisibleRows();
+            }
+        }, 500);
+
+        // Public API
+        return {
+            /**
+             * Update data and re-render
+             * @param {Array} newData - New data to display
+             */
+            updateData(newData) {
+                state.data = [...newData];
+                state.totalRows = newData.length;
+                state.renderedRows.clear();
+                calculateVisibleRows();
+                renderVisibleRows();
+            },
+
+            /**
+             * Get the current visible range
+             * @returns {Object} - First and last visible rows
+             */
+            getVisibleRange() {
+                return {
+                    first: state.firstVisibleRow,
+                    last: state.lastVisibleRow
+                };
+            },
+
+            /**
+             * Scroll to a specific row
+             * @param {number} rowIndex - Row to scroll to
+             */
+            scrollToRow(rowIndex) {
+                if (rowIndex >= 0 && rowIndex < state.totalRows) {
+                    tableWrapper.scrollTop = rowIndex * rowHeight;
+                }
+            },
+
+            /**
+             * Refresh the current view without changing data
+             */
+            refresh() {
+                state.renderedRows.clear();
+                calculateVisibleRows();
+                renderVisibleRows();
+            },
+
+            /**
+             * Get the underlying DOM elements
+             * @returns {Object} - References to DOM elements
+             */
+            getDOMElements() {
+                return {
+                    wrapper: tableWrapper,
+                    table: table,
+                    tbody: tbody
+                };
+            }
+        };
+    }
+
+
+    /**
+ * Pre-computes and manages table data for efficient rendering
+ */
+    const TableDataProcessor = (() => {
+        // Cache for processed data
+        const processedData = new Map();
+
+        return {
+            /**
+             * Process data for table rendering with cell pre-computation
+             * @param {string} tableId - Unique ID for this table
+             * @param {Array} rawData - Raw data array
+             * @param {Object} options - Processing options
+             * @returns {Array} - Processed data ready for rendering
+             */
+            processTableData(tableId, rawData, options = {}) {
+                const {
+                    processFunctions = {}, // Map of column key to processor function
+                    computeDerivedFields = [], // Array of functions to compute new fields
+                    sortState = null, // Current sort state
+                    filterFn = null // Current filter function
+                } = options;
+
+                // Create a unique cache key
+                const cacheKey = `${tableId}-${JSON.stringify(sortState)}-${filterFn ? filterFn.toString() : 'nofilter'}`;
+
+                // Check cache first
+                if (processedData.has(cacheKey)) {
+                    const cached = processedData.get(cacheKey);
+                    if (cached.timestamp > Date.now() - 5000 && // Cache valid for 5 seconds
+                        cached.dataLength === rawData.length) {
+                        return cached.data;
+                    }
+                }
+
+                // Start with a filtered copy if filter function provided
+                let processedItems = filterFn ? rawData.filter(filterFn) : [...rawData];
+
+                // Apply sorting if provided
+                if (sortState && sortState.key) {
+                    processedItems.sort((a, b) => {
+                        const valueA = a[sortState.key];
+                        const valueB = b[sortState.key];
+                        return sortState.direction * String(valueA).localeCompare(String(valueB));
+                    });
+                }
+
+                // Compute derived fields
+                processedItems = processedItems.map(item => {
+                    const result = { ...item };
+
+                    // Apply each derivation function
+                    computeDerivedFields.forEach(deriveFn => {
+                        Object.assign(result, deriveFn(item));
+                    });
+
+                    // Pre-compute cell values for known processors
+                    Object.entries(processFunctions).forEach(([key, processFn]) => {
+                        result[`__processed_${key}`] = processFn(item);
+                    });
+
+                    return result;
+                });
+
+                // Cache the processed data
+                processedData.set(cacheKey, {
+                    data: processedItems,
+                    timestamp: Date.now(),
+                    dataLength: rawData.length
+                });
+
+                return processedItems;
+            },
+
+            /**
+             * Clears the processing cache for a specific table or all tables
+             * @param {string} [tableId] - Specific table ID to clear or all if omitted
+             */
+            clearCache(tableId) {
+                if (tableId) {
+                    // Remove specific table entries
+                    for (const key of processedData.keys()) {
+                        if (key.startsWith(`${tableId}-`)) {
+                            processedData.delete(key);
+                        }
+                    }
+                } else {
+                    // Clear all
+                    processedData.clear();
+                }
+            }
+        };
     })();
 
+    /**
+ * Enhanced reactive filter handler for immediate UI updates
+ */
+    function createReactiveFilter(container, options = {}) {
+        const {
+            searchPlaceholder = 'Search...',
+            onSearch = () => { },
+            initialValue = '',
+            onFilterChange = null,
+            debounceDelay = 200
+        } = options;
+
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'ios-search-container';
+        searchContainer.style.cssText = 'position:relative; width:100%; max-width:300px;';
+
+        // Create search input
+        const input = document.createElement('input');
+        input.className = 'ios-search-input';
+        input.type = 'text';
+        input.placeholder = searchPlaceholder;
+        input.value = initialValue;
+        input.style.cssText = UI_STYLES.controls.search;
+
+        // Add icon
+        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        searchIcon.setAttribute('width', '16');
+        searchIcon.setAttribute('height', '16');
+        searchIcon.setAttribute('viewBox', '0 0 24 24');
+        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
+        path.setAttribute('fill', 'currentColor');
+        searchIcon.appendChild(path);
+
+        // Add clear button
+        const clearButton = document.createElement('button');
+        clearButton.innerHTML = '×';
+        clearButton.style.cssText = 'position:absolute; right:30px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:18px; cursor:pointer; color:#999; display:none;';
+
+        // Create debounced update function
+        let debounceTimeout;
+
+        const triggerFilterChange = (value) => {
+            if (onFilterChange) {
+                onFilterChange(value);
+            } else {
+                if (glb_view_page === 'members') {
+                    filteredMembers.invalidateCache();
+                } else if (glb_view_page === 'offers') {
+                    filteredOffers.invalidateCache();
+                }
+                ViewRenderer.renderCurrentView(true);
+            }
+        };
+
+        // Handle input with debounce
+        input.addEventListener('input', function () {
+            const searchValue = this.value.toLowerCase();
+
+            // Update filter state immediately
+            glb_filters.memberMerchantSearch = searchValue;
+            glb_filters.offerMerchantSearch = searchValue;
+
+            // Show/hide clear button immediately
+            clearButton.style.display = searchValue ? 'block' : 'none';
+
+            // Call the search handler
+            onSearch(searchValue);
+
+            // Show visual feedback that something is happening
+            searchIcon.style.color = 'var(--ios-orange)';
+
+            // Debounce the actual filtering/rendering
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                triggerFilterChange(searchValue);
+                searchIcon.style.color = 'var(--ios-blue)';
+            }, debounceDelay);
+        });
+
+        // Clear button functionality
+        clearButton.addEventListener('click', () => {
+            input.value = '';
+            glb_filters.memberMerchantSearch = '';
+            glb_filters.offerMerchantSearch = '';
+            clearButton.style.display = 'none';
+
+            // Clear any pending debounce
+            clearTimeout(debounceTimeout);
+
+            // Immediately trigger update for clearing
+            triggerFilterChange('');
+            input.focus();
+        });
+
+        searchContainer.appendChild(input);
+        searchContainer.appendChild(searchIcon);
+        searchContainer.appendChild(clearButton);
+        container.appendChild(searchContainer);
+
+        return {
+            container: searchContainer,
+            input: input,
+            getValue: () => input.value.toLowerCase(),
+            setValue: (val) => {
+                input.value = val;
+                clearButton.style.display = val ? 'block' : 'none';
+            }
+        };
+    }
+
+    /**
+ * Adds optimized CSS animation keyframes
+ */
+    function addOptimizedAnimations() {
+        const style = document.createElement('style');
+        style.textContent = `
+          /* Hardware-accelerated animations */
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+      
+          @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(10px); }
+          }
+      
+          @keyframes pulse {
+            0% { background-color: transparent; }
+            30% { background-color: rgba(0, 122, 255, 0.1); }
+            100% { background-color: transparent; }
+          }
+      
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+      
+          /* Hardware acceleration classes */
+          .hw-accelerated {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+          }
+      
+          /* Animation utility classes */
+          .animate-fade-in {
+            animation: fadeIn 0.3s ease forwards;
+          }
+      
+          .animate-fade-out {
+            animation: fadeOut 0.3s ease forwards;
+          }
+      
+          .animate-pulse {
+            animation: pulse 1s ease;
+          }
+      
+          /* Virtual scrolling optimization */
+          .virtual-table-wrapper {
+            -webkit-overflow-scrolling: touch;
+            overflow-scrolling: touch;
+          }
+      
+          .virtual-table thead th {
+            will-change: transform;
+          }
+      
+          /* Optimize common elements */
+          .ios-table {
+            contain: content;
+          }
+      
+          .ios-table tbody tr {
+            contain: layout style;
+          }
+        `;
+
+        document.head.appendChild(style);
+    }
 
 
 
@@ -6585,8 +7298,8 @@
                     glb_offer_expired = loaded["offer_expired"] ? JSON.parse(loaded["offer_expired"]) : [];
                     glb_offer_redeemed = loaded["offer_redeemed"] ? JSON.parse(loaded["offer_redeemed"]) : [];
 
-                    console.log(`Load cookie: ${storage_accToken}, key: ${defaultKeys.join(", ")}`);
-                    SmartRenderer.renderCurrentView();
+                    console.log(`Load cookie: ${storage_accToken},  keys: ${defaultKeys.join(", ")}`);
+                    ViewRenderer.renderCurrentView();
 
                     return 1;
                 } catch (error) {
@@ -6603,7 +7316,7 @@
                         JSON.stringify(allData[key])
                     );
                 });
-                console.log(`Set cookie: ${storage_accToken}, key: ${keys.join(", ")}`);
+                console.log(`Set cookie: ${storage_accToken}, keys: ${keys.join(", ")}`);
                 return 1;
 
             }
@@ -6613,10 +7326,10 @@
                     keys.forEach(key => {
                         localStorage.removeItem(`AMaxOffer_${key}_${storage_accToken}`);
                     });
-                    console.log(`Cleared cookie: ${storage_accToken}, keys: ${keys.join(", ")}`);
+                    console.log(`Cleared cookie: ${storage_accToken} for keys: ${keys.join(", ")}`);
                     return 1;
                 } catch (e) {
-                    console.error("Error clearing localStorage data:", e);
+                    console.error("Error clearing cookie:", e);
                     return 0;
                 }
             }
@@ -6673,11 +7386,11 @@
 
             lastUpdate = new Date().toLocaleString();
             storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
-            SmartRenderer.renderCurrentView(true);
+            ViewRenderer.renderCurrentView(true);
         } else {
             console.log("Using data from LocalStorage.");
             await api_fetchAllBalances();
-            SmartRenderer.renderCurrentView();
+            ViewRenderer.renderCurrentView();
         }
 
         btnMembers.classList.add('active');
