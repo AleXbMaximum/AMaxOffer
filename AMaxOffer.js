@@ -1224,8 +1224,10 @@
                 font-size: var(--ios-table-header-font-size);
                 font-weight: 600;
                 color: var(--ios-text-secondary);
-                text-align: left;
-                border-right: var(--ios-border-light);  `;
+                text-align: center;
+                vertical-align: middle;
+                border-right: var(--ios-border-light);
+            `;
 
             // Apply column width if specified
             if (colWidths && colWidths[headerItem.key]) {
@@ -1407,9 +1409,6 @@
                     };
                 }
 
-                // Update where the function is used in row creation (inside the createVirtualScrollingTable function)
-                // Find this part in the code and replace with:
-
                 if (glb_view_page === "members" && glb_filters?.memberMerchantSearch) {
                     const highlightData = shouldHighlightItem(item);
 
@@ -1469,7 +1468,7 @@
                             row.style.backgroundColor = 'var(--ios-highlight-bg)';
                         }
                     } else {
-                        row.style.backgroundColor = i % 2 === 1 ? 'var(--ios-secondary-bg)' : '';
+                        row.style.backgroundColor = idx % 2 === 1 ? 'var(--ios-secondary-bg)' : '';
                     }
                 });
 
@@ -1480,6 +1479,7 @@
                         padding: var(--ios-table-cell-padding);
                         border-bottom: var(--ios-border-light);
                         vertical-align: middle;
+                        text-align: center;
                     `;
 
                     // Apply column width if specified
@@ -1503,7 +1503,7 @@
                                 span.style.cssText = `
                                     font-variant-numeric: tabular-nums;
                                     font-weight: 500;
-                                    text-align: right;
+                                    text-align: center;
                                 `;
                                 span.textContent = content;
                                 td.appendChild(span);
@@ -1568,27 +1568,18 @@
 
         tableElement.appendChild(tbody);
         return tableElement;
-
-
     }
 
     // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
     function ui_createMain() {
-        // Get viewport dimensions
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // Calculate initial position (centered)
-        const initialLeft = (viewportWidth - 200) / 2;
-        const initialTop = viewportHeight * 0.1; // 10% from top
 
         // Create the main container with better positioning
         const container = ui_createElement('div', {
             props: { id: 'card-utility-overlay' },
             className: 'amaxoffer-container amaxoffer-minimized',
             styleString: `
-                left: ${initialLeft}px;
-                top: ${initialTop}px;
+                left: 25px;
+                top: 25px;
                 opacity: 0;
                 transform: scale(0.95);
                 transition: opacity 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease;
@@ -2968,7 +2959,16 @@
                     statItem.style.transform = 'translateY(0)';
                     statItem.style.boxShadow = 'none';
                 });
-                statItem.addEventListener('click', filterAction);
+                statItem.addEventListener('click', () => {
+                    // Apply the filter action
+                    filterAction();
+
+                    const tableContainer = document.getElementById('members-table-container');
+                    if (tableContainer) {
+                        tableContainer.innerHTML = "";
+                        tableContainer.appendChild(members_renderTable());
+                    }
+                });
             }
 
             const iconElement = document.createElement('div');
@@ -3284,6 +3284,7 @@
                         align-items:center; 
                         justify-content:center; 
                         min-width:40px;
+                        margin:0 auto;
                     `,
                     events: {
                         mouseover: e => {
@@ -3302,7 +3303,7 @@
             // Zero count indicator
             return ui_createElement('span', {
                 text: '0',
-                styleString: 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6;'
+                styleString: 'color:var(--ios-gray); font-size:13px; font-weight:400; opacity:0.6; text-align:center; display:block;'
             });
         }
 
@@ -3319,6 +3320,9 @@
                             ${UI_STYLES.tableCells.money}
                             font-weight:${numValue > 0 ? '600' : '400'}; 
                             color:${numValue > 0 ? '#1c1c1e' : '#8e8e93'};
+                            text-align:center;
+                            display:block;
+                            margin:0 auto;
                         `,
                         text: numValue.toLocaleString('en-US', {
                             style: 'currency',
@@ -3337,7 +3341,6 @@
             return "";
         }
 
-        // Helper function for toggle switches
         function createToggleSwitch(account, type) {
             const isChecked = type === 'priority'
                 ? glb_priorityCards.includes(account.account_token)
@@ -3354,6 +3357,7 @@
                             border-radius:11px; cursor:pointer; transition:background-color 0.3s ease; 
                             box-shadow:0 1px 3px rgba(0,0,0,0.1) inset; 
                             background-color:${isChecked ? color : '#e9e9ea'};
+                            margin:0 auto;
                         `,
                         children: [
                             ui_createElement('div', {
@@ -4060,7 +4064,16 @@
                     statItem.style.transform = 'translateY(0)';
                     statItem.style.boxShadow = 'none';
                 });
-                statItem.addEventListener('click', filterAction);
+                statItem.addEventListener('click', () => {
+                    // Apply the filter action
+                    filterAction();
+
+                    const displayContainer = document.getElementById('offers-display-container');
+                    if (displayContainer) {
+                        displayContainer.innerHTML = "";
+                        displayContainer.appendChild(offers_renderTableView());
+                    }
+                });
             }
 
             const iconElement = document.createElement('div');
@@ -4113,12 +4126,6 @@
             glb_filters.customFilter = offers_expiringFilter();
             SmartRenderer.renderCurrentView();
         }));
-
-        // statsBar.appendChild(createStatItem('Fully Enrolled', stats.distinctFullyEnrolled, ICONS.ENROLLED, '88, 86, 214', () => {
-        //     offers_resetAllFilters();
-        //     glb_filters.enrollmentStatus = 'fully';
-        //     SmartRenderer.renderCurrentView();
-        // }));
 
         statsBar.appendChild(createStatItem('Pending Enrollment', stats.distinctNotFullyEnrolled, ICONS.PENDING, '255, 204, 0', () => {
             offers_resetAllFilters();
@@ -4352,12 +4359,13 @@
                         '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
                         '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
 
-                    return buttonHtml;
+                    return `<div style="display:flex; justify-content:center; align-items:center;">${buttonHtml}</div>`;
                 },
 
                 // Pre-compute logo cell
                 logo: offer => {
-                    return ui_returnLogo(offer.logo, offer.name);
+                    const logoElement = ui_returnLogo(offer.logo, offer.name);
+                    return `<div style="display:flex; justify-content:center; align-items:center;">${logoElement.outerHTML}</div>`;
                 },
 
                 // Pre-compute achievement type
@@ -4369,7 +4377,7 @@
                     const color = achievementType === "STATEMENT_CREDIT" ? '#2e7d32' :
                         achievementType === "MEMBERSHIP_REWARDS" ? '#1976d2' : '#2c3e50';
 
-                    return `<div style="font-weight:500; font-size:13px; color:${color};">${text}</div>`;
+                    return `<div style="font-weight:500; font-size:13px; color:${color}; text-align:center;">${text}</div>`;
                 },
 
                 // Pre-compute category
@@ -4387,11 +4395,11 @@
 
                         const config = categoryMap[cat] || { icon: "•", color: "#757575" };
                         return `<div style="display:flex; align-items:center; justify-content:center; gap:6px;">
-                        <span>${config.icon}</span>
-                        <span style="color:${config.color}; font-size:13px;">${cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
-                      </div>`;
+                                <span>${config.icon}</span>
+                                <span style="color:${config.color}; font-size:13px;">${cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
+                              </div>`;
                     }
-                    return 'N/A';
+                    return '<div style="text-align:center;">N/A</div>';
                 },
 
                 redemption_types: offer => {
@@ -4442,29 +4450,29 @@
                 eligibleCards: offer => {
                     const count = offer.eligibleCards?.length || 0;
                     if (count > 0) {
-                        return `<button class="eligible-badge" style="border-radius:16px; background-color:rgba(0, 122, 255, 0.1); color:var(--ios-blue); border:1px solid rgba(0, 122, 255, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
-                          <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
-                        </svg>
-                        ${count}
-                      </button>`;
+                        return `<div style="display:flex; justify-content:center; align-items:center;"><button class="eligible-badge" style="border-radius:16px; background-color:rgba(0, 122, 255, 0.1); color:var(--ios-blue); border:1px solid rgba(0, 122, 255, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+                                  <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+                                </svg>
+                                ${count}
+                              </button></div>`;
                     }
-                    return `<span style="color:rgba(0,0,0,0.3);">0</span>`;
+                    return `<div style="color:rgba(0,0,0,0.3); text-align:center;">0</div>`;
                 },
 
                 enrolledCards: offer => {
                     const count = offer.enrolledCards?.length || 0;
                     if (count > 0) {
-                        return `<button class="enrolled-badge" style="border-radius:16px; background-color:rgba(52, 199, 89, 0.1); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                          <path d="M22 4L12 14.01l-3-3"/>
-                        </svg>
-                        ${count}
-                      </button>`;
+                        return `<div style="display:flex; justify-content:center; align-items:center;"><button class="enrolled-badge" style="border-radius:16px; background-color:rgba(52, 199, 89, 0.1); color:var(--ios-green); border:1px solid rgba(52, 199, 89, 0.25); padding:5px 12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                  <path d="M22 4L12 14.01l-3-3"/>
+                                </svg>
+                                ${count}
+                              </button></div>`;
                     }
-                    return `<span style="color:rgba(0,0,0,0.3);">0</span>`;
+                    return `<div style="color:rgba(0,0,0,0.3); text-align:center;">0</div>`;
                 },
 
                 // Pre-compute formatted values
@@ -4484,7 +4492,7 @@
             if (value && value !== 'N/A') {
                 return `<div style="font-variant-numeric:tabular-nums; font-weight:600; text-align:center; color:${color};">${value}</div>`;
             }
-            return '';
+            return '<div style="text-align:center;"></div>';
         }
 
     }
