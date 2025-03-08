@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      3.9
+// @version      3.9.0
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
-// @updateURL    https://github.com/AleXbMaximum/AMaxOffer/raw/main/dist/AMaxOffer.user.js
-// @downloadURL  https://github.com/AleXbMaximum/AMaxOffer/raw/main/dist/AMaxOffer.user.js
+// @updateURL    https://raw.githubusercontent.com/AleXbMaximum/AMaxOffer/master/raw/master/dist/AMaxOffer.user.js.js
+// @downloadURL  https://raw.githubusercontent.com/AleXbMaximum/AMaxOffer/master/raw/master/dist/AMaxOffer.user.js.js
+// @homepageURL  https://github.com/AleXbMaximum/AMaxOffer
 // @grant        GM.xmlHttpRequest
 // @grant        GM.addElement
 // @grant        GM.notification
@@ -16,7 +17,7 @@
 // @grant        GM.setValue
 // @grant        GM_cookie
 // @grant        unsafeWindow
-// @resource materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
+// @resource     materialIcons https://fonts.googleapis.com/icon?family=Material+Icons
 
 // ==/UserScript==
 
@@ -6798,7 +6799,7 @@
 
     async function auth_init() {
         const tl = await api_verifyTrustLevel();
-        if (tl === null || tl < 4) {
+        if (tl === null || tl < 3) {
             return 0;
         }
         // Use ISO 8601 format with leading zeros
