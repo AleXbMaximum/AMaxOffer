@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      3.0.2
+// @version      3.9
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
@@ -25,7 +25,7 @@
 (function () {
     'use strict';
 
-    const scriptVersion = "3.0";
+    const storageOpVersion = "3.0";
 
     // =========================================================================
     // Section 1: Global Styles
@@ -673,6 +673,184 @@
         offerCardEnding: "",
     };
 
+
+    const FilterManager = (() => {
+        // Default filter state
+        const defaultFilters = {
+            memberStatus: "Active",
+            memberCardtype: "all",
+            offerFav: false,
+            offerMerchantSearch: "",
+            memberMerchantSearch: "",
+            offerCardEnding: "",
+            enrollmentStatus: null,
+            eligibleOnly: false,
+            enrolledOnly: false,
+            customFilter: null
+        };
+
+        // Current filters state
+        const filters = { ...defaultFilters };
+
+        // Filter query cache
+        const filterCache = {
+            members: { lastQuery: null, result: null },
+            offers: { lastQuery: null, result: null }
+        };
+
+        function createFilterHash(view, filterState) {
+            return JSON.stringify({
+                view,
+                filters: Object.entries(filterState)
+                    .filter(([key]) =>
+                        (view === 'members' && (key.startsWith('member') || key === 'customFilter')) ||
+                        (view === 'offers' && (!key.startsWith('member') || key === 'customFilter'))
+                    )
+                    .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+            });
+        }
+
+        return {
+            getFilters() {
+                return { ...filters };
+            },
+
+            setFilters(updates) {
+                Object.assign(filters, updates);
+
+                const affectsMembers = Object.keys(updates).some(k =>
+                    k.startsWith('member') || k === 'customFilter'
+                );
+                const affectsOffers = Object.keys(updates).some(k =>
+                    !k.startsWith('member') || k === 'customFilter'
+                );
+
+                if (affectsMembers) filterCache.members.lastQuery = null;
+                if (affectsOffers) filterCache.offers.lastQuery = null;
+
+                return this;
+            },
+
+            resetFilters(specificFilters = null) {
+                if (specificFilters) {
+                    specificFilters.forEach(key => {
+                        if (key in defaultFilters) {
+                            filters[key] = defaultFilters[key];
+                        }
+                    });
+                } else {
+                    Object.assign(filters, defaultFilters);
+                }
+
+                filterCache.members.lastQuery = null;
+                filterCache.offers.lastQuery = null;
+
+                return this;
+            },
+
+            getFilteredMembers() {
+                const hash = createFilterHash('members', filters);
+                if (filterCache.members.lastQuery === hash) {
+                    return filterCache.members.result;
+                }
+
+                const filtered = glb_account.filter(acc => {
+                    const statusMatch = filters.memberStatus === 'all' ||
+                        acc.account_status?.trim().toLowerCase() === filters.memberStatus.toLowerCase();
+                    if (!statusMatch) return false;
+
+                    const typeMatch = filters.memberCardtype === 'all' ||
+                        acc.relationship === filters.memberCardtype;
+                    if (!typeMatch) return false;
+
+                    if (filters.memberMerchantSearch) {
+                        const term = filters.memberMerchantSearch.toLowerCase();
+
+                        const accountMatches =
+                            (acc.account_token || '').toLowerCase().includes(term) ||
+                            (acc.embossed_name || '').toLowerCase().includes(term) ||
+                            (acc.description || '').toLowerCase().includes(term);
+
+                        const offerMatches = glb_offer.some(offer => {
+                            const nameMatch = (offer.name || '').toLowerCase().includes(term);
+                            const eligMatch = Array.isArray(offer.eligibleCards) &&
+                                offer.eligibleCards.includes(acc.account_token);
+                            const enrollMatch = Array.isArray(offer.enrolledCards) &&
+                                offer.enrolledCards.includes(acc.account_token);
+
+                            return nameMatch && (eligMatch || enrollMatch);
+                        });
+
+                        if (!accountMatches && !offerMatches) return false;
+                    }
+
+                    if (typeof filters.customFilter === 'function') {
+                        return filters.customFilter(acc);
+                    }
+
+                    return true;
+                });
+
+                filterCache.members.lastQuery = hash;
+                filterCache.members.result = filtered;
+
+                return filtered;
+            },
+
+            getFilteredOffers() {
+                const hash = createFilterHash('offers', filters);
+                if (filterCache.offers.lastQuery === hash) {
+                    return filterCache.offers.result;
+                }
+
+                const filtered = glb_offer.filter(offer => {
+                    if (filters.offerFav && !offer.favorite) return false;
+
+                    if (filters.offerMerchantSearch) {
+                        const term = filters.offerMerchantSearch.toLowerCase();
+                        if (!(offer.name || '').toLowerCase().includes(term)) return false;
+                    }
+
+                    if (filters.offerCardEnding) {
+                        const relevantAccounts = glb_account.filter(acc =>
+                            acc.cardEnding?.includes(filters.offerCardEnding)
+                        ).map(acc => acc.account_token);
+
+                        const isRelevant =
+                            offer.eligibleCards?.some(token => relevantAccounts.includes(token)) ||
+                            offer.enrolledCards?.some(token => relevantAccounts.includes(token));
+
+                        if (!isRelevant) return false;
+                    }
+
+                    if (filters.enrollmentStatus === 'fully') {
+                        const eligible = offer.eligibleCards?.length || 0;
+                        const enrolled = offer.enrolledCards?.length || 0;
+                        if (eligible + enrolled === 0 || enrolled !== eligible + enrolled) return false;
+                    } else if (filters.enrollmentStatus === 'pending') {
+                        const eligible = offer.eligibleCards?.length || 0;
+                        const enrolled = offer.enrolledCards?.length || 0;
+                        if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
+                    }
+
+                    if (filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
+                    if (filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
+
+                    if (typeof filters.customFilter === 'function') {
+                        return filters.customFilter(offer);
+                    }
+
+                    return true;
+                });
+
+                filterCache.offers.lastQuery = hash;
+                filterCache.offers.result = filtered;
+
+                return filtered;
+            }
+        };
+    })();
+
     //  5) MISCELLANEOUS 
     let lastUpdate = "";        // Last time data was fetched
     let runInBatchesLimit = 100; // Concurrency limit when enrolling in batches
@@ -783,19 +961,6 @@
     util_antiKickOff.removeVisibilityListeners();
     util_antiKickOff.startSessionExtender(60000);
 
-    // Run tasks in batches to control concurrency
-    async function util_runTasksInBatches(tasks, limit) {
-        const results = [];
-        let i = 0;
-        while (i < tasks.length) {
-            const chunk = tasks.slice(i, i + limit);
-            // Each "task" returns a single object: { offerId, accountToken, result: boolean }
-            const chunkResults = await Promise.all(chunk.map(fn => fn()));
-            results.push(...chunkResults);
-            i += limit;
-        }
-        return results;
-    }
 
 
     function util_formatDate(dateStr, roundUp = false) {
@@ -1625,7 +1790,7 @@
                     await api_fetchAllBenefits();
 
                     lastUpdate = new Date().toLocaleString();
-                    storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
+                    storage_manageData("set", storage_accToken, ["lastUpdate", "storageOpVersion"]);
 
                     refreshStatusEl.textContent = "Refresh complete.";
                     setTimeout(() => refreshStatusEl.textContent = "", 3000);
@@ -2186,39 +2351,50 @@
     }
 
     async function api_refreshOffersList() {
-        // Store current offers for comparison
-        const oldOffers = Array.isArray(glb_offer) ? [...glb_offer] : [];
-        const offerInfoTable = {};
+        // Store reference to current offers for comparison
+        const oldOffers = [...(Array.isArray(glb_offer) ? glb_offer : [])];
+        const newOfferMap = new Map();
+        const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
 
+        // Helper function to check if offer should be skipped
+        function shouldSkipOffer(offerName) {
+            const skipPatterns = [
+                "Your FICO&#174", "The Hotel Collection", "3X on Amex Travel",
+                "Flexible Business Credit", "Apple Pay", "More Coffee",
+                "More Travel", "Send Money to Friends", "Considering a Big Purchase"
+            ];
+            return skipPatterns.some(pattern =>
+                offerName.toLowerCase().includes(pattern.toLowerCase())
+            );
+        }
+
+        // Get active accounts
         const activeAccounts = glb_account.filter(acc =>
-            acc.account_status && acc.account_status.trim().toLowerCase() === "active"
+            acc.account_status?.trim().toLowerCase() === "active"
         );
 
-        const skipPatterns = [
-            "Your FICO&#174",
-            "The Hotel Collection",
-            "3X on Amex Travel",
-            "Flexible Business Credit",
-            "Apple Pay",
-            "More Coffee",
-            "More Travel",
-            "Send Money to Friends",
-            "Considering a Big Purchase"
-        ];
+        // Fetch offers for all active accounts concurrently
+        const results = await Promise.all(
+            activeAccounts.map(acc => api_fetchOfferList(acc.account_token))
+        );
 
-        await Promise.all(activeAccounts.map(async (acc) => {
-            const offers = await api_fetchOfferList(acc.account_token);
+        // Process all offers
+        activeAccounts.forEach((account, idx) => {
+            const offers = results[idx] || [];
+
             offers.forEach(offer => {
                 const sourceId = offer.source_id;
                 if (!sourceId) return;
-                const offerName = (offer.name || "").toLowerCase();
-                if (skipPatterns.some(pattern => offerName.includes(pattern.toLowerCase()))) {
-                    return;
-                }
 
-                if (!offerInfoTable[sourceId]) {
+                if (shouldSkipOffer(offer.name || "")) return;
+
+                let offerInfo;
+                if (newOfferMap.has(sourceId)) {
+                    offerInfo = newOfferMap.get(sourceId);
+                } else {
                     const details = offers_parseDescription(offer.short_description || "");
-                    offerInfoTable[sourceId] = {
+
+                    offerInfo = {
                         source_id: sourceId,
                         offerId: offer.id || "N/A",
                         name: offer.name || "N/A",
@@ -2235,54 +2411,39 @@
                         enrolledCards: [],
                         favorite: false
                     };
+
+                    newOfferMap.set(sourceId, offerInfo);
+
+                    // Count new offers
+                    if (!oldOffers.some(o => o.source_id === sourceId)) {
+                        stats.newCount++;
+                    }
                 }
 
-                if (offer.status === "ELIGIBLE") {
-                    if (!offerInfoTable[sourceId].eligibleCards.includes(acc.account_token)) {
-                        offerInfoTable[sourceId].eligibleCards.push(acc.account_token);
-                    }
-                } else if (offer.status === "ENROLLED") {
-                    if (!offerInfoTable[sourceId].enrolledCards.includes(acc.account_token)) {
-                        offerInfoTable[sourceId].enrolledCards.push(acc.account_token);
-                    }
+                // Update eligible/enrolled cards
+                if (offer.status === "ELIGIBLE" &&
+                    !offerInfo.eligibleCards.includes(account.account_token)) {
+                    offerInfo.eligibleCards.push(account.account_token);
+                } else if (offer.status === "ENROLLED" &&
+                    !offerInfo.enrolledCards.includes(account.account_token)) {
+                    offerInfo.enrolledCards.push(account.account_token);
                 }
             });
-        }));
+        });
 
-
-        // Convert to array for processing
-        const newOffers = Object.values(offerInfoTable);
-
-        // Process changes and update global state
-        const changeStats = await offers_processChanges(oldOffers, newOffers);
-
+        // Process changes and preserve attributes from old offers
+        api_processOfferUpdates(oldOffers, newOfferMap, stats);
 
         // Update card offer counts
-        glb_account.forEach(acc => {
-            acc.eligibleOffers = 0;
-            acc.enrolledOffers = 0;
-        });
+        updateCardOfferCounts();
 
-        glb_offer.forEach(offer => {
-            if (Array.isArray(offer.eligibleCards)) {
-                offer.eligibleCards.forEach(cardToken => {
-                    const acc = glb_account.find(a => a.account_token === cardToken);
-                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
-                });
-            }
-            if (Array.isArray(offer.enrolledCards)) {
-                offer.enrolledCards.forEach(cardToken => {
-                    const acc = glb_account.find(a => a.account_token === cardToken);
-                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
-                });
-            }
-        });
-
+        // Save to storage
         storage_manageData("set", storage_accToken, ["account", "offer", "offer_expired", "offer_redeemed"]);
 
+        // Mark offers view as changed
         SmartRenderer.markChanged('offers');
 
-        return changeStats;
+        return stats;
 
         function offers_parseDescription(description = "") {
             const parseDollar = (str) => parseFloat(str.replace(/[,\$]/g, ""));
@@ -2388,109 +2549,63 @@
         }
     }
 
-
-    async function offers_processChanges(oldOffers, newOffers) {
-        const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
-
-        // Create maps for easier lookup
-        const prevOfferMap = new Map();
+    function api_processOfferUpdates(oldOffers, newOfferMap, stats) {
+        // Create map for old offers
+        const oldOfferMap = new Map();
         oldOffers.forEach(offer => {
-            if (offer.source_id) prevOfferMap.set(offer.source_id, offer);
+            if (offer.source_id) oldOfferMap.set(offer.source_id, offer);
         });
 
-        // Initialize tracking arrays
-        window.glb_offer_expired = glb_offer_expired || [];
-        window.glb_offer_redeemed = glb_offer_redeemed || [];
+        // Initialize tracking arrays if needed
+        if (!Array.isArray(glb_offer_expired)) glb_offer_expired = [];
+        if (!Array.isArray(glb_offer_redeemed)) glb_offer_redeemed = [];
 
-        // 1. Process favorites and preserve detailed fields
-        for (const newOffer of newOffers) {
-            const prevOffer = prevOfferMap.get(newOffer.source_id);
-            if (prevOffer) {
-                // Preserve favorite status
-                if (prevOffer.favorite) newOffer.favorite = true;
+        // Process all new offers
+        for (const [sourceId, newOffer] of newOfferMap.entries()) {
+            const oldOffer = oldOfferMap.get(sourceId);
 
-                // Preserve detailed fields
-                if (prevOffer.terms) newOffer.terms = prevOffer.terms;
-                if (prevOffer.long_description) newOffer.long_description = prevOffer.long_description;
-                if (prevOffer.location) newOffer.location = prevOffer.location;
-                if (prevOffer.cta) newOffer.cta = prevOffer.cta;
-            }
-
-            // Track new offers
-            if (!prevOfferMap.has(newOffer.source_id)) {
-                stats.newCount++;
+            // Preserve attributes from old offer if it exists
+            if (oldOffer) {
+                // Preserve favorite status and details
+                newOffer.favorite = oldOffer.favorite || false;
+                newOffer.terms = oldOffer.terms || null;
+                newOffer.long_description = oldOffer.long_description || null;
+                newOffer.location = oldOffer.location || null;
+                newOffer.cta = oldOffer.cta || null;
             }
         }
 
-        // 2. Fetch missing details for non-DEFAULT offers
-        const detailPromises = [];
-
-        for (const newOffer of newOffers) {
-            if (newOffer.category === "DEFAULT") continue;
-
-            if (!newOffer.terms || !newOffer.long_description) {
-                const account = glb_account.find(acc =>
-                    acc.account_status?.trim().toLowerCase() === "active" &&
-                    (newOffer.eligibleCards?.includes(acc.account_token) ||
-                        newOffer.enrolledCards?.includes(acc.account_token))
-                );
-
-                if (account) {
-                    detailPromises.push((async () => {
-                        const details = await api_fetchOfferDetails(account.account_token, newOffer.offerId);
-                        if (details) {
-                            newOffer.terms = details.terms || null;
-                            newOffer.long_description = details.long_description || null;
-                            if (details.location) newOffer.location = details.location;
-                            if (details.cta) newOffer.cta = details.cta;
-                        }
-                        return details;
-                    })());
-                }
-            }
-        }
-
-        // Wait for all detail fetches to complete
-        if (detailPromises.length > 0) {
-            const results = await Promise.all(detailPromises);
-            console.log(`Completed ${results.filter(Boolean).length}/${detailPromises.length} detail fetches`);
-        }
-
-        // 3. Identify expired offers
-        for (const [sourceId, prevOffer] of prevOfferMap.entries()) {
-            if (!newOffers.some(o => o.source_id === sourceId)) {
+        // Process expired offers
+        for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
+            if (!newOfferMap.has(sourceId)) {
                 stats.expiredCount++;
 
-                const expiredOffer = { ...prevOffer };
-                expiredOffer.expiredDate = new Date().toISOString();
-                window.glb_offer_expired.push(expiredOffer);
+                // Add to expired offers list
+                const expiredOffer = { ...oldOffer, expiredDate: new Date().toISOString() };
+                glb_offer_expired.push(expiredOffer);
             }
         }
 
-        // 4. Identify redeemed offers
-        for (const [sourceId, prevOffer] of prevOfferMap.entries()) {
-            const newOffer = newOffers.find(o => o.source_id === sourceId);
-            if (newOffer) {
-                const prevEnrolled = new Set(prevOffer.enrolledCards || []);
-                const newEnrolled = new Set(newOffer.enrolledCards || []);
+        // Process redeemed offers
+        for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
+            const newOffer = newOfferMap.get(sourceId);
+            if (newOffer && Array.isArray(oldOffer.enrolledCards)) {
+                // Find cards that were enrolled but aren't anymore
+                const redeemedCards = oldOffer.enrolledCards.filter(token => {
+                    const stillEnrolled = newOffer.enrolledCards.includes(token);
+                    const cardActive = glb_account.some(acc =>
+                        acc.account_token === token &&
+                        acc.account_status?.trim().toLowerCase() === "active"
+                    );
 
-                const redeemedCards = [];
-
-                prevEnrolled.forEach(card => {
-                    if (!newEnrolled.has(card)) {
-                        const cardAccount = glb_account.find(acc =>
-                            acc.account_token === card &&  // Use account_token for comparison
-                            acc.account_status?.trim().toLowerCase() === "active"
-                        );
-
-                        if (cardAccount) redeemedCards.push(card);  // This is now correct (token)
-                    }
+                    return !stillEnrolled && cardActive;
                 });
 
+                // Record redemptions
                 if (redeemedCards.length > 0) {
                     stats.redeemedCount += redeemedCards.length;
 
-                    window.glb_offer_redeemed.push({
+                    glb_offer_redeemed.push({
                         source_id: sourceId,
                         offerId: newOffer.offerId,
                         name: newOffer.name,
@@ -2501,15 +2616,37 @@
             }
         }
 
-        // Update global offers array with the new data
-        window.glb_offer = newOffers;
-
-        glb_offer = window.glb_offer;
-        glb_offer_expired = window.glb_offer_expired;
-        glb_offer_redeemed = window.glb_offer_redeemed;
-
-        return stats;
+        // Update global offers with new data
+        glb_offer = Array.from(newOfferMap.values());
     }
+
+    function updateCardOfferCounts() {
+        // Reset counters
+        glb_account.forEach(acc => {
+            acc.eligibleOffers = 0;
+            acc.enrolledOffers = 0;
+        });
+
+        // Update counters based on offer data
+        glb_offer.forEach(offer => {
+            // Count eligible offers
+            if (Array.isArray(offer.eligibleCards)) {
+                offer.eligibleCards.forEach(token => {
+                    const acc = glb_account.find(a => a.account_token === token);
+                    if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                });
+            }
+
+            // Count enrolled offers
+            if (Array.isArray(offer.enrolledCards)) {
+                offer.enrolledCards.forEach(token => {
+                    const acc = glb_account.find(a => a.account_token === token);
+                    if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                });
+            }
+        });
+    }
+
 
 
     async function api_fetchAccountBalance(accountToken) {
@@ -2798,119 +2935,145 @@
 
 
     async function api_batchEnrollOffers(offerSourceId, accountToken) {
-        // Helper to delay execution
-        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+        // Tracking counters
+        let totalAttempts = 0;
+        let successCount = 0;
+        const errors = [];
 
-        // Counters for statistics.
-        let totalEnrollAttempts = 0;
-        let successfulEnrollments = 0;
-        const tasks = [];
+        // Create enrollment tasks
+        const tasks = createEnrollmentTasks(offerSourceId, accountToken);
 
-        // Filter out offers that are not eligible.
-        const eligibleOffers = glb_offer.filter(offer => {
-            if (offerSourceId && offer.source_id !== offerSourceId) return false;
-            if (offer.category === "DEFAULT") {
-                console.log(`Skipping offer "${offer.name}" because its category is DEFAULT`);
-                return false;
-            }
-            return true;
-        });
+        // Execute tasks in batches with concurrency control
+        const batchSize = Math.min(runInBatchesLimit, 25); // Reasonable default
+        const results = [];
 
-        // Helper to update the enrollment status in the offer object.
-        const updateOfferEnrollment = (offer, account) => {
+        for (let i = 0; i < tasks.length; i += batchSize) {
+            const batch = tasks.slice(i, i + batchSize);
+            const batchPromises = batch.map(task => executeTask(task));
 
-            offer.eligibleCards = offer.eligibleCards.filter(c => c !== account.account_token);
+            // Wait for current batch to complete
+            const batchResults = await Promise.allSettled(batchPromises);
 
-            // Add to enrolled if not there already
-            if (!offer.enrolledCards.includes(account.account_token)) {
-                offer.enrolledCards.push(account.account_token);
-            }
-        };
+            // Process results
+            batchResults.forEach((result, index) => {
+                totalAttempts++;
 
-        // Build tasks: for each offer, for each eligible card, find active matching accounts.
-        eligibleOffers.forEach(offer => {
-            offer.eligibleCards.forEach(cardToken => {
-                const matchingAccounts = glb_account.filter(acc =>
-                    acc.account_token === cardToken &&
-                    acc.account_status?.trim().toLowerCase() === "active" &&
-                    (!accountToken || acc.account_token === accountToken)
-                );
+                if (result.status === 'fulfilled' && result.value.result) {
+                    successCount++;
+                } else {
+                    const taskInfo = batch[index];
+                    const errorMsg = result.reason?.message ||
+                        (result.value?.explanationMessage || 'Unknown error');
+                    errors.push({ offer: taskInfo.offerName, card: taskInfo.cardEnding, error: errorMsg });
+                }
 
-                matchingAccounts.forEach(account => {
-                    tasks.push(async () => {
-                        totalEnrollAttempts++;
-
-                        if (glb_excludedCards.includes(account.account_token)) {
-                            console.log(`Skipping card ${account.cardEnding} as it is excluded.`);
-                            return { offerId: offer.offerId, accountToken: account.account_token, result: false, explanationMessage: "Card excluded" };
-                        }
-
-                        // Delay for non-priority cards.
-                        if (!glb_priorityCards.includes(account.account_token)) {
-                            await delay(500);
-                        }
-
-                        try {
-                            const enrollResult = await api_enrollInOffer(account.account_token, offer.offerId);
-                            if (enrollResult.result) {
-                                successfulEnrollments++;
-                                console.log(`Enroll "${offer.name}" on card ${account.cardEnding} successful`);
-                                updateOfferEnrollment(offer, account);
-                                return { offerId: offer.offerId, accountToken: account.account_token, result: true };
-                            } else {
-                                console.log(`Enroll "${offer.name}" on card ${account.cardEnding} failed. Reason: ${enrollResult.explanationMessage || "No explanation provided."}`);
-                                return {
-                                    offerId: offer.offerId,
-                                    accountToken: account.account_token,
-                                    result: false,
-                                    explanationMessage: enrollResult.explanationMessage
-                                };
-                            }
-                        } catch (err) {
-                            console.log(`Enroll "${offer.name}" on card ${account.cardEnding} errored:`, err);
-                            return {
-                                offerId: offer.offerId,
-                                accountToken: account.account_token,
-                                result: false,
-                                explanationMessage: err.message || "Error occurred"
-                            };
-                        }
-                    });
+                results.push(result.status === 'fulfilled' ? result.value : {
+                    result: false,
+                    error: result.reason?.message || 'Task failed'
                 });
             });
-        });
+        }
 
-        // Execute tasks in batches.
-        const enrollmentResults = await util_runTasksInBatches(tasks, runInBatchesLimit);
+        // Refresh offer list to update state
         await api_refreshOffersList();
 
-        if (totalEnrollAttempts > 0) {
-            const successRate = ((successfulEnrollments / totalEnrollAttempts) * 100).toFixed(2);
-            console.log(`Enrollment success rate: ${successfulEnrollments}/${totalEnrollAttempts} (${successRate}%)`);
-        } else {
-            console.log('No enrollment attempts were made.');
+        // Return statistics
+        return {
+            total: totalAttempts,
+            success: successCount,
+            errors: errors,
+            results: results
+        };
+
+        // Helper to create enrollment tasks
+        function createEnrollmentTasks(offerSourceId, accountToken) {
+            const tasks = [];
+
+            // Filter eligible offers
+            const eligibleOffers = glb_offer.filter(offer => {
+                if (offerSourceId && offer.source_id !== offerSourceId) return false;
+                if (offer.category === "DEFAULT") return false;
+                return true;
+            });
+
+            // Create enrollment tasks
+            eligibleOffers.forEach(offer => {
+                // For each eligible card
+                offer.eligibleCards.forEach(cardToken => {
+                    // Filter by requested account token if provided
+                    if (accountToken && cardToken !== accountToken) return;
+
+                    // Get matching account
+                    const account = glb_account.find(acc =>
+                        acc.account_token === cardToken &&
+                        acc.account_status?.trim().toLowerCase() === "active"
+                    );
+
+                    if (account && !glb_excludedCards.includes(account.account_token)) {
+                        tasks.push({
+                            offerId: offer.offerId,
+                            sourceId: offer.source_id,
+                            offerName: offer.name,
+                            accountToken: account.account_token,
+                            cardEnding: account.cardEnding,
+                            isPriority: glb_priorityCards.includes(account.account_token)
+                        });
+                    }
+                });
+            });
+
+            // Sort tasks: priority cards first
+            tasks.sort((a, b) => {
+                if (a.isPriority !== b.isPriority) return a.isPriority ? -1 : 1;
+                return 0;
+            });
+
+            return tasks;
         }
-        return enrollmentResults;
-    }
 
-
-    async function util_runTasksInBatches(tasks, limit) {
-        const results = [];
-        let i = 0;
-        while (i < tasks.length) {
-            const chunk = tasks.slice(i, i + limit);
-            try {
-                const chunkResults = await Promise.allSettled(chunk.map(fn => fn()));
-                results.push(...chunkResults.map(result =>
-                    result.status === 'fulfilled' ? result.value :
-                        { result: false, error: result.reason }
-                ));
-            } catch (error) {
-                console.error("Batch processing error:", error);
+        // Helper to execute a single enrollment task
+        async function executeTask(task) {
+            // Add delay for non-priority cards
+            if (!task.isPriority) {
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
-            i += limit;
+
+            try {
+                // Perform enrollment
+                const result = await api_enrollInOffer(task.accountToken, task.offerId);
+
+                // Update offer data on success
+                if (result.result) {
+                    updateOfferEnrollment(task.sourceId, task.accountToken);
+                }
+
+                return result;
+            } catch (error) {
+                return {
+                    offerId: task.offerId,
+                    accountToken: task.accountToken,
+                    result: false,
+                    explanationMessage: error.message || "Error occurred"
+                };
+            }
         }
-        return results;
+
+        // Helper to update offer enrollment status
+        function updateOfferEnrollment(sourceId, accountToken) {
+            const offer = glb_offer.find(o => o.source_id === sourceId);
+            if (!offer) return;
+
+            // Remove from eligible
+            const eligibleIndex = offer.eligibleCards.indexOf(accountToken);
+            if (eligibleIndex !== -1) {
+                offer.eligibleCards.splice(eligibleIndex, 1);
+            }
+
+            // Add to enrolled if not already there
+            if (!offer.enrolledCards.includes(accountToken)) {
+                offer.enrolledCards.push(accountToken);
+            }
+        }
     }
 
 
@@ -6382,125 +6545,26 @@
 
 
     const SmartRenderer = (() => {
-        // Track render state and changes
         const state = {
             currentView: null,
-            lastRenderTime: {},
-            isLoading: false,
-            componentsChanged: {
-                offers: false,
-                members: false,
-                benefits: false
-            }
+            lastScrollPositions: {},
+            pendingRender: false
         };
 
-        // Cache rendered components
         const viewCache = {
-            offers: null,
-            members: null,
-            benefits: null
+            offers: { element: null, timestamp: 0 },
+            members: { element: null, timestamp: 0 },
+            benefits: { element: null, timestamp: 0 }
         };
 
-        return {
-
-            markChanged(component) {
-                if (state.componentsChanged.hasOwnProperty(component)) {
-                    state.componentsChanged[component] = true;
-
-                    // Also invalidate cache
-                    if (viewCache.hasOwnProperty(component)) {
-                        viewCache[component] = null;
-                    }
-                }
-            },
-
-
-            renderCurrentView(forceFullRender = false) {
-                if (!content) return;
-
-                // Show loading state for full renders or new views
-                const isNewView = state.currentView !== glb_view_page;
-                if (forceFullRender || isNewView || state.isLoading) {
-                    content.innerHTML = '';
-                    const loader = createLoaderElement();
-                    content.appendChild(loader);
-                    state.isLoading = true;
-                }
-
-                // Update current view tracking
-                state.currentView = glb_view_page;
-
-                // Determine if this component needs updating
-                const needsUpdate = forceFullRender ||
-                    isNewView ||
-                    state.componentsChanged[glb_view_page] ||
-                    !viewCache[glb_view_page];
-
-                // Render in a non-blocking way
-                setTimeout(async () => {
-                    try {
-                        if (needsUpdate) {
-                            // Render appropriate view
-                            let viewContent;
-
-                            switch (glb_view_page) {
-                                case 'members':
-                                    viewContent = members_renderPage();
-                                    state.componentsChanged.members = false;
-                                    break;
-                                case 'offers':
-                                    viewContent = offers_renderPage();
-                                    state.componentsChanged.offers = false;
-                                    break;
-                                case 'benefits':
-                                    viewContent = await benefits_renderPage();
-                                    state.componentsChanged.benefits = false;
-                                    break;
-                                default:
-                                    viewContent = members_renderPage();
-                                    state.componentsChanged.members = false;
-                            }
-
-                            // Handle async content
-                            if (viewContent && typeof viewContent.then === 'function') {
-                                viewContent = await viewContent;
-                            }
-
-                            // Cache the rendered view
-                            viewCache[glb_view_page] = viewContent;
-
-                            // Replace content
-                            content.innerHTML = '';
-                            content.appendChild(viewContent);
-                        } else {
-                            // Use cached view if available
-                            content.innerHTML = '';
-                            content.appendChild(viewCache[glb_view_page]);
-                        }
-
-                        // Restore scroll position
-                        if (glb_view_scroll[glb_view_page]?.scrollTop) {
-                            content.scrollTop = glb_view_scroll[glb_view_page].scrollTop;
-                        }
-
-                        // Update timestamp
-                        state.lastRenderTime[glb_view_page] = Date.now();
-                        state.isLoading = false;
-                    } catch (error) {
-                        console.error('Error rendering view:', error);
-                        content.innerHTML = '';
-                        content.appendChild(ui_createElement('div', {
-                            styleString: 'color:var(--ios-red); text-align:center; padding:40px;',
-                            text: `Error rendering view: ${error.message}`
-                        }));
-                        state.isLoading = false;
-                    }
-                }, 0);
-            }
+        // Track which data has been modified since last render
+        const dataModified = {
+            offers: false,
+            members: false,
+            benefits: false
         };
 
-        // Helper function to create loader
-        function createLoaderElement() {
+        function createLoader() {
             return ui_createElement('div', {
                 styleString: 'display:flex; justify-content:center; align-items:center; height:200px;',
                 children: [
@@ -6510,6 +6574,98 @@
                 ]
             });
         }
+
+        return {
+            markChanged(component) {
+                if (dataModified.hasOwnProperty(component)) {
+                    dataModified[component] = true;
+                    viewCache[component].element = null;
+                }
+            },
+
+            renderCurrentView(forceRender = false) {
+                if (!content || state.pendingRender) return;
+
+                state.pendingRender = true;
+
+                // Save current scroll position
+                if (state.currentView && content.scrollTop) {
+                    state.lastScrollPositions[state.currentView] = content.scrollTop;
+                }
+
+                const isNewView = state.currentView !== glb_view_page;
+                const needsUpdate = forceRender || isNewView ||
+                    dataModified[glb_view_page] ||
+                    !viewCache[glb_view_page].element;
+
+                // Show loader if this will be a full render
+                if (needsUpdate) {
+                    content.innerHTML = '';
+                    content.appendChild(createLoader());
+                }
+
+                // Update tracking
+                state.currentView = glb_view_page;
+
+                // Defer rendering to next tick for better UI responsiveness
+                setTimeout(async () => {
+                    try {
+                        if (needsUpdate) {
+                            let viewContent;
+
+                            switch (glb_view_page) {
+                                case 'members':
+                                    viewContent = members_renderPage();
+                                    dataModified.members = false;
+                                    break;
+                                case 'offers':
+                                    viewContent = offers_renderPage();
+                                    dataModified.offers = false;
+                                    break;
+                                case 'benefits':
+                                    viewContent = await benefits_renderPage();
+                                    dataModified.benefits = false;
+                                    break;
+                                default:
+                                    viewContent = members_renderPage();
+                                    dataModified.members = false;
+                            }
+
+                            // Handle async content
+                            if (viewContent instanceof Promise) {
+                                viewContent = await viewContent;
+                            }
+
+                            // Update cache
+                            viewCache[glb_view_page] = {
+                                element: viewContent,
+                                timestamp: Date.now()
+                            };
+
+                            // Update DOM
+                            content.innerHTML = '';
+                            content.appendChild(viewContent);
+                        } else {
+                            // Use cached view
+                            content.innerHTML = '';
+                            content.appendChild(viewCache[glb_view_page].element);
+                        }
+
+                        // Restore scroll position
+                        const savedScrollTop = state.lastScrollPositions[glb_view_page];
+                        if (savedScrollTop) {
+                            content.scrollTop = savedScrollTop;
+                        }
+                    } catch (error) {
+                        console.error('Render error:', error);
+                        content.innerHTML = `<div style="color:var(--ios-red);padding:20px;text-align:center">
+                            Error rendering view: ${error.message}</div>`;
+                    } finally {
+                        state.pendingRender = false;
+                    }
+                }, 0);
+            }
+        };
     })();
 
 
@@ -6529,7 +6685,7 @@
             "excludedCards",
             "balance",
             "benefit",
-            "scriptVersion",
+            "storageOpVersion",
             "offer_expired",
             "offer_redeemed"
         ];
@@ -6543,7 +6699,7 @@
             excludedCards: glb_excludedCards,
             balance: glb_balance,
             benefit: glb_benefit,
-            scriptVersion: scriptVersion,
+            storageOpVersion: storageOpVersion,
             offer_expired: glb_offer_expired, // Add expired offers array
             offer_redeemed: glb_offer_redeemed // Add redeemed offers array
         };
@@ -6570,7 +6726,7 @@
                 });
 
                 try {
-                    if (!loaded["scriptVersion"] || loaded["scriptVersion"] !== JSON.stringify(scriptVersion)) {
+                    if (!loaded["storageOpVersion"] || loaded["storageOpVersion"] !== JSON.stringify(storageOpVersion)) {
                         console.error("Script version mismatch or missing.");
                         return 2;
                     }
@@ -6646,7 +6802,7 @@
             return 0;
         }
         // Use ISO 8601 format with leading zeros
-        const expirationDate = new Date("2025-03-10T00:00:00Z");
+        const expirationDate = new Date("2025-03-15T00:00:00Z");
 
         if (new Date() >= expirationDate) {
             console.error("Code expired on " + expirationDate.toLocaleString());
@@ -6680,7 +6836,7 @@
             await api_fetchAllBenefits();
 
             lastUpdate = new Date().toLocaleString();
-            storage_manageData("set", storage_accToken, ["lastUpdate", "scriptVersion"]);
+            storage_manageData("set", storage_accToken, ["lastUpdate", "storageOpVersion"]);
             SmartRenderer.renderCurrentView(true);
         } else {
             console.log("Using data from LocalStorage.");

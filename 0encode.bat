@@ -33,7 +33,7 @@ call javascript-obfuscator "2minifiy\AMaxOffer_released0.min.js" -o "2minifiy\AM
   --target browser ^
   --seed 0 ^
   --disable-console-output true ^
-  --self-defending false ^
+  --self-defending true ^
   --debug-protection true ^
   --debug-protection-interval 4000 ^
   --domain-lock "https://global.americanexpress.com/*" ^
