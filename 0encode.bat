@@ -17,8 +17,7 @@ call terser AMaxOffer.js -o "2minifiy\AMaxOffer_released0.min.js"  ^
 
 set "inHeader=true"
 
-for /f "delims=" %%a in (2minifiy\AMaxOffer_released0.min.js) do (
-
+for /f "delims=" %%a in (AMaxOffer.js) do (
 
     if "%%a"=="// @license    CC BY-NC-ND 4.0" set inHeader=false
 
@@ -27,6 +26,10 @@ for /f "delims=" %%a in (2minifiy\AMaxOffer_released0.min.js) do (
     )
 )
 
+for /f "tokens=1,* delims=:" %%a in ('findstr /n /C:"// @version" "2minifiy\header.txt"') do (
+    set "versionLine=%%b"
+    for /f "tokens=3 delims= " %%c in ("!versionLine!") do set "version=%%c"
+)
 
 REM Obfuscate the minified file
 call javascript-obfuscator "2minifiy\AMaxOffer_released0.min.js" -o "2minifiy\AMaxOffer_released1.min.js" ^
@@ -61,5 +64,6 @@ call javascript-obfuscator "2minifiy\AMaxOffer_released0.min.js" -o "2minifiy\AM
   --disable-console-output true ^
   --rename-globals true
 
-REM Concatenate header.txt and the obfuscated file to produce the final released file.
-copy /b .\2minifiy\header.txt+.\2minifiy\AMaxOffer_released1.min.js .\2minifiy\AMaxOffer_Released.js
+copy /b .\2minifiy\header.txt+.\2minifiy\AMaxOffer_released1.min.js .\3github_release\raw\dist\AMaxOffer.user.js
+
+copy /b .\2minifiy\header.txt+.\2minifiy\AMaxOffer_released1.min.js .\3github_release\raw\dist\Hist\AMaxOffer%version%.user.js
