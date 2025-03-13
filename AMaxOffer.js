@@ -290,13 +290,15 @@
             return Array.from(newOfferMap.values());
         }
 
-        // Update card offer counts
         function updateCardOfferCounts() {
             const accounts = glbVer.get('accounts');
             const offers_current = glbVer.get('offers_current');
 
-            // Reset counts
-            accounts.forEach(acc => {
+            // Create a copy of accounts to preserve all properties
+            const updatedAccounts = accounts.map(acc => ({ ...acc }));
+
+            // Reset counts while preserving other properties
+            updatedAccounts.forEach(acc => {
                 acc.eligibleOffers = 0;
                 acc.enrolledOffers = 0;
             });
@@ -305,20 +307,25 @@
             offers_current.forEach(offer => {
                 if (Array.isArray(offer.eligibleCards)) {
                     offer.eligibleCards.forEach(token => {
-                        const acc = accounts.find(a => a.account_token === token);
-                        if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
+                        if (accIndex >= 0) {
+                            updatedAccounts[accIndex].eligibleOffers = (updatedAccounts[accIndex].eligibleOffers || 0) + 1;
+                        }
                     });
                 }
 
                 if (Array.isArray(offer.enrolledCards)) {
                     offer.enrolledCards.forEach(token => {
-                        const acc = accounts.find(a => a.account_token === token);
-                        if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
+                        if (accIndex >= 0) {
+                            updatedAccounts[accIndex].enrolledOffers = (updatedAccounts[accIndex].enrolledOffers || 0) + 1;
+                        }
                     });
                 }
             });
 
-            glbVer.set('accounts', accounts);
+            glbVer.set('accounts', updatedAccounts);
+            storageOP.saveItem('accounts');
         }
 
         // Improved accounts fetch with parallel processing
@@ -512,10 +519,16 @@
                 glbVer.set('offers_current', processedOffers);
                 updateCardOfferCounts();
 
+                // Save both offers and accounts to storage
+                storageOP.saveItem('offers_current');
+                storageOP.saveItem('accounts');
+
                 // Mark OFFER view as changed
                 renderEngine.markChanged('OFFER');
+                renderEngine.markChanged('MEMBER');
 
                 return stats;
+
             } catch (error) {
                 console.error('Error refreshing offers list:', error);
                 throw new Error(`Failed to refresh offers: ${error.message}`);
@@ -816,6 +829,9 @@
 
                 // Update state
                 glbVer.set('accounts', updatedAccounts);
+                storageOP.saveItem('accounts');
+                statsOP.invalidate('MEMBER');
+
                 return true;
             } catch (error) {
                 console.error("Error fetching all balances:", error);
@@ -966,7 +982,13 @@
                 updateCardOfferCounts();
             });
 
+            // Save both offers and accounts explicitly
+            storageOP.saveItem('offers_current');
+            storageOP.saveItem('accounts');
+
+            // Use both change types for safety
             storageOP.saveDataChanges('enrollment');
+            storageOP.saveDataChanges('accounts');
 
             return {
                 total: totalAttempts,
@@ -1224,7 +1246,9 @@
                         break;
                     case 'enrollment':
                         this.saveItem('offers_current');
+                        this.saveItem('accounts');
                         statsOP.invalidate('OFFER');
+                        statsOP.invalidate('MEMBER');
                         renderEngine.markChanged('OFFER');
                         renderEngine.markChanged('MEMBER');
                         break;
@@ -1554,22 +1578,7 @@
         };
 
         const filters = { ...defaultFilters };
-        const filterCache = {
-            MEMBER: { lastQuery: null, result: null },
-            OFFER: { lastQuery: null, result: null }
-        };
 
-        function createFilterHash(view, filterState) {
-            return JSON.stringify({
-                view,
-                filters: Object.entries(filterState)
-                    .filter(([key]) =>
-                        (view === 'MEMBER' && (key.startsWith('member') || key === 'customFilter')) ||
-                        (view === 'OFFER' && (!key.startsWith('member') || key === 'customFilter'))
-                    )
-                    .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-            });
-        }
 
         return {
             getFilters() {
@@ -1579,12 +1588,7 @@
             setFilter(key, value) {
                 if (key in filters) {
                     filters[key] = value;
-                    if (key.startsWith('member') || key === 'customFilter') {
-                        filterCache.MEMBER.lastQuery = null;
-                    }
-                    if (!key.startsWith('member') || key === 'customFilter') {
-                        filterCache.OFFER.lastQuery = null;
-                    }
+
                 }
                 return this;
             },
@@ -1598,8 +1602,6 @@
                     !k.startsWith('member') || k === 'customFilter'
                 );
 
-                if (affectsMembers) filterCache.MEMBER.lastQuery = null;
-                if (affectsOffers) filterCache.OFFER.lastQuery = null;
                 return this;
             },
 
@@ -1613,14 +1615,13 @@
                 } else {
                     Object.assign(filters, defaultFilters);
                 }
-                filterCache.MEMBER.lastQuery = null;
-                filterCache.OFFER.lastQuery = null;
+
                 return this;
             },
 
             applyFilters(viewName) {
                 if (!viewName) viewName = renderEngine.getCurrentView();
-                filterCache[viewName].lastQuery = null;
+
                 this.updateFilterControls(viewName);
                 renderEngine.markChanged(viewName);
             },
@@ -1644,13 +1645,8 @@
             },
 
             getFilteredMembers() {
-                const hash = createFilterHash('MEMBER', filters);
-                if (filterCache.MEMBER.lastQuery === hash) {
-                    return filterCache.MEMBER.result;
-                }
 
                 const accounts = glbVer.get('accounts');
-                const offers_current = glbVer.get('offers_current');
 
                 const filtered = accounts.filter(acc => {
                     // Status filter
@@ -1663,27 +1659,6 @@
                         acc.relationship === filters.memberCardtype;
                     if (!typeMatch) return false;
 
-                    // Search filter
-                    if (filters.memberMerchantSearch) {
-                        const term = filters.memberMerchantSearch.toLowerCase();
-                        const accountMatches =
-                            (acc.account_token || '').toLowerCase().includes(term) ||
-                            (acc.embossed_name || '').toLowerCase().includes(term) ||
-                            (acc.description || '').toLowerCase().includes(term);
-
-                        const offerMatches = offers_current.some(offer => {
-                            const nameMatch = (offer.name || '').toLowerCase().includes(term);
-                            const eligMatch = Array.isArray(offer.eligibleCards) &&
-                                offer.eligibleCards.includes(acc.account_token);
-                            const enrollMatch = Array.isArray(offer.enrolledCards) &&
-                                offer.enrolledCards.includes(acc.account_token);
-
-                            return nameMatch && (eligMatch || enrollMatch);
-                        });
-
-                        if (!accountMatches && !offerMatches) return false;
-                    }
-
                     // Custom filter
                     if (typeof filters.customFilter === 'function') {
                         return filters.customFilter(acc);
@@ -1692,24 +1667,20 @@
                     return true;
                 });
 
-                filterCache.MEMBER.lastQuery = hash;
-                filterCache.MEMBER.result = filtered;
+
                 return filtered;
             },
 
             getFilteredOffers() {
-                const hash = createFilterHash('OFFER', filters);
-                if (filterCache.OFFER.lastQuery === hash) {
-                    return filterCache.OFFER.result;
-                }
 
-                const offers_current = glbVer.get('offers_current') || [];
-                if (!offers_current || !Array.isArray(offers_current)) {
-                    console.error("offers_current is not an array:", offers_current);
+
+                const offers = glbVer.get('offers_current') || [];
+                if (!offers || !Array.isArray(offers)) {
+                    console.error("offers_current is not an array:", offers);
                     return [];
                 }
 
-                const filtered = offers_current.filter(offer => {
+                const filtered = offers.filter(offer => {
                     if (!offer) return false;
 
                     // Favorite filter
@@ -1752,8 +1723,7 @@
                     return true;
                 });
 
-                filterCache.OFFER.lastQuery = hash;
-                filterCache.OFFER.result = filtered;
+
                 return filtered;
             },
 
@@ -3304,6 +3274,78 @@
                     row.style.backgroundColor = 'var(--ios-secondary-bg)';
                 }
 
+                // Check for highlighting
+                function shouldHighlightItem(item) {
+                    if (!filterOP.getFilters().memberMerchantSearch) return { shouldHighlight: false };
+
+                    const searchTerm = filterOP.getFilters().memberMerchantSearch.trim().toLowerCase();
+                    if (!searchTerm) return { shouldHighlight: false };
+
+                    // Check direct matches
+                    const accountMatches =
+                        (item.account_token || '').toLowerCase().includes(searchTerm) ||
+                        (item.embossed_name || '').toLowerCase().includes(searchTerm) ||
+                        (item.description || '').toLowerCase().includes(searchTerm);
+
+                    if (accountMatches) return { shouldHighlight: true, matchType: 'account' };
+
+                    // Check related offers
+                    const offers_current = glbVer.get('offers_current');
+                    const matchingEnrolledOffers = offers_current?.filter(offer => {
+                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
+                        const isEnrolled = Array.isArray(offer.enrolledCards) &&
+                            offer.enrolledCards.includes(item.account_token);
+                        return nameMatch && isEnrolled;
+                    });
+
+                    const matchingEligibleOffers = offers_current?.filter(offer => {
+                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
+                        const isEligible = Array.isArray(offer.eligibleCards) &&
+                            offer.eligibleCards.includes(item.account_token);
+                        return nameMatch && isEligible;
+                    });
+
+                    return {
+                        shouldHighlight: matchingEnrolledOffers.length > 0 || matchingEligibleOffers.length > 0,
+                        matchType: matchingEnrolledOffers.length > 0 ? 'enrolled' :
+                            (matchingEligibleOffers.length > 0 ? 'eligible' : null),
+                        matchingEnrolledOffers,
+                        matchingEligibleOffers
+                    };
+                }
+
+                if (currentView === 'MEMBER' && filterOP.getFilters().memberMerchantSearch) {
+                    const highlightData = shouldHighlightItem(item);
+
+                    if (highlightData.shouldHighlight) {
+                        row.classList.add('ios-highlight-row');
+                        row.dataset.highlighted = 'true';
+
+                        // Apply different highlight styles based on match type
+                        if (highlightData.matchType === 'enrolled') {
+                            // Green highlight for enrolled offers
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
+                        } else if (highlightData.matchType === 'eligible') {
+                            // Blue highlight for eligible offers
+                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
+                        } else {
+                            // Default yellow highlight for direct account matches
+                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                            row.style.borderLeft = '3px solid var(--ios-highlight-border)';
+                        }
+
+                        // Store match data for tooltips or additional UI features
+                        if (highlightData.matchingEnrolledOffers?.length > 0) {
+                            row.dataset.matchedEnrolledOffers = highlightData.matchingEnrolledOffers.length;
+                        }
+                        if (highlightData.matchingEligibleOffers?.length > 0) {
+                            row.dataset.matchedEligibleOffers = highlightData.matchingEligibleOffers.length;
+                        }
+                    }
+                }
+
                 // Create cells
                 headers.forEach(headerItem => {
                     const td = document.createElement('td');
@@ -3453,16 +3495,15 @@
             }
         });
 
-        // Helper function to activate a button with improved feedback
+
         function activateButton(button, viewName) {
-            // Make sure the buttons array is defined
+
             const allButtons = [
-                uiElements.btnMembers,
-                uiElements.btnOffers,
-                uiElements.btnBenefits
+                uiElements.btnMEMBER,
+                uiElements.btnOFFER,
+                uiElements.btnBENEFIT
             ].filter(btn => btn);
 
-            // Deactivate all buttons first
             allButtons.forEach(btn => {
                 if (btn) {
                     btn.classList.remove('active');
@@ -3470,20 +3511,18 @@
                     btn.style.color = '#333';
                     btn.style.fontWeight = '500';
                     btn.style.boxShadow = 'none';
+                    btn.style.transition = 'all 0.3s ease';
                 }
             });
 
-            // Exit if button is not defined
-            if (!button) return;
+            setTimeout(() => {
+                button.classList.add('active');
+                button.style.backgroundColor = 'var(--ios-blue)';
+                button.style.color = 'white';
+                button.style.fontWeight = '600';
+                button.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+            }, 50);
 
-            // Activate the selected button
-            button.classList.add('active');
-            button.style.backgroundColor = 'var(--ios-blue)';
-            button.style.color = 'white';
-            button.style.fontWeight = '600';
-            button.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-
-            // Update document title if viewName is provided
             if (viewName && typeof viewName === 'string') {
                 document.title = `AMaxOffer - ${viewName.charAt(0).toUpperCase() + viewName.slice(1).toLowerCase()}`;
             }
@@ -4896,23 +4935,19 @@
         tableElement.className = 'ios-table';
         tableElement.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; font-size:14px;';
 
-        // Create headers based on type
-        const thead = document.createElement('thead');
-        thead.className = 'ios-table-head';
-
-        const headerRow = document.createElement('tr');
-
         const headers = [
             { label: "Name", key: "name" },
             { label: type === 'expired' ? "Expired Date" : "Redeemed Date", key: type === 'expired' ? "expiredDate" : "redeemedDate" }
         ];
 
-        // Add card column for redeemed offers
         if (type === 'redeemed') {
             headers.push({ label: "Redeemed Cards", key: "redeemedCards" });
         }
 
-        // Create header cells
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+        const headerRow = document.createElement('tr');
+
         headers.forEach(header => {
             const th = document.createElement('th');
             th.textContent = header.label;
@@ -4923,59 +4958,62 @@
         thead.appendChild(headerRow);
         tableElement.appendChild(thead);
 
-        // Create body
         const tbody = document.createElement('tbody');
 
-        // Sort by date descending (newest first)
-        const sortedOffers = [...offers_current].sort((a, b) => {
-            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
-            return new Date(b[dateKey]) - new Date(a[dateKey]);
-        });
+        if (Array.isArray(offers) && offers.length > 0) {
+            const sortedOffers = [...offers].sort((a, b) => {
+                const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+                const dateA = new Date(a[dateKey] || 0);
+                const dateB = new Date(b[dateKey] || 0);
+                return dateB - dateA; // Newest first
+            });
 
-        sortedOffers.forEach((offer, index) => {
-            const row = document.createElement('tr');
-            row.style.cssText = index % 2 === 0 ? 'background-color:white;' : 'background-color:rgba(0,0,0,0.02);';
+            sortedOffers.forEach((offer, index) => {
+                const row = document.createElement('tr');
+                row.style.cssText = index % 2 === 0 ? 'background-color:white;' : 'background-color:rgba(0,0,0,0.02);';
 
-            // Name cell
-            const nameCell = document.createElement('td');
-            nameCell.textContent = offer.name;
-            nameCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); font-weight:500;';
-            row.appendChild(nameCell);
+                // Name cell
+                const nameCell = document.createElement('td');
+                nameCell.textContent = offer.name || 'Unknown';
+                nameCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); font-weight:500;';
+                row.appendChild(nameCell);
 
-            // Date cell
-            const dateCell = document.createElement('td');
-            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
-            const date = new Date(offer[dateKey]);
-            dateCell.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            dateCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
-            row.appendChild(dateCell);
+                // Date cell
+                const dateCell = document.createElement('td');
+                const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+                const date = new Date(offer[dateKey]);
+                dateCell.textContent = !isNaN(date) ?
+                    date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                    'N/A';
+                dateCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+                row.appendChild(dateCell);
 
-            // Add cards for redeemed offers
-            if (type === 'redeemed' && offer.redeemedCards) {
-                const cardsCell = document.createElement('td');
-                cardsCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+                // Add cards for redeemed offers
+                if (type === 'redeemed' && Array.isArray(offer.redeemedCards)) {
+                    const cardsCell = document.createElement('td');
+                    cardsCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
 
-                offer.redeemedCards.forEach((token, i) => {
-                    // Find account by token to get display ending
-                    const account = glbVer.get('accounts').find(acc => acc.account_token === token);
-                    const displayText = account ? account.cardEnding : token.slice(-4);
+                    offer.redeemedCards.forEach((token, i) => {
+                        const account = glbVer.get('accounts').find(acc => acc.account_token === token);
+                        const displayText = account ? account.cardEnding : token.slice(-4);
 
-                    const cardBadge = document.createElement('span');
-                    cardBadge.textContent = displayText;
-                    cardBadge.style.cssText = 'display:inline-block; padding:3px 8px; background-color:rgba(0,0,0,0.05); border-radius:10px; margin-right:6px; margin-bottom:6px; font-size:13px;';
-                    cardBadge.dataset.accountToken = token;
-                    cardsCell.appendChild(cardBadge);
+                        const cardBadge = document.createElement('span');
+                        cardBadge.textContent = displayText;
+                        cardBadge.style.cssText = 'display:inline-block; padding:3px 8px; background-color:rgba(0,0,0,0.05); border-radius:10px; margin-right:6px; margin-bottom:6px; font-size:13px;';
+                        cardBadge.dataset.accountToken = token;
+                        cardsCell.appendChild(cardBadge);
 
-                    if (i < offer.redeemedCards.length - 1) {
-                        cardsCell.appendChild(document.createTextNode(' '));
-                    }
-                });
+                        if (i < offer.redeemedCards.length - 1) {
+                            cardsCell.appendChild(document.createTextNode(' '));
+                        }
+                    });
 
-                row.appendChild(cardsCell);
-            }
+                    row.appendChild(cardsCell);
+                }
 
-            tbody.appendChild(row);
-        });
+                tbody.appendChild(row);
+            });
+        }
 
         tableElement.appendChild(tbody);
         return tableElement;
@@ -5584,18 +5622,10 @@
         if (sortFunctions[key]) {
             sortedOffers.sort(sortFunctions[key]);
         } else {
-            sortedOffers.sort((a, b) => direction * (a[key] || "").toString().localeCompare((b[key] || "").toString()));
+            sortedOffers.sort((a, b) => direction * ((a[key] || "").toString().localeCompare((b[key] || "").toString())));
         }
 
-        // Update the global offers_current list while preserving offers not in the current filtered view
-        const allOffers = glbVer.get('offers_current');
-        const sortedMap = new Map(sortedOffers.map(offer => [offer.source_id, offer]));
-
-        const updatedOffers = allOffers.map(offer => {
-            return sortedMap.get(offer.source_id) || offer;
-        });
-
-        glbVer.set('offers_current', updatedOffers);
+        glbVer.set('offers_current', sortedOffers);
 
         const displayContainer = document.getElementById('offers-display-container');
         if (displayContainer) {
