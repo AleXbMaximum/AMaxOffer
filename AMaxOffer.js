@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      3.9.4
+// @version      3.9.5
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
@@ -216,18 +216,18 @@
             return { threshold, reward, percentage, times, total };
         }
 
-        // Process offer updates including tracking expired and redeemed offers
+        // Process offer updates including tracking expired and redeemed offers_current
         function processOfferUpdates(oldOffers, newOfferMap, stats) {
             const oldOfferMap = new Map();
             oldOffers.forEach(offer => {
                 if (offer.source_id) oldOfferMap.set(offer.source_id, offer);
             });
 
-            // Get existing expired and redeemed offers
+            // Get existing expired and redeemed offers_current
             const expired = glbVer.get('offers_expired');
             const redeemed = glbVer.get('offers_redeemed');
 
-            // Process all new offers (preserve metadata)
+            // Process all new offers_current (preserve metadata)
             for (const [sourceId, newOffer] of newOfferMap.entries()) {
                 const oldOffer = oldOfferMap.get(sourceId);
                 if (oldOffer) {
@@ -239,7 +239,7 @@
                 }
             }
 
-            // Track expired offers
+            // Track expired offers_current
             for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
                 if (!newOfferMap.has(sourceId)) {
                     stats.expiredCount++;
@@ -251,7 +251,7 @@
                 }
             }
 
-            // Track redeemed offers
+            // Track redeemed offers_current
             for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
                 const newOffer = newOfferMap.get(sourceId);
                 if (newOffer && Array.isArray(oldOffer.enrolledCards)) {
@@ -282,18 +282,18 @@
                 }
             }
 
-            // Update global state for expired and redeemed offers
+            // Update global state for expired and redeemed offers_current
             glbVer.set('offers_expired', expired);
             glbVer.set('offers_redeemed', redeemed);
 
-            // Return the new offers array
+            // Return the new offers_current array
             return Array.from(newOfferMap.values());
         }
 
         // Update card offer counts
         function updateCardOfferCounts() {
             const accounts = glbVer.get('accounts');
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
 
             // Reset counts
             accounts.forEach(acc => {
@@ -301,8 +301,8 @@
                 acc.enrolledOffers = 0;
             });
 
-            // Update counts based on offers
-            offers.forEach(offer => {
+            // Update counts based on offers_current
+            offers_current.forEach(offer => {
                 if (Array.isArray(offer.eligibleCards)) {
                     offer.eligibleCards.forEach(token => {
                         const acc = accounts.find(a => a.account_token === token);
@@ -410,16 +410,16 @@
                 });
                 if (!res.ok) throw new Error(`Offers fetch error: ${res.status}`);
                 const json = await res.json();
-                return json.offers || [];
+                return json.offers_current || [];
             } catch (error) {
-                console.error(`Error fetching offers for token ${accountToken}:`, error);
+                console.error(`Error fetching offers_current for token ${accountToken}:`, error);
                 return [];
             }
         }
-        // Optimized batch refresh of offers with improved concurrency
+        // Optimized batch refresh of offers_current with improved concurrency
         async function refreshOffersList(progressCallback) {
             try {
-                const oldOffers = glbVer.get('offers');
+                const oldOffers = glbVer.get('offers_current');
                 const newOfferMap = new Map();
                 const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
                 const accounts = glbVer.get('accounts');
@@ -450,7 +450,7 @@
 
                     if (progressCallback) {
                         const progress = Math.min(100, Math.round((i + batchSize) / totalAccounts * 100));
-                        progressCallback('offers', progress);
+                        progressCallback('offers_current', progress);
                     }
 
                     if (i + batchSize < totalAccounts) {
@@ -459,8 +459,8 @@
                 }
 
                 activeAccounts.forEach((account, idx) => {
-                    const offers = results[idx] || [];
-                    offers.forEach(offer => {
+                    const offers_current = results[idx] || [];
+                    offers_current.forEach(offer => {
                         const sourceId = offer.source_id;
                         if (!sourceId || shouldSkipOffer(offer.name || "")) return;
 
@@ -498,21 +498,21 @@
                     });
                 });
 
-                const offers = processOfferUpdates(oldOffers, newOfferMap, stats);
+                const offers_current = processOfferUpdates(oldOffers, newOfferMap, stats);
                 glbVer.batchUpdate(() => {
-                    glbVer.set('offers', offers);
+                    glbVer.set('offers_current', offers_current);
                     updateCardOfferCounts();
                 });
 
-                storageOP.saveDataChanges('offers');
+                storageOP.saveDataChanges('offers_current');
                 if (stats.expiredCount > 0 || stats.redeemedCount > 0) {
                     storageOP.saveDataChanges('history');
                 }
 
                 return stats;
             } catch (error) {
-                console.error('Error refreshing offers list:', error);
-                throw new Error(`Failed to refresh offers: ${error.message}`);
+                console.error('Error refreshing offers_current list:', error);
+                throw new Error(`Failed to refresh offers_current: ${error.message}`);
             }
         }
         async function fetchOfferDetails(accountToken, offerId) {
@@ -858,18 +858,18 @@
                 return { offerId: offerIdentifier, accountToken, result: false };
             }
         }
-        // Enhanced batch enrollment of offers with parallel processing
+        // Enhanced batch enrollment of offers_current with parallel processing
         async function batchEnrollOffers(offerSourceId = null, accountToken = null, options = {}) {
             let totalAttempts = 0;
             let successCount = 0;
             const errors = [];
             const tasks = [];
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             const accounts = glbVer.get('accounts');
             const priorityCards = glbVer.get('priorityCards');
             const excludedCards = glbVer.get('excludedCards');
 
-            const eligibleOffers = offers.filter(offer =>
+            const eligibleOffers = offers_current.filter(offer =>
                 offerSourceId ? offer.source_id === offerSourceId : true
             );
 
@@ -897,7 +897,7 @@
 
             const batchSize = options.batchSize || MAX_CONCURRENT / 2;
             const results = [];
-            const updatedOffers = [...offers];
+            const updatedOffers = [...offers_current];
 
             for (let i = 0; i < tasks.length; i += batchSize) {
                 const batch = tasks.slice(i, i + batchSize);
@@ -955,7 +955,7 @@
             }
 
             glbVer.batchUpdate(() => {
-                glbVer.set('offers', updatedOffers);
+                glbVer.set('offers_current', updatedOffers);
                 updateCardOfferCounts();
             });
 
@@ -977,7 +977,7 @@
                 if (accounts.length === 0) throw new Error('No accounts found');
 
                 if (progressCallback) {
-                    progressCallback({ type: 'offers', percent: 0 });
+                    progressCallback({ type: 'offers_current', percent: 0 });
                     progressCallback({ type: 'benefits', percent: 0 });
                     progressCallback({ type: 'balances', percent: 0 });
                 }
@@ -1033,7 +1033,7 @@
     const glbVer = (() => {
         const data = {
             accounts: [],
-            offers: [],
+            offers_current: [],
             offers_expired: [],
             offers_redeemed: [],
             benefits: [],
@@ -1130,7 +1130,7 @@
 
         const storageConfig = new Map([
             ["accounts", { storageKey: "accounts", important: true, compress: true }],
-            ["offers", { storageKey: "offers", important: true, compress: true }],
+            ["offers_current", { storageKey: "offers_current", important: true, compress: true }],
             ["offers_expired", { storageKey: "offers_expired", important: false, compress: true }],
             ["offers_redeemed", { storageKey: "offers_redeemed", important: false, compress: true }],
             ["benefits", { storageKey: "benefits", important: true, compress: true }],
@@ -1175,11 +1175,6 @@
             },
 
             saveItem(key) {
-                if (!storageToken || !storageConfig.has(key)) {
-                    console.warn(`Cannot save item: Invalid key "${key}" or missing token`);
-                    return false;
-                }
-
                 try {
                     const value = glbVer.get(key);
                     const keyConfig = storageConfig.get(key);
@@ -1198,44 +1193,39 @@
 
             saveDataChanges(changeType) {
                 switch (changeType) {
-                    case 'offers':
-                        this.saveItem('offers');
-                        this.saveItem('lastUpdate');
+                    case 'offers_current':
+                        this.saveItem('offers_current');
                         statsOP.invalidate('offers');
                         renderEngine.markChanged('offers');
                         break;
                     case 'accounts':
                         this.saveItem('accounts');
-                        this.saveItem('lastUpdate');
-                        statsOP.invalidate('members');
-                        renderEngine.markChanged('members');
+                        statsOP.invalidate('MEMBER');
+                        renderEngine.markChanged('MEMBER');
                         break;
                     case 'benefits':
                         this.saveItem('benefits');
-                        this.saveItem('lastUpdate');
                         statsOP.invalidate('benefits');
                         renderEngine.markChanged('benefits');
                         break;
                     case 'preferences':
                         this.saveItem('priorityCards');
                         this.saveItem('excludedCards');
-                        this.saveItem('lastUpdate');
                         renderEngine.renderCurrentView();
                         break;
                     case 'enrollment':
-                        this.saveItem('offers');
-                        this.saveItem('lastUpdate');
-                        statsOP.invalidate('offers');
+                        this.saveItem('offers_current');
+                        statsOP.invalidate('offers_current');
                         renderEngine.markChanged('offers');
-                        renderEngine.markChanged('members');
+                        renderEngine.markChanged('MEMBER');
                         break;
                     case 'history':
                         this.saveItem('offers_expired');
                         this.saveItem('offers_redeemed');
                         break;
                     case 'favorite':
-                        this.saveItem('offers');
-                        statsOP.invalidate('offers');
+                        this.saveItem('offers_current');
+                        statsOP.invalidate('offers_current');
                         break;
                     default:
                         this.saveAll();
@@ -1329,24 +1319,24 @@
 
     const renderEngine = (() => {
         const views = {
-            members: {
-                renderer: members_renderPage,
+            MEMBER: {
+                renderer: member_renderPage,
                 dependencies: ['accounts'],
                 element: null,
                 timestamp: 0,
                 sortState: { key: 'cardIndex', direction: 1 },
                 scrollTop: 0
             },
-            offers: {
-                renderer: offers_renderPage,
-                dependencies: ['offers', 'accounts'],
+            OFFER: {
+                renderer: offer_renderPage,
+                dependencies: ['offers_current', 'accounts'],
                 element: null,
                 timestamp: 0,
                 sortState: { key: 'name', direction: 1 },
                 scrollTop: 0
             },
-            benefits: {
-                renderer: benefits_renderPage,
+            BENEFIT: {
+                renderer: benefit_renderPage,
                 dependencies: ['benefits', 'accounts'],
                 element: null,
                 timestamp: 0,
@@ -1420,7 +1410,7 @@
 
                 let viewContent;
                 try {
-                    if (viewName === 'members' || viewName === 'offers') {
+                    if (viewName === 'MEMBER' || viewName === 'OFFER') {
                         filterOP.applyFilters(viewName);
                     }
 
@@ -1555,8 +1545,8 @@
 
         const filters = { ...defaultFilters };
         const filterCache = {
-            members: { lastQuery: null, result: null },
-            offers: { lastQuery: null, result: null }
+            MEMBER: { lastQuery: null, result: null },
+            OFFER: { lastQuery: null, result: null }
         };
 
         function createFilterHash(view, filterState) {
@@ -1564,8 +1554,8 @@
                 view,
                 filters: Object.entries(filterState)
                     .filter(([key]) =>
-                        (view === 'members' && (key.startsWith('member') || key === 'customFilter')) ||
-                        (view === 'offers' && (!key.startsWith('member') || key === 'customFilter'))
+                        (view === 'MEMBER' && (key.startsWith('member') || key === 'customFilter')) ||
+                        (view === 'OFFER' && (!key.startsWith('member') || key === 'customFilter'))
                     )
                     .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
             });
@@ -1580,10 +1570,10 @@
                 if (key in filters) {
                     filters[key] = value;
                     if (key.startsWith('member') || key === 'customFilter') {
-                        filterCache.members.lastQuery = null;
+                        filterCache.MEMBER.lastQuery = null;
                     }
                     if (!key.startsWith('member') || key === 'customFilter') {
-                        filterCache.offers.lastQuery = null;
+                        filterCache.OFFER.lastQuery = null;
                     }
                 }
                 return this;
@@ -1598,8 +1588,8 @@
                     !k.startsWith('member') || k === 'customFilter'
                 );
 
-                if (affectsMembers) filterCache.members.lastQuery = null;
-                if (affectsOffers) filterCache.offers.lastQuery = null;
+                if (affectsMembers) filterCache.MEMBER.lastQuery = null;
+                if (affectsOffers) filterCache.OFFER.lastQuery = null;
                 return this;
             },
 
@@ -1613,8 +1603,8 @@
                 } else {
                     Object.assign(filters, defaultFilters);
                 }
-                filterCache.members.lastQuery = null;
-                filterCache.offers.lastQuery = null;
+                filterCache.MEMBER.lastQuery = null;
+                filterCache.OFFER.lastQuery = null;
                 return this;
             },
 
@@ -1626,7 +1616,7 @@
             },
 
             updateFilterControls(viewName) {
-                if (viewName === 'members') {
+                if (viewName === 'MEMBER') {
                     const statusFilter = document.getElementById('status-filter');
                     const typeFilter = document.getElementById('type-filter');
                     const searchInput = document.querySelector('.filter-search-input');
@@ -1634,7 +1624,7 @@
                     if (statusFilter) statusFilter.value = filters.memberStatus;
                     if (typeFilter) typeFilter.value = filters.memberCardtype;
                     if (searchInput) searchInput.value = filters.memberMerchantSearch;
-                } else if (viewName === 'offers') {
+                } else if (viewName === 'OFFER') {
                     const searchInput = document.querySelector('.offer-search-input');
                     const cardFilter = document.querySelector('.card-filter');
 
@@ -1644,13 +1634,13 @@
             },
 
             getFilteredMembers() {
-                const hash = createFilterHash('members', filters);
-                if (filterCache.members.lastQuery === hash) {
-                    return filterCache.members.result;
+                const hash = createFilterHash('MEMBER', filters);
+                if (filterCache.MEMBER.lastQuery === hash) {
+                    return filterCache.MEMBER.result;
                 }
 
                 const accounts = glbVer.get('accounts');
-                const offers = glbVer.get('offers');
+                const offers_current = glbVer.get('offers_current');
 
                 const filtered = accounts.filter(acc => {
                     // Status filter
@@ -1671,7 +1661,7 @@
                             (acc.embossed_name || '').toLowerCase().includes(term) ||
                             (acc.description || '').toLowerCase().includes(term);
 
-                        const offerMatches = offers.some(offer => {
+                        const offerMatches = offers_current.some(offer => {
                             const nameMatch = (offer.name || '').toLowerCase().includes(term);
                             const eligMatch = Array.isArray(offer.eligibleCards) &&
                                 offer.eligibleCards.includes(acc.account_token);
@@ -1692,19 +1682,19 @@
                     return true;
                 });
 
-                filterCache.members.lastQuery = hash;
-                filterCache.members.result = filtered;
+                filterCache.MEMBER.lastQuery = hash;
+                filterCache.MEMBER.result = filtered;
                 return filtered;
             },
 
             getFilteredOffers() {
-                const hash = createFilterHash('offers', filters);
-                if (filterCache.offers.lastQuery === hash) {
-                    return filterCache.offers.result;
+                const hash = createFilterHash('OFFER', filters);
+                if (filterCache.OFFER.lastQuery === hash) {
+                    return filterCache.OFFER.result;
                 }
 
-                const offers = glbVer.get('offers');
-                const filtered = offers.filter(offer => {
+                const offers_current = glbVer.get('offers_current');
+                const filtered = offers_current.filter(offer => {
                     // Favorite filter
                     if (filters.offerFav && !offer.favorite) return false;
 
@@ -1745,8 +1735,8 @@
                     return true;
                 });
 
-                filterCache.offers.lastQuery = hash;
-                filterCache.offers.result = filtered;
+                filterCache.OFFER.lastQuery = hash;
+                filterCache.OFFER.result = filtered;
                 return filtered;
             },
 
@@ -1766,7 +1756,7 @@
     const statsOP = (() => {
         const cache = {
             members: null,
-            offers: null,
+            offers_current: null,
             benefits: null
         };
 
@@ -1793,21 +1783,21 @@
         }
 
         function calculateOffersStats() {
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             const now = new Date();
             const twoWeeksFromNow = new Date(now);
             twoWeeksFromNow.setDate(now.getDate() + 14);
 
             const stats = {
-                totalOffers: offers.length,
-                favoriteOffers: offers.filter(o => o.favorite).length,
+                totalOffers: offers_current.length,
+                favoriteOffers: offers_current.filter(o => o.favorite).length,
                 expiringSoon: 0,
                 distinctNotFullyEnrolled: 0,
                 totalEligible: 0,
                 totalEnrolled: 0
             };
 
-            offers.forEach(offer => {
+            offers_current.forEach(offer => {
                 // Count expiring soon
                 if (offer.expiry_date && offer.expiry_date !== 'N/A') {
                     const expiryDate = new Date(offer.expiry_date);
@@ -1865,10 +1855,10 @@
             },
 
             getOffersStats() {
-                if (!cache.offers) {
-                    cache.offers = calculateOffersStats();
+                if (!cache.offers_current) {
+                    cache.offers_current = calculateOffersStats();
                 }
-                return cache.offers;
+                return cache.offers_current;
             },
 
             getBenefitsStats(benefits) {
@@ -1889,17 +1879,18 @@
                 }
             },
 
+            // In statsOP
             getStats(type, forceRefresh = false) {
                 if (forceRefresh) {
                     this.invalidate(type);
                 }
 
                 switch (type) {
-                    case 'members':
+                    case 'MEMBER':
                         return this.getMembersStats();
-                    case 'offers':
+                    case 'OFFER':
                         return this.getOffersStats();
-                    case 'benefits':
+                    case 'BENEFIT':
                         return this.getBenefitsStats();
                     default:
                         return {
@@ -3360,7 +3351,7 @@
     }
 
 
-    // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
+    // In UI creation functions
     function ui_createMain() {
         const uiElements = {
             container: null,
@@ -3503,10 +3494,13 @@
                     await API.fetchAllBenefits();
 
                     const lastUpdate = new Date().toLocaleString();
+                    glbVer.set('lastUpdate', lastUpdate);
                     storageOP.saveItem('lastUpdate');
 
                     uiElements.refreshStatusEl.textContent = "Refresh complete.";
-                    setTimeout(() => uiElements.refreshStatusEl.textContent = "", 3000);
+                    setTimeout(() => {
+                        uiElements.refreshStatusEl.textContent = `Last updated: ${lastUpdate.toLocaleString()}`;
+                    }, 3000);;
 
                     await renderEngine.renderCurrentView();
                 } catch (e) {
@@ -3817,25 +3811,25 @@
     // Members Page Rendering Functions
     // =========================================================================
 
-    function members_renderPage() {
+    function member_renderPage() {
         const containerDiv = ui_createElement('div', {
             styleString: UI_STYLES.pageContainer
         });
 
-        containerDiv.appendChild(members_renderStatsBar());
-        containerDiv.appendChild(members_renderFilterBar());
+        containerDiv.appendChild(member_renderStatsBar());
+        containerDiv.appendChild(member_renderFilterBar());
 
         const tableWrapper = ui_createElement('div', {
             props: { id: 'members-table-container' },
             styleString: 'overflow-x:auto;'
         });
-        tableWrapper.appendChild(members_renderTable());
+        tableWrapper.appendChild(member_renderTable());
 
         containerDiv.appendChild(tableWrapper);
         return containerDiv;
     }
 
-    function members_renderStatsBar() {
+    function member_renderStatsBar() {
         const statsBar = document.createElement('div');
         statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
 
@@ -3860,7 +3854,7 @@
                     const tableContainer = document.getElementById('members-table-container');
                     if (tableContainer) {
                         tableContainer.innerHTML = "";
-                        tableContainer.appendChild(members_renderTable());
+                        tableContainer.appendChild(member_renderTable());
                     }
                 });
             }
@@ -3902,7 +3896,7 @@
                 memberStatus: 'all',
                 memberCardtype: 'all'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Active Cards', stats.activeCards, ICONS.ACTIVE, '46, 204, 113', () => {
@@ -3910,7 +3904,7 @@
                 memberStatus: 'Active',
                 memberCardtype: 'all'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Basic Cards', stats.basicCards, ICONS.BASIC, '155, 89, 182', () => {
@@ -3918,7 +3912,7 @@
                 memberStatus: 'all',
                 memberCardtype: 'BASIC'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Total Balance', `$${stats.totalBalance.toFixed(2)}`, ICONS.balance, '255, 149, 0'));
@@ -3928,7 +3922,7 @@
         return statsBar;
     }
 
-    function members_applyFilters() {
+    function member_applyFilters() {
         // Update UI elements if they exist
         const statusFilter = document.getElementById('status-filter');
         const typeFilter = document.getElementById('type-filter');
@@ -3939,7 +3933,7 @@
         renderEngine.renderCurrentView();
     }
 
-    function members_renderFilterBar() {
+    function member_renderFilterBar() {
         const filtersCard = document.createElement('div');
         filtersCard.style.cssText = UI_STYLES.containers.card + ' margin-bottom:8px;';
 
@@ -3955,7 +3949,7 @@
                 const tableContainer = document.getElementById('members-table-container');
                 if (tableContainer) {
                     tableContainer.innerHTML = "";
-                    tableContainer.appendChild(members_renderTable());
+                    tableContainer.appendChild(member_renderTable());
                 }
             }
         });
@@ -3980,7 +3974,7 @@
         return filtersCard;
     }
 
-    function members_renderTable() {
+    function member_renderTable() {
         const headers = [
             { label: "Index", key: "cardIndex" },
             { label: "Logo", key: "small_card_art" },
@@ -4010,7 +4004,7 @@
         let filteredAccounts = filterOP.getFilteredMembers();
 
         // Apply sorting if needed
-        const sortState = renderEngine.restoreSortState('members');
+        const sortState = renderEngine.restoreSortState('MEMBER');
         if (sortState && sortState.key) {
             const direction = sortState.direction;
             const key = sortState.key;
@@ -4110,7 +4104,7 @@
 
                 relationship: () => {
                     if (item.relationship === "SUPP") {
-                        const parentCardNum = members_getParentCardNumber(item);
+                        const parentCardNum = member_getParentCardNumber(item);
                         return ui_createElement('div', {
                             styleString: 'display:flex; flex-direction:column; align-items:center; gap:2px;',
                             children: [
@@ -4202,7 +4196,7 @@
                             e.target.style.transform = 'scale(1) translateY(0)';
                             e.target.style.boxShadow = 'none';
                         },
-                        click: e => members_popCard(accountToken, type)
+                        click: e => member_popCard(accountToken, type)
                     }
                 });
             }
@@ -4368,10 +4362,10 @@
         ];
 
         // Create and return the table
-        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
+        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, member_sortTable, sortableKeys);
     }
 
-    function members_getParentCardNumber(suppAccount) {
+    function member_getParentCardNumber(suppAccount) {
         const parts = suppAccount.cardIndex.split('-');
         if (parts.length > 1) {
             const mainIndex = parts[0];
@@ -4384,7 +4378,7 @@
         return "N/A";
     }
 
-    function members_popCard(accountToken, mode = 'details') {
+    function member_popCard(accountToken, mode = 'details') {
         const account = glbVer.get('accounts').find(acc => acc.account_token === accountToken);
         if (!account) return;
 
@@ -4474,31 +4468,31 @@
         }
 
         function getOffersForCard(account, mode) {
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             let result = [];
 
             if (mode === 'details') {
-                // Get both eligible and enrolled offers
-                const eligible = offers
+                // Get both eligible and enrolled offers_current
+                const eligible = offers_current
                     .filter(offer => Array.isArray(offer.eligibleCards) &&
                         offer.eligibleCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'eligible' }));
 
-                const enrolled = offers
+                const enrolled = offers_current
                     .filter(offer => Array.isArray(offer.enrolledCards) &&
                         offer.enrolledCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'enrolled' }));
 
                 result = [...eligible, ...enrolled];
             } else if (mode === 'eligible') {
-                // Get only eligible offers
-                result = offers
+                // Get only eligible offers_current
+                result = offers_current
                     .filter(offer => Array.isArray(offer.eligibleCards) &&
                         offer.eligibleCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'eligible' }));
             } else if (mode === 'enrolled') {
-                // Get only enrolled offers
-                result = offers
+                // Get only enrolled offers_current
+                result = offers_current
                     .filter(offer => Array.isArray(offer.enrolledCards) &&
                         offer.enrolledCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'enrolled' }));
@@ -4557,7 +4551,7 @@
                         styleString: 'margin-bottom:16px;'
                     }),
                     ui_createElement('div', {
-                        text: `No ${type === 'details' ? '' : type + ' '}offers found for this card.`,
+                        text: `No ${type === 'details' ? '' : type + ' '}offers_current found for this card.`,
                         styleString: 'font-size:15px; color:#666;'
                     })
                 ]
@@ -4579,7 +4573,7 @@
                         e.currentTarget.style.boxShadow = 'none';
                     },
                     click: () => {
-                        offers_popCard(offer.offerId, 'details', offer);
+                        offer_popCard(offer.offerId, 'details', offer);
                     }
                 },
                 children: [
@@ -4633,7 +4627,7 @@
                         ]
                     }),
 
-                    // Enroll button for eligible offers
+                    // Enroll button for eligible offers_current
                     offerType === 'eligible' ? createEnrollButton(offer, accountToken) : null
                 ].filter(Boolean)
             });
@@ -4692,7 +4686,7 @@
                             } else {
                                 handleEnrollFailure(btn, originalHTML);
                             }
-                            storageOP.saveItem('offers');
+                            storageOP.saveItem('offers_current');
                         } catch (error) {
                             console.error('Error enrolling offer:', error);
                             handleEnrollFailure(btn, originalHTML);
@@ -4712,8 +4706,8 @@
             if (!offer.enrolledCards.includes(accountToken)) offer.enrolledCards.push(accountToken);
 
             API.updateCardOfferCounts();
-            statsOP.invalidate('offers');
-            renderEngine.markChanged('offers');
+            statsOP.invalidate('offers_current');
+            renderEngine.markChanged('offers_current');
 
             const offerCard = btn.closest('div');
             if (offerCard) {
@@ -4724,7 +4718,7 @@
                 setTimeout(() => {
                     offerCard.remove();
                     if (offersList.childElementCount === 0) {
-                        members_popCard(accountToken, mode);
+                        member_popCard(accountToken, mode);
                     }
                 }, 500);
             }
@@ -4744,18 +4738,18 @@
         }
     }
 
-    function members_sortTable(key) {
-        const sortState = renderEngine.restoreSortState('members');
+    function member_sortTable(key) {
+        const sortState = renderEngine.restoreSortState('MEMBER');
         const direction = sortState.key === key ? sortState.direction * -1 : 1;
 
         // Update sort state
-        renderEngine.saveSortState('members', key, direction);
+        renderEngine.saveSortState('MEMBER', key, direction);
 
         // Refresh the table
         const container = document.getElementById('members-table-container');
         if (container) {
             container.innerHTML = "";
-            container.appendChild(members_renderTable());
+            container.appendChild(member_renderTable());
         }
     }
 
@@ -4763,12 +4757,12 @@
     // Offers Page Rendering Functions
     // =========================================================================
 
-    function offers_renderPage() {
+    function offer_renderPage() {
         const containerDiv = document.createElement('div');
         containerDiv.style.cssText = UI_STYLES.pageContainer;
 
         // Add components sequentially
-        containerDiv.appendChild(offers_renderStatsBar());
+        containerDiv.appendChild(offer_renderStatsBar());
 
         // Create tab navigation for current vs history
         const tabContainer = document.createElement('div');
@@ -4784,7 +4778,7 @@
 
         const displayContainer = document.createElement('div');
         displayContainer.id = 'offers-display-container';
-        displayContainer.appendChild(offers_renderTableView());
+        displayContainer.appendChild(offer_renderTableView());
 
         // Tab click handlers
         currentTab.addEventListener('click', () => {
@@ -4794,7 +4788,7 @@
             historyTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(offers_renderTableView());
+            displayContainer.appendChild(offer_renderTableView());
         });
 
         historyTab.addEventListener('click', () => {
@@ -4804,19 +4798,19 @@
             currentTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(offers_renderHistoryView());
+            displayContainer.appendChild(offer_renderHistoryView());
         });
 
         tabContainer.appendChild(currentTab);
         tabContainer.appendChild(historyTab);
         containerDiv.appendChild(tabContainer);
-        containerDiv.appendChild(offers_renderControlBar());
+        containerDiv.appendChild(offer_renderControlBar());
         containerDiv.appendChild(displayContainer);
 
         return containerDiv;
     }
 
-    function offers_renderHistoryView() {
+    function offer_renderHistoryView() {
         const historyContainer = document.createElement('div');
         historyContainer.style.cssText = 'display:flex; flex-direction:column; gap:24px;';
 
@@ -4842,7 +4836,7 @@
             emptyExpired.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
             expiredSection.appendChild(emptyExpired);
         } else {
-            expiredSection.appendChild(offers_renderHistoryTable(glbVer.get('offers_expired'), 'expired'));
+            expiredSection.appendChild(offer_renderHistoryTable(glbVer.get('offers_expired'), 'expired'));
         }
 
         // Redeemed offers section
@@ -4867,7 +4861,7 @@
             emptyRedeemed.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
             redeemedSection.appendChild(emptyRedeemed);
         } else {
-            redeemedSection.appendChild(offers_renderHistoryTable(glbVer.get('offers_redeemed'), 'redeemed'));
+            redeemedSection.appendChild(offer_renderHistoryTable(glbVer.get('offers_redeemed'), 'redeemed'));
         }
 
         historyContainer.appendChild(expiredSection);
@@ -4876,7 +4870,7 @@
         return historyContainer;
     }
 
-    function offers_renderHistoryTable(offers, type) {
+    function offer_renderHistoryTable(offers, type) {
         const tableElement = document.createElement('table');
         tableElement.className = 'ios-table';
         tableElement.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; font-size:14px;';
@@ -4912,7 +4906,7 @@
         const tbody = document.createElement('tbody');
 
         // Sort by date descending (newest first)
-        const sortedOffers = [...offers].sort((a, b) => {
+        const sortedOffers = [...offers_current].sort((a, b) => {
             const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
             return new Date(b[dateKey]) - new Date(a[dateKey]);
         });
@@ -4966,7 +4960,7 @@
         return tableElement;
     }
 
-    function offers_renderStatsBar() {
+    function offer_renderStatsBar() {
         const statsBar = document.createElement('div');
         statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
 
@@ -4994,7 +4988,7 @@
                     const displayContainer = document.getElementById('offers-display-container');
                     if (displayContainer) {
                         displayContainer.innerHTML = "";
-                        displayContainer.appendChild(offers_renderTableView());
+                        displayContainer.appendChild(offer_renderTableView());
                     }
                 });
             }
@@ -5072,7 +5066,7 @@
         return statsBar;
     }
 
-    function offers_renderControlBar() {
+    function offer_renderControlBar() {
         const filterCard = document.createElement('div');
         filterCard.style.cssText = UI_STYLES.containers.card + ' display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px; align-items:center;';
 
@@ -5118,7 +5112,7 @@
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offer_renderTableView());
                 }
             }
         });
@@ -5138,7 +5132,7 @@
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offer_renderTableView());
                 }
             }
         });
@@ -5162,7 +5156,7 @@
         return filterCard;
     }
 
-    function offers_renderTableView() {
+    function offer_renderTableView() {
         // Get processed offers
         const processedOffers = filterOP.getFilteredOffers();
 
@@ -5358,7 +5352,7 @@
                             events: {
                                 click: (e) => {
                                     e.stopPropagation();
-                                    offers_popCard(offer.offerId, 'eligible', offer);
+                                    offer_popCard(offer.offerId, 'eligible', offer);
                                 }
                             }
                         });
@@ -5397,7 +5391,7 @@
                             events: {
                                 click: (e) => {
                                     e.stopPropagation();
-                                    offers_popCard(offer.offerId, 'enrolled', offer);
+                                    offer_popCard(offer.offerId, 'enrolled', offer);
                                 }
                             }
                         });
@@ -5443,7 +5437,7 @@
                     },
                     click: (e) => {
                         e.stopPropagation();
-                        offers_toggleFavorite(offer);
+                        offer_toggleFavorite(offer);
                     }
                 }
             });
@@ -5459,14 +5453,14 @@
         ];
 
         // Create the table
-        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offers_sortTable, sortableKeys);
+        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offer_sortTable, sortableKeys);
 
         // Make rows clickable
         tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
             if (index < processedOffers.length) {
                 row.style.cursor = 'pointer';
                 row.addEventListener('click', () => {
-                    offers_popCard(processedOffers[index].offerId, 'details', processedOffers[index]);
+                    offer_popCard(processedOffers[index].offerId, 'details', processedOffers[index]);
                 });
             }
         });
@@ -5480,16 +5474,16 @@
         return tableWrapper;
     }
 
-    function offers_toggleFavorite(offer) {
+    function offer_toggleFavorite(offer) {
         offer.favorite = !offer.favorite;
 
         // Find and update the original offer in the glbVer
-        glbVer.update('offers', offers => {
-            return offers.map(o => o.offerId === offer.offerId ?
+        glbVer.update('offers_current', offers_current => {
+            return offers_current.map(o => o.offerId === offer.offerId ?
                 { ...o, favorite: offer.favorite } : o);
         });
 
-        statsOP.invalidate('offers');
+        statsOP.invalidate('offers_current');
         storageOP.saveDataChanges('favorite');
 
         // Update the UI element that triggered this
@@ -5525,7 +5519,7 @@
     }
 
 
-    function offers_sortTable(key) {
+    function offer_sortTable(key) {
         const sortState = renderEngine.restoreSortState('offers');
         let direction = sortState.key === key ? sortState.direction * -1 : 1;
 
@@ -5581,9 +5575,9 @@
         }
 
         // Update the global offers array for consistency
-        glbVer.update('offers', offers => {
+        glbVer.update('offers_current', offers_current => {
             const sortedMap = new Map(sortedOffers.map(offer => [offer.offerId, offer]));
-            return offers.map(offer => sortedMap.get(offer.offerId) || offer);
+            return offers_current.map(offer => sortedMap.get(offer.offerId) || offer);
         });
 
         // Refresh the table view with sorted data
@@ -5631,8 +5625,8 @@
                     headers,
                     colWidths,
                     sortedOffers,
-                    offers_renderTableView().querySelector('table').cellRenderer,
-                    offers_sortTable,
+                    offer_renderTableView().querySelector('table').cellRenderer,
+                    offer_sortTable,
                     sortableKeys
                 );
 
@@ -5641,7 +5635,7 @@
                     if (index < sortedOffers.length) {
                         row.style.cursor = 'pointer';
                         row.addEventListener('click', () => {
-                            offers_popCard(sortedOffers[index].offerId, 'details', sortedOffers[index]);
+                            offer_popCard(sortedOffers[index].offerId, 'details', sortedOffers[index]);
                         });
                     }
                 });
@@ -5655,9 +5649,9 @@
     }
 
 
-    function offers_popCard(offerId, mode = 'details', offer = null) {
+    function offer_popCard(offerId, mode = 'details', offer = null) {
         // Get offer if not provided
-        const offerObj = offer || glbVer.get('offers').find(o => o.offerId === offerId);
+        const offerObj = offer || glbVer.get('offers_current').find(o => o.offerId === offerId);
         if (!offerObj) return;
 
         const { overlay, content, closeBtn } = ui_createModal({
@@ -6066,7 +6060,7 @@
                             // Update offer data
                             offer.terms = details.terms;
                             offer.long_description = details.long_description;
-                            storageOP.saveItem('offers');
+                            storageOP.saveItem('offers_current');
 
                             // Update UI
                             populateDetailsTab(container, offer);
@@ -6117,8 +6111,8 @@
             }
 
             // Update global state
-            glbVer.update('offers', offers => {
-                return offers.map(o => o.offerId === offer.offerId ?
+            glbVer.update('offers_current', offers_current => {
+                return offers_current.map(o => o.offerId === offer.offerId ?
                     {
                         ...o,
                         eligibleCards: [...offer.eligibleCards],
@@ -6197,7 +6191,7 @@
     // Benefits Page Rendering Functions
     // =========================================================================
 
-    function benefits_renderPage() {
+    function benefit_renderPage() {
         // Ensure we have benefit data
         if (!glbVer.get('benefits') || glbVer.get('benefits').length === 0) {
             // This will be handled by API in real implementation
@@ -6209,10 +6203,10 @@
         });
 
         // Process all data once before rendering
-        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefits_processAndGroup(glbVer.get('benefits'));
+        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefit_processAndGroup(glbVer.get('benefits'));
 
         // Add benefits overview
-        containerDiv.appendChild(benefits_renderStatsSummary(statusCounts));
+        containerDiv.appendChild(benefit_renderStatsSummary(statusCounts));
 
         // Create status legend
         const statusLegendConfig = {
@@ -6220,14 +6214,14 @@
             'IN_PROGRESS': { label: 'In Progress', color: UI_STYLES.status.inProgress.color },
             'NOT_STARTED': { label: 'Not Started', color: UI_STYLES.status.notStarted.color }
         };
-        containerDiv.appendChild(benefits_createStatusKey(statusLegendConfig));
+        containerDiv.appendChild(benefit_createStatusKey(statusLegendConfig));
 
         // Handle empty state
         if (sortedBenefitGroups.length === 0) {
             containerDiv.appendChild(createEmptyState());
         } else {
             // Add filter controls
-            containerDiv.appendChild(benefits_createFilters());
+            containerDiv.appendChild(benefit_createFilters());
 
             // Create benefit accordions
             const accordionContainer = ui_createElement('div', {
@@ -6237,7 +6231,7 @@
 
             // Add each benefit group as an accordion item
             sortedBenefitGroups.forEach(groupObj => {
-                accordionContainer.appendChild(benefits_createExpandableItem(groupObj, statusLegendConfig));
+                accordionContainer.appendChild(benefit_createExpandableItem(groupObj, statusLegendConfig));
             });
 
             containerDiv.appendChild(accordionContainer);
@@ -6282,7 +6276,7 @@
         }
     }
 
-    function benefits_processAndGroup(benefits) {
+    function benefit_processAndGroup(benefits) {
         const statusCounts = statsOP.getBenefitsStats(benefits);
 
         const groupedBenefits = benefits.reduce((grouped, trackerObj) => {
@@ -6306,7 +6300,7 @@
             return grouped;
         }, {});
 
-        const sortedBenefitGroups = benefits_sortBenefits(groupedBenefits);
+        const sortedBenefitGroups = benefit_sortBenefits(groupedBenefits);
 
         return {
             groupedBenefits,
@@ -6315,7 +6309,7 @@
         };
     }
 
-    function benefits_sortBenefits(groupedBenefits) {
+    function benefit_sortBenefits(groupedBenefits) {
         // Expanded mapping of benefit IDs to display order and custom names
         const benefitSortMapping = {
             // Credits
@@ -6340,14 +6334,14 @@
             const benefitNameKey = (firstTracker.benefitName || "").toLowerCase().trim();
 
             const sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
-            const periodInfo = benefits_extractPeriod(firstTracker);
+            const periodInfo = benefit_extractPeriod(firstTracker);
 
             return {
                 key,
                 trackers: group,
                 order: sortData?.order || Infinity,
                 displayName: sortData?.newName || firstTracker.benefitName || "",
-                category: sortData?.category || benefits_inferCategoryFromTitle(firstTracker),
+                category: sortData?.category || benefit_inferCategoryFromTitle(firstTracker),
                 periodType: periodInfo.periodType,
                 periodLabel: periodInfo.periodLabel
             };
@@ -6370,7 +6364,7 @@
         });
     }
 
-    function benefits_renderStatsSummary(statusCounts) {
+    function benefit_renderStatsSummary(statusCounts) {
         const statsContainer = ui_createElement('div', {
             styleString: 'display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; justify-content:center;'
         });
@@ -6431,7 +6425,7 @@
         return statsContainer;
     }
 
-    function benefits_createStatusKey(statusConfig) {
+    function benefit_createStatusKey(statusConfig) {
         return ui_createElement('div', {
             styleString: 'display:flex; gap:15px; margin-bottom:25px; justify-content:center; flex-wrap:wrap; background-color:rgba(255,255,255,0.6); border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.05);',
             children: Object.entries(statusConfig).map(([status, { label, color }]) =>
@@ -6455,7 +6449,7 @@
         });
     }
 
-    function benefits_createFilters() {
+    function benefit_createFilters() {
         return ui_createElement('div', {
             styleString: `
             display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
@@ -6627,7 +6621,7 @@
         }
     }
 
-    function benefits_createExpandableItem(groupObj, statusConfig) {
+    function benefit_createExpandableItem(groupObj, statusConfig) {
         const accordionItem = ui_createElement('div', {
             className: 'accordion-item',
             styleString: UI_STYLES.accordion.item,
@@ -6678,7 +6672,7 @@
 
         // Add click handler
         headerDiv.addEventListener('click', () => {
-            benefits_toggleItemExpansion(headerDiv);
+            benefit_toggleItemExpansion(headerDiv);
         });
 
         accordionItem.appendChild(headerDiv);
@@ -6711,7 +6705,7 @@
                             ui_createElement('div', {
                                 styleString: `${UI_STYLES.containers.flexRow} flex:1;`,
                                 children: [
-                                    benefits_getCategoryIcon(groupObj.category),
+                                    benefit_getCategoryIcon(groupObj.category),
                                     ui_createElement('span', {
                                         className: 'accordion-title',
                                         text: groupObj.displayName || groupObj.trackers[0].benefitName || "",
@@ -6818,13 +6812,13 @@
             return ui_createElement('div', {
                 styleString: 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;',
                 children: groupObj.trackers.map(tracker =>
-                    benefits_createProgressCard(tracker, groupObj)
+                    benefit_createProgressCard(tracker, groupObj)
                 )
             });
         }
     }
 
-    function benefits_toggleItemExpansion(header) {
+    function benefit_toggleItemExpansion(header) {
         const bodyDiv = header.bodyRef;
         const arrowIcon = header.arrowRef;
         const parentItem = header.parentItem;
@@ -6910,7 +6904,7 @@
         }
     }
 
-    function benefits_getCategoryIcon(category) {
+    function benefit_getCategoryIcon(category) {
         const iconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         iconSvg.setAttribute('viewBox', '0 0 24 24');
         iconSvg.setAttribute('width', '24');
@@ -6973,7 +6967,7 @@
         return iconSvg;
     }
 
-    function benefits_extractPeriod(tracker) {
+    function benefit_extractPeriod(tracker) {
         let periodType = "";
         let periodLabel = "";
 
@@ -7001,7 +6995,7 @@
         return { periodType, periodLabel };
     }
 
-    function benefits_inferCategoryFromTitle(tracker) {
+    function benefit_inferCategoryFromTitle(tracker) {
         const name = (tracker.benefitName || "").toLowerCase();
 
         if (name.includes("hotel") || name.includes("resort") || name.includes("free night") || name.includes("hilton") || name.includes("marriott")) {
@@ -7021,7 +7015,7 @@
         }
     }
 
-    function benefits_createProgressCard(trackerObj, groupObj) {
+    function benefit_createProgressCard(trackerObj, groupObj) {
         const cardAccount = glbVer.get('accounts').find(acc => acc.account_token === trackerObj.accountToken);
 
         const statusKey = trackerObj.status === 'ACHIEVED' ? 'achieved' :
@@ -7268,6 +7262,61 @@
     // Section 9: Initialization Functions
     // =========================================================================
 
+
+
+    // Update the init function to initialize the arrays
+    async function initialize() {
+        const authStatus = await auth_init();
+        if (!authStatus) {
+            return 0;
+        }
+        const uiElements = ui_createMain();
+        renderEngine.initialize(uiElements.content);
+
+        const kickoffStatus = util_antiKickOff.initialize(90000, true);
+        if (!kickoffStatus) {
+            console.warn("Anti-kickoff initialization failed");
+        }
+
+        uiElements.refreshStatusEl.textContent = "Loading accounts...";
+        const accounts = await API.fetchAccounts(true);
+        if (!accounts || accounts.length === 0) {
+            throw new Error("No accounts found");
+        }
+
+        uiElements.refreshStatusEl.textContent = "Loading saved data...";
+        storageOP.setToken(accounts[0].account_token);
+        const loadedFromStorage = storageOP.loadAll();
+
+        if (!loadedFromStorage) {
+            uiElements.refreshStatusEl.textContent = "Refreshing data...";
+            const refreshResult = await API.refreshAllData(progress => {
+                uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
+            });
+
+            if (!refreshResult.success) {
+                throw new Error(`Failed to refresh data: ${refreshResult.error}`);
+            }
+
+            if (refreshResult.newOffers > 0) {
+                ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
+            }
+        }
+
+        uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
+        renderEngine.changeView('MEMBER');
+
+        const date = new Date(glbVer.get('lastUpdate'));
+        uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
+
+        util_antiKickOff.forceExtend();
+
+        return true;
+    }
+
+    document.addEventListener('DOMContentLoaded', initialize);
+    initialize();
+
     async function auth_init() {
         try {
             const expirationDate = new Date("2025-03-20T05:00:00Z");
@@ -7338,68 +7387,7 @@
 
     }
 
-    // Update the init function to initialize the arrays
-    async function initialize() {
-
-
-        const authStatus = await auth_init();
-        if (!authStatus) {
-            return 0;
-        }
-        const uiElements = ui_createMain();
-        renderEngine.initialize(uiElements.content);
-
-        const kickoffStatus = util_antiKickOff.initialize(90000, true);
-        if (!kickoffStatus) {
-            console.warn("Anti-kickoff initialization failed");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading accounts...";
-        const accounts = await API.fetchAccounts(true);
-        if (!accounts || accounts.length === 0) {
-            throw new Error("No accounts found");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading saved data...";
-        storageOP.setToken(accounts[0].account_token);
-        const loadedFromStorage = storageOP.loadAll();
-
-        if (!loadedFromStorage) {
-            uiElements.refreshStatusEl.textContent = "Refreshing data...";
-            const refreshResult = await API.refreshAllData(progress => {
-                uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
-            });
-
-            if (!refreshResult.success) {
-                throw new Error(`Failed to refresh data: ${refreshResult.error}`);
-            }
-
-            if (refreshResult.newOffers > 0) {
-                ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
-            }
-        }
-
-        uiElements.activateButton(uiElements.btnMembers, 'members');
-        renderEngine.changeView('members');
-
-        updateLastUpdateDisplay(uiElements.refreshStatusEl);
-        util_antiKickOff.forceExtend();
-
-        return true;
-
-        function updateLastUpdateDisplay(statusElement) {
-            const lastUpdate = glbVer.get('lastUpdate');
-            if (lastUpdate) {
-                const date = new Date(lastUpdate);
-                statusElement.textContent = `Last updated: ${date.toLocaleString()}`;
-            } else {
-                statusElement.textContent = '';
-            }
-        }
-    }
 
     // Helper function to update the last update display
 
-    document.addEventListener('DOMContentLoaded', initialize);
-    initialize();
 })();
