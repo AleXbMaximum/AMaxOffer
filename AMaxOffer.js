@@ -410,16 +410,17 @@
                 });
                 if (!res.ok) throw new Error(`Offers fetch error: ${res.status}`);
                 const json = await res.json();
-                return json.offers_current || [];
+                return json.offers || [];
             } catch (error) {
                 console.error(`Error fetching offers_current for token ${accountToken}:`, error);
                 return [];
             }
         }
-        // Optimized batch refresh of offers_current with improved concurrency
+
+        // Revised API function to handle offer fetching
         async function refreshOffersList(progressCallback) {
             try {
-                const oldOffers = glbVer.get('offers_current');
+                const oldOffers = glbVer.get('offers_current') || [];
                 const newOfferMap = new Map();
                 const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
                 const accounts = glbVer.get('accounts');
@@ -458,9 +459,16 @@
                     }
                 }
 
-                activeAccounts.forEach((account, idx) => {
-                    const offers_current = results[idx] || [];
-                    offers_current.forEach(offer => {
+                for (let idx = 0; idx < activeAccounts.length; idx++) {
+                    const account = activeAccounts[idx];
+                    const offers = results[idx] || [];
+
+                    if (!Array.isArray(offers)) {
+                        console.error(`Non-array offers result for account ${account.cardEnding}:`, offers);
+                        continue;
+                    }
+
+                    offers.forEach(offer => {
                         const sourceId = offer.source_id;
                         if (!sourceId || shouldSkipOffer(offer.name || "")) return;
 
@@ -496,25 +504,24 @@
                             offerInfo.enrolledCards.push(account.account_token);
                         }
                     });
-                });
-
-                const offers_current = processOfferUpdates(oldOffers, newOfferMap, stats);
-                glbVer.batchUpdate(() => {
-                    glbVer.set('offers_current', offers_current);
-                    updateCardOfferCounts();
-                });
-
-                storageOP.saveDataChanges('offers_current');
-                if (stats.expiredCount > 0 || stats.redeemedCount > 0) {
-                    storageOP.saveDataChanges('history');
                 }
+
+                // Process updates to track expired and redeemed
+                const processedOffers = processOfferUpdates(oldOffers, newOfferMap, stats);
+
+                glbVer.set('offers_current', processedOffers);
+                updateCardOfferCounts();
+
+                // Mark OFFER view as changed
+                renderEngine.markChanged('OFFER');
 
                 return stats;
             } catch (error) {
-                console.error('Error refreshing offers_current list:', error);
-                throw new Error(`Failed to refresh offers_current: ${error.message}`);
+                console.error('Error refreshing offers list:', error);
+                throw new Error(`Failed to refresh offers: ${error.message}`);
             }
         }
+
         async function fetchOfferDetails(accountToken, offerId) {
 
             // Generate timestamp in required format with offset
@@ -969,7 +976,6 @@
             };
         }
 
-        // Refresh all data with improved progress reporting and parallelization
         async function refreshAllData(progressCallback) {
             try {
                 if (progressCallback) progressCallback({ type: 'accounts', percent: 0 });
@@ -977,17 +983,20 @@
                 if (accounts.length === 0) throw new Error('No accounts found');
 
                 if (progressCallback) {
-                    progressCallback({ type: 'offers_current', percent: 0 });
-                    progressCallback({ type: 'benefits', percent: 0 });
+                    progressCallback({ type: 'OFFER', percent: 0 });
+                    progressCallback({ type: 'BENEFIT', percent: 0 });
                     progressCallback({ type: 'balances', percent: 0 });
                 }
 
                 const [offerStats, benefitsResult, balancesResult] = await Promise.all([
                     this.refreshOffersList((type, percent) => {
-                        if (progressCallback) progressCallback({ type, percent });
+                        // Map the internal data type to view name for progress reporting
+                        const reportType = type === 'offers_current' ? 'OFFER' : type;
+                        if (progressCallback) progressCallback({ type: reportType, percent });
                     }),
                     this.fetchAllBenefits((type, percent) => {
-                        if (progressCallback) progressCallback({ type, percent });
+                        const reportType = type === 'benefits' ? 'BENEFIT' : type;
+                        if (progressCallback) progressCallback({ type: reportType, percent });
                     }),
                     this.fetchAllBalances((type, percent) => {
                         if (progressCallback) progressCallback({ type, percent });
@@ -1195,8 +1204,8 @@
                 switch (changeType) {
                     case 'offers_current':
                         this.saveItem('offers_current');
-                        statsOP.invalidate('offers');
-                        renderEngine.markChanged('offers');
+                        statsOP.invalidate('OFFER');
+                        renderEngine.markChanged('OFFER');
                         break;
                     case 'accounts':
                         this.saveItem('accounts');
@@ -1205,8 +1214,8 @@
                         break;
                     case 'benefits':
                         this.saveItem('benefits');
-                        statsOP.invalidate('benefits');
-                        renderEngine.markChanged('benefits');
+                        statsOP.invalidate('BENEFIT');
+                        renderEngine.markChanged('BENEFIT');
                         break;
                     case 'preferences':
                         this.saveItem('priorityCards');
@@ -1215,8 +1224,8 @@
                         break;
                     case 'enrollment':
                         this.saveItem('offers_current');
-                        statsOP.invalidate('offers_current');
-                        renderEngine.markChanged('offers');
+                        statsOP.invalidate('OFFER');
+                        renderEngine.markChanged('OFFER');
                         renderEngine.markChanged('MEMBER');
                         break;
                     case 'history':
@@ -1225,7 +1234,7 @@
                         break;
                     case 'favorite':
                         this.saveItem('offers_current');
-                        statsOP.invalidate('offers_current');
+                        statsOP.invalidate('OFFER');
                         break;
                     default:
                         this.saveAll();
@@ -1529,6 +1538,7 @@
         };
     })();
 
+
     const filterOP = (() => {
         const defaultFilters = {
             memberStatus: "Active",
@@ -1693,8 +1703,15 @@
                     return filterCache.OFFER.result;
                 }
 
-                const offers_current = glbVer.get('offers_current');
+                const offers_current = glbVer.get('offers_current') || [];
+                if (!offers_current || !Array.isArray(offers_current)) {
+                    console.error("offers_current is not an array:", offers_current);
+                    return [];
+                }
+
                 const filtered = offers_current.filter(offer => {
+                    if (!offer) return false;
+
                     // Favorite filter
                     if (filters.offerFav && !offer.favorite) return false;
 
@@ -1707,8 +1724,8 @@
                     // Card token filter
                     if (filters.offerCardToken) {
                         const accountToken = filters.offerCardToken;
-                        const isEligible = offer.eligibleCards?.includes(accountToken);
-                        const isEnrolled = offer.enrolledCards?.includes(accountToken);
+                        const isEligible = Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(accountToken);
+                        const isEnrolled = Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(accountToken);
                         if (!isEligible && !isEnrolled) return false;
                     }
 
@@ -1872,14 +1889,21 @@
             },
 
             invalidate(type) {
-                if (type in cache) {
-                    cache[type] = null;
+                const cacheKeyMap = {
+                    'MEMBER': 'members',
+                    'OFFER': 'offers_current',
+                    'BENEFIT': 'benefits'
+                };
+
+                const cacheKey = cacheKeyMap[type] || type;
+
+                if (cacheKey in cache) {
+                    cache[cacheKey] = null;
                 } else {
                     Object.keys(cache).forEach(key => cache[key] = null);
                 }
             },
 
-            // In statsOP
             getStats(type, forceRefresh = false) {
                 if (forceRefresh) {
                     this.invalidate(type);
@@ -3351,7 +3375,6 @@
     }
 
 
-    // In UI creation functions
     function ui_createMain() {
         const uiElements = {
             container: null,
@@ -3360,9 +3383,9 @@
             toggleBtn: null,
             btnRefresh: null,
             refreshStatusEl: null,
-            btnMembers: null,
-            btnOffers: null,
-            btnBenefits: null
+            btnMEMBER: null,
+            btnOFFER: null,
+            btnBENEFIT: null
         };
 
         // Create the main container with better positioning
@@ -3385,47 +3408,47 @@
         });
 
         // Create navigation buttons with improved active states
-        uiElements.btnMembers = ui_createElement('button', {
+        uiElements.btnMEMBER = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'members',
+                'data-view': 'MEMBER',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>Members'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnMembers, 'members');
-                    renderEngine.changeView('members');
+                    activateButton(uiElements.btnMEMBER, 'MEMBER');
+                    renderEngine.changeView('MEMBER');
                 }
             }
         });
 
-        uiElements.btnOffers = ui_createElement('button', {
+        uiElements.btnOFFER = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'offers',
+                'data-view': 'OFFER',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>Offers'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnOffers, 'offers');
-                    renderEngine.changeView('offers');
+                    activateButton(uiElements.btnOFFER, 'OFFER');
+                    renderEngine.changeView('OFFER');
                 }
             }
         });
 
-        uiElements.btnBenefits = ui_createElement('button', {
+        uiElements.btnBENEFIT = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'benefits',
+                'data-view': 'BENEFIT',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 12 7.4l3.38 4.6L17 10.83 14.92 8H20v6z"/></svg>Benefits'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnBenefits, 'benefits');
-                    renderEngine.changeView('benefits');
+                    activateButton(uiElements.btnBENEFIT, 'BENEFIT');
+                    renderEngine.changeView('BENEFIT');
                 }
             }
         });
@@ -3469,7 +3492,7 @@
         // Navigation container with centered positioning
         uiElements.viewBtns = ui_createElement('div', {
             className: 'amaxoffer-nav',
-            children: [uiElements.btnMembers, uiElements.btnOffers, uiElements.btnBenefits],
+            children: [uiElements.btnMEMBER, uiElements.btnOFFER, uiElements.btnBENEFIT],
             styleString: 'display:none; position:absolute; left:50%; transform:translateX(-50%); z-index:1; background:#f8f9fa; border-radius:8px; padding:4px;'
         });
 
@@ -4742,10 +4765,8 @@
         const sortState = renderEngine.restoreSortState('MEMBER');
         const direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        // Update sort state
         renderEngine.saveSortState('MEMBER', key, direction);
 
-        // Refresh the table
         const container = document.getElementById('members-table-container');
         if (container) {
             container.innerHTML = "";
@@ -5518,25 +5539,19 @@
         }
     }
 
-
     function offer_sortTable(key) {
-        const sortState = renderEngine.restoreSortState('offers');
+        const sortState = renderEngine.restoreSortState('OFFER');
         let direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        // Default to descending for these columns
         if (key === "favorite" || key === "eligibleCards" || key === "enrolledCards") {
             if (sortState.key !== key) direction = -1;
         }
 
-        renderEngine.saveSortState('offers', key, direction);
+        renderEngine.saveSortState('OFFER', key, direction);
 
-        // Get the filtered offers currently displayed
         const filteredOffers = filterOP.getFilteredOffers();
-
-        // Sort the filtered offers based on the selected key and direction
         let sortedOffers = [...filteredOffers];
 
-        // Define sort functions for different data types
         const sortFunctions = {
             favorite: (a, b) => direction * (Number(b.favorite) - Number(a.favorite)),
             name: (a, b) => direction * (a.name || "").localeCompare(b.name || ""),
@@ -5566,91 +5581,30 @@
             enrolledCards: (a, b) => direction * ((a.enrolledCards?.length || 0) - (b.enrolledCards?.length || 0))
         };
 
-        // Apply the appropriate sort function if available
         if (sortFunctions[key]) {
             sortedOffers.sort(sortFunctions[key]);
         } else {
-            // Default sort by name if no specific sort function
             sortedOffers.sort((a, b) => direction * (a[key] || "").toString().localeCompare((b[key] || "").toString()));
         }
 
-        // Update the global offers array for consistency
-        glbVer.update('offers_current', offers_current => {
-            const sortedMap = new Map(sortedOffers.map(offer => [offer.offerId, offer]));
-            return offers_current.map(offer => sortedMap.get(offer.offerId) || offer);
+        // Update the global offers_current list while preserving offers not in the current filtered view
+        const allOffers = glbVer.get('offers_current');
+        const sortedMap = new Map(sortedOffers.map(offer => [offer.source_id, offer]));
+
+        const updatedOffers = allOffers.map(offer => {
+            return sortedMap.get(offer.source_id) || offer;
         });
 
-        // Refresh the table view with sorted data
+        glbVer.set('offers_current', updatedOffers);
+
         const displayContainer = document.getElementById('offers-display-container');
         if (displayContainer) {
             displayContainer.innerHTML = "";
-
-            // Create a custom renderer that uses the sorted offers
-            const customRenderer = () => {
-                const container = document.createElement('div');
-                container.id = 'offers-table-container';
-                container.style.cssText = 'overflow-x:auto;';
-
-                const headers = [
-                    { label: "★", key: "favorite" },
-                    { label: "Logo", key: "logo" },
-                    { label: "Offer", key: "name" },
-                    { label: "Type", key: "achievement_type" },
-                    { label: "Category", key: "category" },
-                    { label: "Expiry", key: "expiry_date" },
-                    { label: "Usage", key: "redemption_types" },
-                    { label: "Description", key: "short_description" },
-                    { label: "Threshold", key: "threshold" },
-                    { label: "Reward", key: "reward" },
-                    { label: "Percent", key: "percentage" },
-                    { label: "Eligible", key: "eligibleCards" },
-                    { label: "Enrolled", key: "enrolledCards" }
-                ];
-
-                const colWidths = {
-                    favorite: "40px", logo: "70px", name: "180px", achievement_type: "70px",
-                    category: "90px", expiry_date: "110px", redemption_types: "80px",
-                    short_description: "230px", threshold: "90px", reward: "90px",
-                    percentage: "80px", eligibleCards: "80px", enrolledCards: "80px"
-                };
-
-                const sortableKeys = [
-                    "favorite", "name", "achievement_type", "category",
-                    "expiry_date", "threshold", "reward", "percentage",
-                    "eligibleCards", "enrolledCards"
-                ];
-
-                // Create table with sorted offers
-                const tableElement = ui_renderDataTable(
-                    headers,
-                    colWidths,
-                    sortedOffers,
-                    offer_renderTableView().querySelector('table').cellRenderer,
-                    offer_sortTable,
-                    sortableKeys
-                );
-
-                // Make rows clickable
-                tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
-                    if (index < sortedOffers.length) {
-                        row.style.cursor = 'pointer';
-                        row.addEventListener('click', () => {
-                            offer_popCard(sortedOffers[index].offerId, 'details', sortedOffers[index]);
-                        });
-                    }
-                });
-
-                container.appendChild(tableElement);
-                return container;
-            };
-
-            displayContainer.appendChild(customRenderer());
+            displayContainer.appendChild(offer_renderTableView());
         }
     }
 
-
     function offer_popCard(offerId, mode = 'details', offer = null) {
-        // Get offer if not provided
         const offerObj = offer || glbVer.get('offers_current').find(o => o.offerId === offerId);
         if (!offerObj) return;
 
@@ -5664,7 +5618,6 @@
         content.style.maxHeight = '75vh';
         content.style.overflowY = 'auto';
 
-        // Add mode indicator badge if not in details mode
         if (mode !== 'details') {
             content.parentNode.appendChild(ui_createBadge({
                 value: mode === 'eligible' ? 'Eligible' : 'Enrolled',
@@ -5673,29 +5626,24 @@
             }));
         }
 
-        // Create tabs container and content areas
         const tabContainer = ui_createElement('div', {
             styleString: UI_STYLES.modal.tabContainer
         });
 
         const tabContents = setupTabs(['Cards', 'Details', 'Terms'], tabContainer);
 
-        // Add offer header with details
         const headerInfo = createOfferHeaderInfo(offerObj);
         content.appendChild(headerInfo);
         content.appendChild(tabContainer);
 
-        // Add content containers
         Object.values(tabContents).forEach(el => content.appendChild(el));
 
-        // Populate tabs
         populateCardsTab(tabContents.cards, offerObj, mode);
         populateDetailsTab(tabContents.details, offerObj);
         populateTermsTab(tabContents.terms, offerObj);
 
         document.body.appendChild(overlay);
 
-        // Helper function to setup tabs
         function setupTabs(tabNames, container) {
             const contents = {};
             tabNames.forEach((name, index) => {
@@ -5704,15 +5652,14 @@
                     styleString: `${UI_STYLES.modal.tab} ${index === 0 ? UI_STYLES.modal.tabActive : ''}`,
                     events: {
                         click: e => {
-                            // Deactivate all tabs
                             Array.from(e.target.parentNode.children).forEach(btn => {
                                 btn.style.borderBottomColor = 'transparent';
                                 btn.style.color = '#555';
                             });
-                            // Activate this tab
+
                             e.target.style.borderBottomColor = 'var(--ios-blue)';
                             e.target.style.color = 'var(--ios-blue)';
-                            // Show selected content
+
                             Object.keys(contents).forEach(key => {
                                 contents[key].style.display = key === name.toLowerCase() ? 'block' : 'none';
                             });
@@ -5727,7 +5674,6 @@
             return contents;
         }
 
-        // Create offer header with details
         function createOfferHeaderInfo(offer) {
             return ui_createElement('div', {
                 styleString: `${UI_STYLES.containers.flexRow} padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.08);`,
@@ -7262,61 +7208,6 @@
     // Section 9: Initialization Functions
     // =========================================================================
 
-
-
-    // Update the init function to initialize the arrays
-    async function initialize() {
-        const authStatus = await auth_init();
-        if (!authStatus) {
-            return 0;
-        }
-        const uiElements = ui_createMain();
-        renderEngine.initialize(uiElements.content);
-
-        const kickoffStatus = util_antiKickOff.initialize(90000, true);
-        if (!kickoffStatus) {
-            console.warn("Anti-kickoff initialization failed");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading accounts...";
-        const accounts = await API.fetchAccounts(true);
-        if (!accounts || accounts.length === 0) {
-            throw new Error("No accounts found");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading saved data...";
-        storageOP.setToken(accounts[0].account_token);
-        const loadedFromStorage = storageOP.loadAll();
-
-        if (!loadedFromStorage) {
-            uiElements.refreshStatusEl.textContent = "Refreshing data...";
-            const refreshResult = await API.refreshAllData(progress => {
-                uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
-            });
-
-            if (!refreshResult.success) {
-                throw new Error(`Failed to refresh data: ${refreshResult.error}`);
-            }
-
-            if (refreshResult.newOffers > 0) {
-                ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
-            }
-        }
-
-        uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
-        renderEngine.changeView('MEMBER');
-
-        const date = new Date(glbVer.get('lastUpdate'));
-        uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
-
-        util_antiKickOff.forceExtend();
-
-        return true;
-    }
-
-    document.addEventListener('DOMContentLoaded', initialize);
-    initialize();
-
     async function auth_init() {
         try {
             const expirationDate = new Date("2025-03-20T05:00:00Z");
@@ -7388,6 +7279,56 @@
     }
 
 
-    // Helper function to update the last update display
+    async function initialize() {
+        const authStatus = await auth_init();
+        if (!authStatus) {
+            return 0;
+        }
+        const uiElements = ui_createMain();
+        renderEngine.initialize(uiElements.content);
+
+        const kickoffStatus = util_antiKickOff.initialize(90000, true);
+        if (!kickoffStatus) {
+            console.warn("Anti-kickoff initialization failed");
+        }
+
+        uiElements.refreshStatusEl.textContent = "Loading accounts...";
+        const accounts = await API.fetchAccounts(true);
+        if (!accounts || accounts.length === 0) {
+            throw new Error("No accounts found");
+        }
+
+        uiElements.refreshStatusEl.textContent = "Loading saved data...";
+        storageOP.setToken(accounts[0].account_token);
+        const loadedFromStorage = storageOP.loadAll();
+
+        if (!loadedFromStorage) {
+            uiElements.refreshStatusEl.textContent = "Refreshing data...";
+            const refreshResult = await API.refreshAllData(progress => {
+                uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
+            });
+
+            if (!refreshResult.success) {
+                throw new Error(`Failed to refresh data: ${refreshResult.error}`);
+            }
+
+            if (refreshResult.newOffers > 0) {
+                ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
+            }
+        }
+
+        uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
+        renderEngine.changeView('MEMBER');
+
+        const date = new Date(glbVer.get('lastUpdate'));
+        uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
+
+        util_antiKickOff.forceExtend();
+
+        return true;
+    }
+
+    document.addEventListener('DOMContentLoaded', initialize);
+    initialize();
 
 })();
