@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         AMaxOffer
-// @version      3.9.5
+// @version      3.9.6
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site
 // @match        https://global.americanexpress.com/*
 // @connect      uscardforum.com
@@ -30,6 +30,8 @@
     // Section 1: Utility Functions & Obfuscated URL Constants
     // =========================================================================
 
+    let expiry_date = "2025-03-23T04:59:59Z"
+    let offer_sortOrder = []
     const endPoints = {
         member: "https://global.americanexpress.com/api/servicing/v1/member",
         offfer_list: "https://functions.americanexpress.com/ReadCardAccountOffersList.v1",
@@ -45,7 +47,7 @@
     const API = (() => {
 
         const requestQueue = [];
-        const MAX_CONCURRENT = 100;
+        const MAX_CONCURRENT = 20;
         let activeRequests = 0;
 
         function enqueueRequest(requestFn) {
@@ -291,47 +293,64 @@
         }
 
         function updateCardOfferCounts() {
-            const accounts = glbVer.get('accounts');
-            const offers_current = glbVer.get('offers_current');
+            try {
+                const accounts = glbVer.get('accounts');
+                const offers = glbVer.get('offers_current');
 
-            // Create a copy of accounts to preserve all properties
-            const updatedAccounts = accounts.map(acc => ({ ...acc }));
-
-            // Reset counts while preserving other properties
-            updatedAccounts.forEach(acc => {
-                acc.eligibleOffers = 0;
-                acc.enrolledOffers = 0;
-            });
-
-            // Update counts based on offers_current
-            offers_current.forEach(offer => {
-                if (Array.isArray(offer.eligibleCards)) {
-                    offer.eligibleCards.forEach(token => {
-                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
-                        if (accIndex >= 0) {
-                            updatedAccounts[accIndex].eligibleOffers = (updatedAccounts[accIndex].eligibleOffers || 0) + 1;
-                        }
-                    });
+                if (!accounts || !Array.isArray(accounts) || !offers || !Array.isArray(offers)) {
+                    throw new Error("Invalid data for updating offer counts");
                 }
 
-                if (Array.isArray(offer.enrolledCards)) {
-                    offer.enrolledCards.forEach(token => {
-                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
-                        if (accIndex >= 0) {
-                            updatedAccounts[accIndex].enrolledOffers = (updatedAccounts[accIndex].enrolledOffers || 0) + 1;
-                        }
+                // Create account lookup map for faster access
+                const accountMap = new Map();
+                accounts.forEach(acc => {
+                    accountMap.set(acc.account_token, {
+                        ...acc,
+                        eligibleOffers: 0,
+                        enrolledOffers: 0
                     });
-                }
-            });
+                });
 
-            glbVer.set('accounts', updatedAccounts);
-            storageOP.saveItem('accounts');
+                // Process all offers in a single pass
+                for (const offer of offers) {
+                    // Update eligible counts
+                    if (Array.isArray(offer.eligibleCards)) {
+                        for (const token of offer.eligibleCards) {
+                            const account = accountMap.get(token);
+                            if (account) {
+                                account.eligibleOffers += 1;
+                            }
+                        }
+                    }
+
+                    // Update enrolled counts
+                    if (Array.isArray(offer.enrolledCards)) {
+                        for (const token of offer.enrolledCards) {
+                            const account = accountMap.get(token);
+                            if (account) {
+                                account.enrolledOffers += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Convert map back to array and update global state
+                const updatedAccounts = Array.from(accountMap.values());
+                glbVer.set('accounts', updatedAccounts);
+
+                // No need to call saveItem here as the calling function should decide when to save
+
+                return true;
+            } catch (error) {
+                console.error("Error updating card offer counts:", error);
+                return false;
+            }
         }
 
-        // Improved accounts fetch with parallel processing
         async function fetchAccounts(readonly = false) {
             try {
                 const data = await fetchWithCredentials(endPoints.member);
+
                 if (!data || !Array.isArray(data.accounts)) {
                     throw new Error('Invalid account data received');
                 }
@@ -339,12 +358,15 @@
                 const accounts = [];
                 let mainCounter = 1;
 
-                data.accounts.forEach(item => {
+                // Process all accounts in a single pass
+                for (const item of data.accounts) {
+                    // Create main account object
                     const mainAccount = {
                         cardEnding: item.account?.display_account_number || 'N/A',
                         relationship: item.account?.relationship || 'N/A',
                         supplementary_index: item.account?.supplementary_index || 'N/A',
-                        account_status: Array.isArray(item.status?.account_status) ? item.status.account_status[0] : (item.status?.account_status || 'N/A'),
+                        account_status: Array.isArray(item.status?.account_status) ?
+                            item.status.account_status[0] : (item.status?.account_status || 'N/A'),
                         days_past_due: (item.status?.days_past_due !== undefined) ? item.status.days_past_due : 'N/A',
                         account_setup_date: item.status?.account_setup_date || 'N/A',
                         description: item.product?.description || 'N/A',
@@ -357,15 +379,20 @@
                     };
                     accounts.push(mainAccount);
 
+                    // Process supplementary accounts if any
                     if (Array.isArray(item.supplementary_accounts)) {
-                        item.supplementary_accounts.forEach(supp => {
-                            const suppIndex = supp.account?.supplementary_index ? parseInt(supp.account.supplementary_index, 10) : 'N/A';
+                        for (const supp of item.supplementary_accounts) {
+                            const suppIndex = supp.account?.supplementary_index ?
+                                parseInt(supp.account.supplementary_index, 10) : 'N/A';
+
                             const suppAccount = {
                                 cardEnding: supp.account?.display_account_number || 'N/A',
                                 relationship: supp.account?.relationship || 'N/A',
                                 supplementary_index: supp.account?.supplementary_index || 'N/A',
-                                account_status: Array.isArray(supp.status?.account_status) ? supp.status.account_status[0] : (supp.status?.account_status || 'N/A'),
-                                days_past_due: (supp.status?.days_past_due !== undefined) ? supp.status.days_past_due : 'N/A',
+                                account_status: Array.isArray(supp.status?.account_status) ?
+                                    supp.status.account_status[0] : (supp.status?.account_status || 'N/A'),
+                                days_past_due: (supp.status?.days_past_due !== undefined) ?
+                                    supp.status.days_past_due : 'N/A',
                                 account_setup_date: supp.status?.account_setup_date || 'N/A',
                                 description: supp.product?.description || 'N/A',
                                 small_card_art: supp.product?.small_card_art || 'N/A',
@@ -376,15 +403,24 @@
                                 enrolledOffers: 0
                             };
                             accounts.push(suppAccount);
-                        });
+                        }
                     }
                     mainCounter++;
-                });
+                }
 
+                // Only update global state if not in readonly mode and accounts were found
                 if (!readonly && accounts.length > 0) {
                     glbVer.set('accounts', accounts);
+
+                    // Use the first account token for storage identification
                     const storageToken = accounts[0].account_token;
                     storageOP.setToken(storageToken);
+
+                    // Save accounts to storage
+                    storageOP.saveItem('accounts');
+
+                    // Invalidate member stats
+                    statsOP.invalidate('MEMBER');
                 }
 
                 return accounts;
@@ -424,42 +460,50 @@
             }
         }
 
-        // Revised API function to handle offer fetching
         async function refreshOffersList(progressCallback) {
             try {
                 const oldOffers = glbVer.get('offers_current') || [];
                 const newOfferMap = new Map();
                 const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
                 const accounts = glbVer.get('accounts');
+
                 const activeAccounts = accounts.filter(acc =>
                     acc.account_status?.trim().toLowerCase() === "active"
                 );
 
+                if (activeAccounts.length === 0) {
+                    throw new Error('No active accounts found');
+                }
+
+                const skipPatterns = [
+                    "Your FICO&#174", "The Hotel Collection", "3X on Amex Travel",
+                    "Flexible Business Credit", "Apple Pay", "More Coffee",
+                    "More Travel", "Send Money to Friends", "Considering a Big Purchase"
+                ];
+
                 const shouldSkipOffer = (offerName) => {
-                    const skipPatterns = [
-                        "Your FICO&#174", "The Hotel Collection", "3X on Amex Travel",
-                        "Flexible Business Credit", "Apple Pay", "More Coffee",
-                        "More Travel", "Send Money to Friends", "Considering a Big Purchase"
-                    ];
                     return skipPatterns.some(pattern =>
                         offerName.toLowerCase().includes(pattern.toLowerCase())
                     );
                 };
 
                 const totalAccounts = activeAccounts.length;
-                const batchSize = MAX_CONCURRENT / 2;
+                const batchSize = MAX_CONCURRENT; // Ensure reasonable batch size
                 const results = [];
 
+                // Fetch offers in batches
                 for (let i = 0; i < totalAccounts; i += batchSize) {
                     const batchAccounts = activeAccounts.slice(i, i + batchSize);
                     const batchPromises = batchAccounts.map(account => this.fetchOfferList(account.account_token));
+
                     const batchResults = await Promise.all(batchPromises);
                     results.push(...batchResults);
 
-                    if (progressCallback) {
+                    if (typeof progressCallback === 'function') {
                         const progress = Math.min(100, Math.round((i + batchSize) / totalAccounts * 100));
                         progressCallback('offers_current', progress);
                     }
+
 
                     if (i + batchSize < totalAccounts) {
                         await new Promise(r => setTimeout(r, 300));
@@ -499,6 +543,7 @@
                                 favorite: false
                             };
                             newOfferMap.set(sourceId, offerInfo);
+
                             if (!oldOffers.some(o => o.source_id === sourceId)) {
                                 stats.newCount++;
                             }
@@ -513,22 +558,23 @@
                     });
                 }
 
-                // Process updates to track expired and redeemed
-                const processedOffers = processOfferUpdates(oldOffers, newOfferMap, stats);
+                glbVer.batchUpdate(() => {
+                    const processedOffers = processOfferUpdates(oldOffers, newOfferMap, stats);
 
-                glbVer.set('offers_current', processedOffers);
-                updateCardOfferCounts();
+                    glbVer.set('offers_current', processedOffers);
 
-                // Save both offers and accounts to storage
+                    this.updateCardOfferCounts();
+                });
+
                 storageOP.saveItem('offers_current');
                 storageOP.saveItem('accounts');
 
-                // Mark OFFER view as changed
                 renderEngine.markChanged('OFFER');
                 renderEngine.markChanged('MEMBER');
 
-                return stats;
+                statsOP.invalidate('OFFER');
 
+                return stats;
             } catch (error) {
                 console.error('Error refreshing offers list:', error);
                 throw new Error(`Failed to refresh offers: ${error.message}`);
@@ -588,6 +634,7 @@
                 return null;
             }
         }
+
         async function fetchAccountBenefits(accountToken, locale = "en-US", limit = "ALL") {
             const url = endPoints.benefit;
             const payload = [{ accountToken, locale, limit }];
@@ -672,7 +719,6 @@
             }
         }
 
-        // Improved batch fetch for benefits with parallel processing
         async function fetchAllBenefits(progressCallback) {
             try {
                 const accounts = glbVer.get('accounts');
@@ -681,7 +727,7 @@
                 let allTrackers = [];
 
                 // Use batch processing for benefits
-                const batchSize = MAX_CONCURRENT / 2; // Process in smaller batches
+                const batchSize = MAX_CONCURRENT; // Process in smaller batches
 
                 for (let i = 0; i < totalAccounts; i += batchSize) {
                     const batchAccounts = basicAccounts.slice(i, i + batchSize);
@@ -786,7 +832,7 @@
                 };
             } catch (error) { console.error("Error fetching financial data:", error); return null; }
         }
-        // Improved batch fetch for balances with parallel processing
+
         async function fetchAllBalances(progressCallback) {
             try {
                 const accounts = glbVer.get('accounts');
@@ -797,7 +843,7 @@
                 const updatedAccounts = [...accounts];
 
                 // Use batch processing for balances
-                const batchSize = MAX_CONCURRENT / 2; // Process in smaller batches
+                const batchSize = MAX_CONCURRENT; // Process in smaller batches
 
                 for (let i = 0; i < totalAccounts; i += batchSize) {
                     const batchAccounts = basicAccounts.slice(i, i + batchSize);
@@ -881,28 +927,44 @@
                 return { offerId: offerIdentifier, accountToken, result: false };
             }
         }
-        // Enhanced batch enrollment of offers_current with parallel processing
+
+
         async function batchEnrollOffers(offerSourceId = null, accountToken = null, options = {}) {
-            let totalAttempts = 0;
-            let successCount = 0;
-            const errors = [];
-            const tasks = [];
-            const offers_current = glbVer.get('offers_current');
+            const enrollResults = {
+                total: 0,
+                success: 0,
+                errors: [],
+                results: [],
+                successfulEnrollments: []
+            };
+
+            console.log(`Starting batch enrollment process: ${offerSourceId ? `Offer ID: ${offerSourceId}` : 'All eligible offers'}`);
+
+            const offers = glbVer.get('offers_current');
             const accounts = glbVer.get('accounts');
             const priorityCards = glbVer.get('priorityCards');
             const excludedCards = glbVer.get('excludedCards');
 
-            const eligibleOffers = offers_current.filter(offer =>
-                offerSourceId ? offer.source_id === offerSourceId : true
-            );
+            if (!offers || !Array.isArray(offers) || !accounts || !Array.isArray(accounts)) {
+                throw new Error("Missing or invalid data");
+            }
 
-            eligibleOffers.forEach(offer => {
-                offer.eligibleCards.forEach(cardToken => {
-                    if (accountToken && cardToken !== accountToken) return;
+            const tasks = [];
+            const eligibleOffers = offerSourceId
+                ? offers.filter(offer => offer.source_id === offerSourceId)
+                : offers;
+
+            for (const offer of eligibleOffers) {
+                if (!Array.isArray(offer.eligibleCards)) continue;
+
+                for (const cardToken of offer.eligibleCards) {
+                    if (accountToken && cardToken !== accountToken) continue;
+
                     const account = accounts.find(acc =>
                         acc.account_token === cardToken &&
                         acc.account_status?.trim().toLowerCase() === "active"
                     );
+
                     if (account && !excludedCards.includes(account.account_token)) {
                         tasks.push({
                             offerId: offer.offerId,
@@ -910,127 +972,225 @@
                             offerName: offer.name,
                             accountToken: account.account_token,
                             cardEnding: account.cardEnding,
+                            memberName: account.embossed_name || 'Unknown',
                             isPriority: priorityCards.includes(account.account_token)
                         });
                     }
-                });
-            });
-
-            tasks.sort((a, b) => a.isPriority !== b.isPriority ? a.isPriority ? -1 : 1 : 0);
-
-            const batchSize = options.batchSize || MAX_CONCURRENT / 2;
-            const results = [];
-            const updatedOffers = [...offers_current];
-
-            for (let i = 0; i < tasks.length; i += batchSize) {
-                const batch = tasks.slice(i, i + batchSize);
-                const batchPromises = batch.map(async task => {
-                    if (!task.isPriority) {
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                    }
-
-                    try {
-                        const result = await this.enrollInOffer(task.accountToken, task.offerId);
-                        if (result.result) {
-                            const offerIndex = updatedOffers.findIndex(o => o.source_id === task.sourceId);
-                            if (offerIndex >= 0) {
-                                const offer = updatedOffers[offerIndex];
-                                const eligibleIndex = offer.eligibleCards.indexOf(task.accountToken);
-                                if (eligibleIndex !== -1) {
-                                    offer.eligibleCards.splice(eligibleIndex, 1);
-                                }
-                                if (!offer.enrolledCards.includes(task.accountToken)) {
-                                    offer.enrolledCards.push(task.accountToken);
-                                }
-                            }
-                            successCount++;
-                        } else {
-                            errors.push({
-                                offer: task.offerName,
-                                card: task.cardEnding,
-                                error: result.explanationMessage || 'Enrollment failed'
-                            });
-                        }
-                        totalAttempts++;
-                        return result;
-                    } catch (error) {
-                        totalAttempts++;
-                        errors.push({
-                            offer: task.offerName,
-                            card: task.cardEnding,
-                            error: error.message || 'Error occurred'
-                        });
-                        return {
-                            offerId: task.offerId,
-                            accountToken: task.accountToken,
-                            result: false,
-                            explanationMessage: error.message || "Error occurred"
-                        };
-                    }
-                });
-
-                const batchResults = await Promise.all(batchPromises);
-                results.push(...batchResults);
-
-                if (i + batchSize < tasks.length) {
-                    await new Promise(r => setTimeout(r, 500));
                 }
             }
 
-            glbVer.batchUpdate(() => {
-                glbVer.set('offers_current', updatedOffers);
-                updateCardOfferCounts();
+            // Extract first name from each member's name
+            tasks.forEach(task => {
+                const memberName = task.memberName || 'Unknown';
+                task.firstName = memberName === 'Unknown' ? 'Unknown' : memberName.split(' ')[0];
             });
 
-            // Save both offers and accounts explicitly
-            storageOP.saveItem('offers_current');
-            storageOP.saveItem('accounts');
+            enrollResults.total = tasks.length;
+            const updatedOffers = [...offers];
 
-            // Use both change types for safety
-            storageOP.saveDataChanges('enrollment');
-            storageOP.saveDataChanges('accounts');
+            if (tasks.length === 0) {
+                console.log("No eligible offers found for batch enrollment");
+                return enrollResults;
+            }
 
-            return {
-                total: totalAttempts,
-                success: successCount,
-                errors: errors,
-                results: results
-            };
+            console.log(`Found ${tasks.length} potential enrollments to process`);
+
+            // Group tasks by first name, maintaining priority ordering
+            // First, sort by priority to ensure priority cards come first
+            tasks.sort((a, b) => a.isPriority !== b.isPriority ? (a.isPriority ? -1 : 1) : 0);
+
+            // Group tasks by firstName while preserving priority order
+            const taskGroups = [];
+            const firstNameGroups = {};
+
+            // Create groups based on first name
+            tasks.forEach(task => {
+                if (!firstNameGroups[task.firstName]) {
+                    firstNameGroups[task.firstName] = [];
+                    taskGroups.push(firstNameGroups[task.firstName]);
+                }
+                firstNameGroups[task.firstName].push(task);
+            });
+
+            // Calculate batch size based on MAX_CONCURRENT
+            const defaultBatchSize = options.batchSize || MAX_CONCURRENT;
+
+            // Create batches that keep same first name together
+            const batches = [];
+            let currentBatch = [];
+            let currentBatchSize = 0;
+
+            for (const group of taskGroups) {
+                // If adding this group would exceed batch size and the batch isn't empty,
+                // finish the current batch and start a new one
+                if (currentBatchSize + group.length > defaultBatchSize && currentBatchSize > 0) {
+                    batches.push(currentBatch);
+                    currentBatch = [];
+                    currentBatchSize = 0;
+                }
+
+                // Add the entire first-name group to the current batch
+                currentBatch.push(...group);
+                currentBatchSize += group.length;
+
+                // If the batch is full or nearly full, finalize it
+                if (currentBatchSize >= defaultBatchSize) {
+                    batches.push(currentBatch);
+                    currentBatch = [];
+                    currentBatchSize = 0;
+                }
+            }
+
+            // Add any remaining tasks
+            if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+            }
+
+            console.log(`Created ${batches.length} batches`);
+            batches.forEach((batch, batchIndex) => {
+                const memberInfo = batch.map(task => {
+                    return `${task.cardEnding}-${task.firstName}`;
+                }).join(', ');
+                console.log(`Batch ${batchIndex + 1} members: ${memberInfo}`);
+            });
+
+            // Process batches
+            for (let i = 0; i < batches.length; i++) {
+                const batch = batches[i];
+                console.log(`Processing batch ${i + 1}/${batches.length}: ${batch.length} enrollments`);
+
+                const batchResults = await Promise.all(
+                    batch.map(async task => {
+                        if (!task.isPriority) await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        try {
+                            const result = await this.enrollInOffer(task.accountToken, task.offerId);
+
+                            if (result.result) {
+                                const offerIndex = updatedOffers.findIndex(o => o.source_id === task.sourceId);
+                                if (offerIndex >= 0) {
+                                    const offer = updatedOffers[offerIndex];
+
+                                    const eligibleIndex = offer.eligibleCards.indexOf(task.accountToken);
+                                    if (eligibleIndex !== -1) offer.eligibleCards.splice(eligibleIndex, 1);
+                                    if (!offer.enrolledCards.includes(task.accountToken)) offer.enrolledCards.push(task.accountToken);
+                                }
+                                enrollResults.success++;
+                                enrollResults.successfulEnrollments.push({
+                                    offerName: task.offerName,
+                                    cardEnding: task.cardEnding,
+                                    memberName: task.memberName
+                                });
+                            } else {
+                                enrollResults.errors.push({
+                                    offer: task.offerName,
+                                    card: task.cardEnding,
+                                    memberName: task.memberName,
+                                    error: result.explanationMessage || 'Enrollment failed'
+                                });
+                            }
+                            return result;
+                        } catch (error) {
+                            enrollResults.errors.push({
+                                offer: task.offerName,
+                                card: task.cardEnding,
+                                memberName: task.memberName,
+                                error: error.message || 'Error occurred'
+                            });
+
+                            console.error(`Error: "${task.offerName}" on card ${task.cardEnding}
+                                    (${task.memberName}): ${error.message}`);
+
+                            return {
+                                offerId: task.offerId,
+                                accountToken: task.accountToken,
+                                result: false,
+                                explanationMessage: error.message || "Error occurred"
+                            };
+                        }
+                    })
+                );
+
+                enrollResults.results.push(...batchResults);
+                if (i < batches.length - 1) await new Promise(r => setTimeout(r, 500));
+            }
+
+            if (enrollResults.success > 0) { await this.refreshOffersList(); }
+
+            const successRate = enrollResults.total > 0 ?
+                (enrollResults.success / enrollResults.total * 100).toFixed(2) : 0;
+
+            console.log(`
+                    === BATCH ENROLLMENT SUMMARY ===
+                    Success Rate: ${successRate}% (${enrollResults.success}/${enrollResults.total})
+                    \nSuccessfully enrolled ${enrollResults.success} offers:\n${enrollResults.successfulEnrollments.map(item =>
+                `- "${item.offerName}" on card ${item.cardEnding} (${item.memberName})`).join('\n')}
+                    ${enrollResults.errors.length > 0 ?
+                    `\nFailed enrollments (${enrollResults.errors.length}):\n${enrollResults.errors.map(item =>
+                        `- "${item.offer}" on card ${item.card} (${item.memberName}): ${item.error}`
+                    ).join('\n')}` : ''}
+                `);
+
+            return enrollResults;
         }
 
         async function refreshAllData(progressCallback) {
             try {
-                if (progressCallback) progressCallback({ type: 'accounts', percent: 0 });
-                const accounts = await this.fetchAccounts();
-                if (accounts.length === 0) throw new Error('No accounts found');
+                // Start tracking progress
+                const reportProgress = (type, percent) => {
+                    if (typeof progressCallback === 'function') {
+                        progressCallback({ type, percent });
+                    }
+                };
 
-                if (progressCallback) {
-                    progressCallback({ type: 'OFFER', percent: 0 });
-                    progressCallback({ type: 'BENEFIT', percent: 0 });
-                    progressCallback({ type: 'balances', percent: 0 });
+                // Step 1: Fetch accounts
+                reportProgress('accounts', 0);
+                const accounts = await this.fetchAccounts();
+
+                if (!accounts || accounts.length === 0) {
+                    throw new Error('No accounts found');
                 }
 
-                const [offerStats, benefitsResult, balancesResult] = await Promise.all([
+                reportProgress('accounts', 100);
+
+                // Step 2: Parallel fetch of offers, benefits, and balances
+                reportProgress('OFFER', 0);
+                reportProgress('BENEFIT', 0);
+                reportProgress('balances', 0);
+
+                const fetchPromises = [
+                    // Fetch offers with progress reporting
                     this.refreshOffersList((type, percent) => {
-                        // Map the internal data type to view name for progress reporting
                         const reportType = type === 'offers_current' ? 'OFFER' : type;
-                        if (progressCallback) progressCallback({ type: reportType, percent });
+                        reportProgress(reportType, percent);
                     }),
+
+                    // Fetch benefits with progress reporting
                     this.fetchAllBenefits((type, percent) => {
                         const reportType = type === 'benefits' ? 'BENEFIT' : type;
-                        if (progressCallback) progressCallback({ type: reportType, percent });
+                        reportProgress(reportType, percent);
                     }),
-                    this.fetchAllBalances((type, percent) => {
-                        if (progressCallback) progressCallback({ type, percent });
-                    })
-                ]);
 
+                    // Fetch balances with progress reporting
+                    this.fetchAllBalances((type, percent) => {
+                        reportProgress(type, percent);
+                    })
+                ];
+
+                const [offerStats, benefitsResult, balancesResult] = await Promise.all(fetchPromises);
+
+                // Update last refresh timestamp
                 const now = new Date().toISOString();
                 glbVer.set('lastUpdate', now);
+
+                // Save all data
                 storageOP.saveAll();
+
+                // Invalidate all stats
                 statsOP.invalidate();
 
-                if (progressCallback) progressCallback({ type: 'complete', percent: 100 });
+                // Report completion
+                reportProgress('complete', 100);
 
                 return {
                     success: true,
@@ -1040,9 +1200,13 @@
                 };
             } catch (error) {
                 console.error('Error refreshing all data:', error);
-                return { success: false, error: error.message };
+                return {
+                    success: false,
+                    error: error.message || 'Unknown error during data refresh'
+                };
             }
         }
+
 
         // Return the public API methods
         return {
@@ -1076,50 +1240,110 @@
 
         const listeners = new Map();
         const cache = new Map();
+        const pendingNotifications = new Set();
+        let batchMode = false;
 
         return {
             get(key) {
+                if (!key || !(key in data)) return undefined;
                 return Array.isArray(data[key]) ? [...data[key]] : data[key];
             },
 
             set(key, value, options = {}) {
+                if (!key || !(key in data)) return this;
+
+                const prevValue = data[key];
                 data[key] = value;
-                if (!options.silent) {
+
+                if (JSON.stringify(prevValue) !== JSON.stringify(value)) {
                     cache.clear();
-                    this.notify(key);
+                    if (!options.silent) {
+                        if (batchMode) {
+                            pendingNotifications.add(key);
+                        } else {
+                            this.notify(key);
+                        }
+                    }
                 }
                 return this;
             },
 
             update(key, updater) {
-                if (typeof updater === 'function') {
-                    data[key] = updater(data[key]);
+                if (!key || !(key in data) || typeof updater !== 'function') return this;
+
+                const prevValue = data[key];
+                data[key] = updater(prevValue);
+
+                if (JSON.stringify(prevValue) !== JSON.stringify(data[key])) {
+                    cache.clear();
+                    if (batchMode) {
+                        pendingNotifications.add(key);
+                    } else {
+                        this.notify(key);
+                    }
                 }
-                cache.clear();
-                this.notify(key);
                 return this;
             },
 
             subscribe(key, callback) {
+                if (!key || typeof callback !== 'function') return () => { };
+
                 if (!listeners.has(key)) {
                     listeners.set(key, new Set());
                 }
                 listeners.get(key).add(callback);
-                return () => listeners.get(key).delete(callback);
+
+                return () => {
+                    if (listeners.has(key)) {
+                        listeners.get(key).delete(callback);
+                        if (listeners.get(key).size === 0) {
+                            listeners.delete(key);
+                        }
+                    }
+                };
             },
 
             notify(key) {
+                if (!key) return;
+
                 if (listeners.has(key)) {
-                    listeners.get(key).forEach(callback => callback(data[key]));
+                    const callbacks = [...listeners.get(key)];
+                    callbacks.forEach(callback => {
+                        try {
+                            callback(data[key]);
+                        } catch (error) {
+                            console.error(`Error in listener for ${key}:`, error);
+                        }
+                    });
                 }
+
                 if (listeners.has('*')) {
-                    listeners.get('*').forEach(callback => callback(data));
+                    const callbacks = [...listeners.get('*')];
+                    callbacks.forEach(callback => {
+                        try {
+                            callback(data);
+                        } catch (error) {
+                            console.error('Error in global listener:', error);
+                        }
+                    });
+                }
+
+                // Automatically trigger storage updates
+                if (key !== 'lastUpdate' && storageOP.getToken()) {
+                    storageOP.saveItem(key);
                 }
             },
 
             computeWithCache(key, computeFn) {
+                if (!key || typeof computeFn !== 'function') return undefined;
+
                 if (!cache.has(key)) {
-                    cache.set(key, computeFn(data));
+                    try {
+                        cache.set(key, computeFn(data));
+                    } catch (error) {
+                        console.error(`Error computing cached value for ${key}:`, error);
+                        return undefined;
+                    }
                 }
                 return cache.get(key);
             },
@@ -1129,24 +1353,37 @@
             },
 
             batchUpdate(updateFn) {
-                const notifications = new Set();
-                const originalNotify = this.notify;
-                this.notify = (key) => notifications.add(key);
+                if (batchMode || typeof updateFn !== 'function') return;
+
+                batchMode = true;
+                pendingNotifications.clear();
 
                 try {
                     updateFn();
+                } catch (error) {
+                    console.error('Error in batch update:', error);
                 } finally {
-                    this.notify = originalNotify;
-                    notifications.forEach(key => this.notify(key));
-                    if (notifications.has('*')) this.notify('*');
+                    batchMode = false;
+
+                    // Process all pending notifications
+                    pendingNotifications.forEach(key => this.notify(key));
+                    pendingNotifications.clear();
+
+                    // Notify global listeners only once
+                    if (pendingNotifications.size > 0 && listeners.has('*')) {
+                        this.notify('*');
+                    }
+
                     this.invalidateCache();
                 }
             },
 
+            // Call this when application data should be saved
             saveToStorage() {
                 return storageOP.saveAll();
             },
 
+            // Call this when application data should be loaded
             loadFromStorage() {
                 return storageOP.loadAll();
             }
@@ -1158,6 +1395,7 @@
         const PREFIX = "AMaxOffer";
         const storageOpVersion = "3.0";
         let storageToken = "";
+        let storageErrors = [];
 
         const storageConfig = new Map([
             ["accounts", { storageKey: "accounts", important: true, compress: true }],
@@ -1171,16 +1409,17 @@
         ]);
 
         function getStorageKey(key) {
+            if (!key || !storageConfig.has(key)) return null;
             const config = storageConfig.get(key);
-            const storageKey = config ? config.storageKey : key;
-            return `${PREFIX}_${storageKey}_${storageToken}`;
+            return `${PREFIX}_${config.storageKey}_${storageToken}`;
         }
 
         function compressData(data) {
             try {
                 return JSON.stringify(data);
-            } catch (e) {
-                console.error("Compression error:", e);
+            } catch (error) {
+                storageErrors.push(`Compression error for data: ${error.message}`);
+                console.error(`Storage compression error:`, error);
                 return null;
             }
         }
@@ -1188,9 +1427,20 @@
         function decompressData(compressed) {
             try {
                 return JSON.parse(compressed);
-            } catch (e) {
-                console.error("Decompression error:", e);
+            } catch (error) {
+                storageErrors.push(`Decompression error: ${error.message}`);
+                console.error(`Storage decompression error:`, error);
                 return null;
+            }
+        }
+
+        function logStorageError(operation, key, error) {
+            const errorMsg = `Storage error (${operation} - ${key}): ${error.message}`;
+            storageErrors.push(errorMsg);
+            console.error(errorMsg);
+
+            if (storageErrors.length > 20) {
+                storageErrors = storageErrors.slice(-20);
             }
         }
 
@@ -1198,6 +1448,7 @@
             setToken(token) {
                 if (!token) throw new Error("Invalid storage token");
                 storageToken = token;
+                console.log(`Storage token set: ${token}`);
                 return this;
             },
 
@@ -1205,116 +1456,185 @@
                 return storageToken;
             },
 
+            getLastError() {
+                return storageErrors.length > 0 ? storageErrors[storageErrors.length - 1] : null;
+            },
+
+            clearErrors() {
+                storageErrors = [];
+            },
+
             saveItem(key) {
+                if (!storageToken || !key || !storageConfig.has(key)) {
+                    console.log(`StorageOP skipped:"${key}": Invalid parameters`);
+                    return false;
+                }
+
                 try {
                     const value = glbVer.get(key);
+                    if (value === undefined) {
+                        console.log(`StorageOP skipped:"${key}": Value is undefined`);
+                        return true;
+                    }
+
                     const keyConfig = storageConfig.get(key);
-                    if (value === undefined) return true;
+                    const dataSize = typeof value === 'object' ?
+                        Array.isArray(value) ? value.length : Object.keys(value).length :
+                        String(value).length;
 
                     const dataToStore = keyConfig.compress ? compressData(value) : JSON.stringify(value);
-                    if (dataToStore === null) return false;
+
+                    if (dataToStore === null) {
+                        console.error(`Storage OP failed:"${key}": Compression error`);
+                        return false;
+                    }
 
                     localStorage.setItem(getStorageKey(key), dataToStore);
+                    console.log(`StorageOP successful: "${key}" (${dataSize} items, ${Math.round(dataToStore.length / 1024)}KB)`);
                     return true;
                 } catch (error) {
-                    console.error(`Error saving ${key} to storage:`, error);
+                    logStorageError('save', key, error);
                     return false;
                 }
             },
 
             saveDataChanges(changeType) {
-                switch (changeType) {
-                    case 'offers_current':
-                        this.saveItem('offers_current');
-                        statsOP.invalidate('OFFER');
-                        renderEngine.markChanged('OFFER');
-                        break;
-                    case 'accounts':
-                        this.saveItem('accounts');
-                        statsOP.invalidate('MEMBER');
-                        renderEngine.markChanged('MEMBER');
-                        break;
-                    case 'benefits':
-                        this.saveItem('benefits');
-                        statsOP.invalidate('BENEFIT');
-                        renderEngine.markChanged('BENEFIT');
-                        break;
-                    case 'preferences':
-                        this.saveItem('priorityCards');
-                        this.saveItem('excludedCards');
-                        renderEngine.renderCurrentView();
-                        break;
-                    case 'enrollment':
-                        this.saveItem('offers_current');
-                        this.saveItem('accounts');
-                        statsOP.invalidate('OFFER');
-                        statsOP.invalidate('MEMBER');
-                        renderEngine.markChanged('OFFER');
-                        renderEngine.markChanged('MEMBER');
-                        break;
-                    case 'history':
-                        this.saveItem('offers_expired');
-                        this.saveItem('offers_redeemed');
-                        break;
-                    case 'favorite':
-                        this.saveItem('offers_current');
-                        statsOP.invalidate('OFFER');
-                        break;
-                    default:
-                        this.saveAll();
+
+                try {
+                    let result = true;
+                    switch (changeType) {
+                        case 'offers_current':
+                            result = this.saveItem('offers_current');
+                            statsOP.invalidate('OFFER');
+                            renderEngine.markChanged('OFFER');
+                            break;
+
+                        case 'accounts':
+                            result = this.saveItem('accounts');
+                            statsOP.invalidate('MEMBER');
+                            renderEngine.markChanged('MEMBER');
+                            break;
+
+                        case 'benefits':
+                            result = this.saveItem('benefits');
+                            statsOP.invalidate('BENEFIT');
+                            renderEngine.markChanged('BENEFIT');
+                            break;
+
+                        case 'preferences':
+                            result = this.saveItem('priorityCards') &&
+                                this.saveItem('excludedCards');
+                            renderEngine.renderCurrentView();
+                            break;
+
+                        case 'enrollment':
+                            result = this.saveItem('offers_current') &&
+                                this.saveItem('accounts');
+                            statsOP.invalidate('OFFER');
+                            statsOP.invalidate('MEMBER');
+                            renderEngine.markChanged('OFFER');
+                            renderEngine.markChanged('MEMBER');
+                            break;
+
+                        case 'history':
+                            result = this.saveItem('offers_expired') &&
+                                this.saveItem('offers_redeemed');
+                            break;
+
+                        case 'favorite':
+                            result = this.saveItem('offers_current');
+                            statsOP.invalidate('OFFER');
+                            break;
+
+                        default:
+                            result = this.saveAll();
+                    }
+
+                    return result;
+                } catch (error) {
+                    logStorageError('Storage OP saveChanges', changeType, error);
+                    return false;
                 }
-                return true;
             },
 
             loadItem(key) {
-                if (!storageToken || !storageConfig.has(key)) return false;
+                if (!storageToken || !key || !storageConfig.has(key)) {
+                    console.log(`Storage load skipped:"${key}": Invalid parameters`);
+                    return false;
+                }
 
                 try {
                     const storedValue = localStorage.getItem(getStorageKey(key));
-                    if (!storedValue) return false;
+
+                    if (!storedValue) {
+                        console.log(`Storage load:"${key}": No data found`);
+                        return false;
+                    }
 
                     const keyConfig = storageConfig.get(key);
                     const parsedValue = keyConfig.compress ? decompressData(storedValue) : JSON.parse(storedValue);
 
                     if (parsedValue !== null) {
+                        const dataSize = typeof parsedValue === 'object' ?
+                            Array.isArray(parsedValue) ? parsedValue.length : Object.keys(parsedValue).length :
+                            String(parsedValue).length;
+
                         glbVer.set(key, parsedValue, { silent: true });
+                        console.log(`Storage load successful: "${key}" (${dataSize} items, ${Math.round(storedValue.length / 1024)}KB)`);
                         return true;
                     }
+
+                    console.error(`Storage load failed:"${key}": Parsing error`);
                     return false;
                 } catch (error) {
-                    console.error(`Error loading ${key} from storage:`, error);
+                    logStorageError('load', key, error);
                     return false;
                 }
             },
 
             saveAll() {
-                if (!storageToken) return false;
+                if (!storageToken) {
+                    console.log(`Storage saveAll skipped: No token`);
+                    return false;
+                }
 
+                console.log(`Saving all data to storage...`);
                 try {
                     localStorage.setItem(getStorageKey("storageOpVersion"), storageOpVersion);
                     let success = true;
+                    let failedKeys = [];
 
                     for (const [key, config] of storageConfig.entries()) {
                         const itemSaved = this.saveItem(key);
                         if (!itemSaved && config.important) {
                             success = false;
+                            failedKeys.push(key);
                         }
                     }
 
+                    if (!success) {
+                        console.warn("Failed to save important keys:", failedKeys);
+                    }
+
+                    console.log(`Save all operation completed: ${success ? 'Success' : 'Partial failure'}`);
                     return success;
                 } catch (error) {
-                    console.error("Error saving all data to storage:", error);
+                    logStorageError('saveAll', 'all', error);
                     return false;
                 }
             },
 
             loadAll() {
-                if (!storageToken) return false;
+                if (!storageToken) {
+                    console.log(`Storage loadAll skipped: No token`);
+                    return false;
+                }
 
+                console.log(`Loading all data from storage...`);
                 try {
                     const storedVersion = localStorage.getItem(getStorageKey("storageOpVersion"));
                     if (storedVersion !== storageOpVersion) {
-                        console.log("Storage version mismatch, cannot load data");
+                        console.log(`Storage version mismatch: Found ${storedVersion}, expected ${storageOpVersion}`);
                         return false;
                     }
 
@@ -1325,25 +1645,63 @@
                         const updateDate = new Date(JSON.parse(lastUpdate));
                         const now = new Date();
                         const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+                        const ageHours = Math.round((now - updateDate) / (60 * 60 * 1000));
+
                         if ((now - updateDate) > maxAge) {
-                            console.log("Stored data is over 24 hours old");
+                            console.log(`Stored data is over 24 hours old (${ageHours} hours)`);
                             return false;
                         }
+
+                        console.log(`Data age: ${ageHours} hours`);
                     }
 
                     let success = true;
+                    let failedKeys = [];
+                    let loadedItems = 0;
+
                     glbVer.batchUpdate(() => {
                         for (const [key, config] of storageConfig.entries()) {
                             const loaded = this.loadItem(key);
+                            if (loaded) loadedItems++;
+
                             if (!loaded && config.important) {
                                 success = false;
+                                failedKeys.push(key);
                             }
                         }
                     });
 
+                    if (!success) {
+                        console.warn("Failed to load important keys:", failedKeys);
+                    }
+
+                    console.log(`Load all operation completed: ${success ? 'Success' : 'Partial failure'} (${loadedItems}/${storageConfig.size} items loaded)`);
                     return success;
                 } catch (error) {
-                    console.error("Error loading data from storage:", error);
+                    logStorageError('loadAll', 'all', error);
+                    return false;
+                }
+            },
+
+            clearStorage() {
+                if (!storageToken) {
+                    console.log(`Storage clear skipped: No token`);
+                    return false;
+                }
+
+                console.log(`Clearing all storage data...`);
+                try {
+                    for (const key of storageConfig.keys()) {
+                        const storageKey = getStorageKey(key);
+                        if (storageKey) {
+                            localStorage.removeItem(storageKey);
+                        }
+                    }
+                    localStorage.removeItem(getStorageKey("storageOpVersion"));
+                    console.log(`Storage cleared successfully`);
+                    return true;
+                } catch (error) {
+                    logStorageError('clearStorage', 'all', error);
                     return false;
                 }
             }
@@ -1741,51 +2099,68 @@
     })();
 
     const statsOP = (() => {
-        const cache = {
-            members: null,
-            offers_current: null,
-            benefits: null
-        };
+        const cache = new Map();
+        let lastUpdateTime = 0;
 
         function calculateMembersStats() {
             const accounts = glbVer.get('accounts');
+            if (!accounts || !Array.isArray(accounts)) return null;
+
             const stats = {
                 totalCards: accounts.length,
-                activeCards: accounts.filter(acc => acc.account_status?.trim().toLowerCase() === "active").length,
-                basicCards: accounts.filter(acc => acc.relationship === "BASIC").length,
+                activeCards: 0,
+                basicCards: 0,
                 totalBalance: 0,
                 totalPending: 0,
                 totalRemaining: 0
             };
 
-            accounts.forEach(acc => {
-                if (acc.financialData) {
-                    stats.totalBalance += parseFloat(acc.financialData.statement_balance_amount || 0);
-                    stats.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount || 0);
-                    stats.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount || 0);
+            for (const acc of accounts) {
+                // Count active cards
+                if (acc.account_status?.trim().toLowerCase() === "active") {
+                    stats.activeCards++;
                 }
-            });
+
+                // Count basic cards
+                if (acc.relationship === "BASIC") {
+                    stats.basicCards++;
+
+                    // Calculate financial totals only for basic cards
+                    if (acc.financialData) {
+                        stats.totalBalance += parseFloat(acc.financialData.statement_balance_amount || 0);
+                        stats.totalPending += parseFloat(acc.financialData.debits_credits_payments_total_amount || 0);
+                        stats.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount || 0);
+                    }
+                }
+            }
 
             return stats;
         }
 
         function calculateOffersStats() {
-            const offers_current = glbVer.get('offers_current');
+            const offers = glbVer.get('offers_current');
+            if (!offers || !Array.isArray(offers)) return null;
+
             const now = new Date();
             const twoWeeksFromNow = new Date(now);
             twoWeeksFromNow.setDate(now.getDate() + 14);
 
             const stats = {
-                totalOffers: offers_current.length,
-                favoriteOffers: offers_current.filter(o => o.favorite).length,
+                totalOffers: offers.length,
+                favoriteOffers: 0,
                 expiringSoon: 0,
                 distinctNotFullyEnrolled: 0,
                 totalEligible: 0,
                 totalEnrolled: 0
             };
 
-            offers_current.forEach(offer => {
-                // Count expiring soon
+            for (const offer of offers) {
+                // Count favorite offers
+                if (offer.favorite) {
+                    stats.favoriteOffers++;
+                }
+
+                // Check for expiring soon
                 if (offer.expiry_date && offer.expiry_date !== 'N/A') {
                     const expiryDate = new Date(offer.expiry_date);
                     if (!isNaN(expiryDate) && expiryDate > now && expiryDate <= twoWeeksFromNow) {
@@ -1796,20 +2171,23 @@
                 // Count eligible and enrolled
                 const eligibleCount = offer.eligibleCards?.length || 0;
                 const enrolledCount = offer.enrolledCards?.length || 0;
+
                 stats.totalEligible += eligibleCount;
                 stats.totalEnrolled += enrolledCount;
 
-                // Count distinct not fully enrolled
+                // Count not fully enrolled offers
                 if (eligibleCount > 0) {
                     stats.distinctNotFullyEnrolled++;
                 }
-            });
+            }
 
             return stats;
         }
 
         function calculateBenefitsStats(benefits) {
             const benefitsArray = benefits || glbVer.get('benefits');
+            if (!benefitsArray || !Array.isArray(benefitsArray)) return null;
+
             const counts = {
                 total: benefitsArray.length,
                 achieved: 0,
@@ -1817,7 +2195,7 @@
                 notStarted: 0
             };
 
-            benefitsArray.forEach(tracker => {
+            for (const tracker of benefitsArray) {
                 const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
                 const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
 
@@ -1828,71 +2206,105 @@
                 } else {
                     counts.notStarted++;
                 }
-            });
+            }
 
             return counts;
         }
 
+        // Checks if cache should be updated
+        function shouldUpdateCache() {
+            const now = Date.now();
+            // Update at most once per second unless forced
+            return (now - lastUpdateTime) > 1000;
+        }
+
         return {
-            getMembersStats() {
-                if (!cache.members) {
-                    cache.members = calculateMembersStats();
+            getMembersStats(forceRefresh = false) {
+                if (forceRefresh || !cache.has('members') || shouldUpdateCache()) {
+                    const stats = calculateMembersStats();
+                    if (stats) {
+                        cache.set('members', stats);
+                        lastUpdateTime = Date.now();
+                    }
+                    return stats;
                 }
-                return cache.members;
+                return cache.get('members');
             },
 
-            getOffersStats() {
-                if (!cache.offers_current) {
-                    cache.offers_current = calculateOffersStats();
+            getOffersStats(forceRefresh = false) {
+                if (forceRefresh || !cache.has('offers') || shouldUpdateCache()) {
+                    const stats = calculateOffersStats();
+                    if (stats) {
+                        cache.set('offers', stats);
+                        lastUpdateTime = Date.now();
+                    }
+                    return stats;
                 }
-                return cache.offers_current;
+                return cache.get('offers');
             },
 
-            getBenefitsStats(benefits) {
+            getBenefitsStats(benefits, forceRefresh = false) {
                 if (benefits) {
                     return calculateBenefitsStats(benefits);
                 }
-                if (!cache.benefits) {
-                    cache.benefits = calculateBenefitsStats();
+
+                if (forceRefresh || !cache.has('benefits') || shouldUpdateCache()) {
+                    const stats = calculateBenefitsStats();
+                    if (stats) {
+                        cache.set('benefits', stats);
+                        lastUpdateTime = Date.now();
+                    }
+                    return stats;
                 }
-                return cache.benefits;
+                return cache.get('benefits');
             },
 
             invalidate(type) {
+                if (!type) {
+                    cache.clear();
+                    lastUpdateTime = 0;
+                    return;
+                }
+
                 const cacheKeyMap = {
                     'MEMBER': 'members',
-                    'OFFER': 'offers_current',
+                    'OFFER': 'offers',
                     'BENEFIT': 'benefits'
                 };
 
                 const cacheKey = cacheKeyMap[type] || type;
-
-                if (cacheKey in cache) {
-                    cache[cacheKey] = null;
-                } else {
-                    Object.keys(cache).forEach(key => cache[key] = null);
+                if (cacheKey && cache.has(cacheKey)) {
+                    cache.delete(cacheKey);
                 }
             },
 
             getStats(type, forceRefresh = false) {
-                if (forceRefresh) {
-                    this.invalidate(type);
-                }
-
                 switch (type) {
                     case 'MEMBER':
-                        return this.getMembersStats();
+                        return this.getMembersStats(forceRefresh);
                     case 'OFFER':
-                        return this.getOffersStats();
+                        return this.getOffersStats(forceRefresh);
                     case 'BENEFIT':
-                        return this.getBenefitsStats();
+                        return this.getBenefitsStats(null, forceRefresh);
                     default:
                         return {
-                            members: this.getMembersStats(),
-                            offers: this.getOffersStats(),
-                            benefits: this.getBenefitsStats()
+                            members: this.getMembersStats(forceRefresh),
+                            offers: this.getOffersStats(forceRefresh),
+                            benefits: this.getBenefitsStats(null, forceRefresh)
                         };
                 }
+            },
+
+            refreshAll() {
+                this.invalidate();
+                return this.getStats();
+            },
+
+            // Subscribe to data changes to auto-update stats
+            initializeListeners() {
+                glbVer.subscribe('accounts', () => this.invalidate('MEMBER'));
+                glbVer.subscribe('offers_current', () => this.invalidate('OFFER'));
+                glbVer.subscribe('benefits', () => this.invalidate('BENEFIT'));
             }
         };
     })();
@@ -1902,19 +2314,19 @@
         const style = document.createElement('style');
         style.textContent = `
             /* All your existing animation styles... */
-            
+
             /* Improved active tab styles */
             .amaxoffer-nav-button {
                 position: relative;
                 transition: all 0.2s ease;
             }
-            
+
             .amaxoffer-nav-button.active {
                 background-color: var(--ios-blue) !important;
                 color: white !important;
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
             }
-            
+
             .amaxoffer-nav-button.active::after {
                 content: '';
                 position: absolute;
@@ -1927,16 +2339,16 @@
                 border-radius: 50%;
                 animation: pulseIndicator 1.5s infinite alternate;
             }
-            
+
             @keyframes pulseIndicator {
                 from { transform: translateX(-50%) scale(0.8); opacity: 0.7; }
                 to { transform: translateX(-50%) scale(1.2); opacity: 1; }
             }
-            
+
             .current-tab-indicator {
                 animation: fadeInText 0.3s forwards;
             }
-            
+
             @keyframes fadeInText {
                 from { opacity: 0; transform: translateY(5px); }
                 to { opacity: 0.8; transform: translateY(0); }
@@ -2719,25 +3131,28 @@
 
     function ui_createElement(tag, { text = '', className = '', styles = {}, styleString = '', props = {}, children = [], events = {} } = {}) {
         const el = document.createElement(tag);
+
         if (text) el.textContent = text;
         if (className) el.className = className;
 
-        // Apply styles
         if (styleString) {
             el.style.cssText = styleString;
-        } else {
+        } else if (Object.keys(styles).length) {
             Object.assign(el.style, styles);
         }
 
-        // Apply properties
-        Object.entries(props).forEach(([key, value]) => (el[key] = value));
-
-        // Add children
-        children.forEach(child => {
-            if (child) el.appendChild(child);
+        Object.entries(props).forEach(([key, value]) => {
+            if (key === 'innerHTML') {
+                el.innerHTML = value;
+            } else {
+                el[key] = value;
+            }
         });
 
-        // Add event listeners
+        if (Array.isArray(children)) {
+            children.filter(Boolean).forEach(child => el.appendChild(child));
+        }
+
         Object.entries(events).forEach(([event, handler]) => {
             el.addEventListener(event, handler);
         });
@@ -2755,22 +3170,22 @@
             fullWidth = false,
             maxWidth = null,
             customStyle = '',
-            disabled = false
+            disabled = false,
+            ariaLabel = ''
         } = config;
 
-        // Size styles
         const sizeStyles = {
             small: 'padding:6px 12px; font-size:13px;',
             medium: 'padding:10px 16px; font-size:14px;',
             large: 'padding:12px 24px; font-size:16px;'
         };
 
-        // Combine styles
         const styleString = `
             ${UI_STYLES.buttons[type] || UI_STYLES.buttons.primary}
             ${sizeStyles[size] || sizeStyles.medium}
             ${fullWidth ? 'width:100%;' : ''}
             ${maxWidth ? `max-width:${maxWidth};` : ''}
+            ${disabled ? 'opacity:0.6; cursor:not-allowed;' : ''}
             ${customStyle}
         `;
 
@@ -2779,20 +3194,26 @@
         return ui_createElement('button', {
             props: {
                 innerHTML: content,
-                disabled
+                disabled,
+                type: 'button',
+                'aria-label': ariaLabel || label
             },
             styleString,
             events: {
-                click: onClick,
-                mouseenter: (e) => {
-                    if (disabled) return;
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = UI_STYLES.utils.shadowHover;
+                click: e => {
+                    if (!disabled) onClick(e);
                 },
-                mouseleave: (e) => {
-                    if (disabled) return;
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = UI_STYLES.utils.shadow;
+                mouseenter: e => {
+                    if (!disabled) {
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = UI_STYLES.utils.shadowHover;
+                    }
+                },
+                mouseleave: e => {
+                    if (!disabled) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = UI_STYLES.utils.shadow;
+                    }
                 }
             }
         });
@@ -2809,13 +3230,17 @@
 
         return ui_createElement('div', {
             styleString: `
-                display:flex; flex-direction:column; align-items:center;
-                justify-content:center; padding:80px 20px; text-align:center;
-                background-color:rgba(0,0,0,0.02); border-radius:16px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                padding:80px 20px;
+                text-align:center;
+                background-color:rgba(0,0,0,0.02);
+                border-radius:16px;
                 margin:20px 0;
             `,
             children: [
-                // Icon
                 ui_createElement('div', {
                     styleString: 'margin-bottom:24px; width:100px; height:100px; display:flex; align-items:center; justify-content:center;',
                     props: {
@@ -2823,25 +3248,27 @@
                     }
                 }),
 
-                // Title
                 ui_createElement('div', {
                     text: title,
                     styleString: 'font-size:18px; font-weight:600; margin-bottom:12px; color:#1c1c1e;'
                 }),
 
-                // Message
                 ui_createElement('div', {
                     text: message,
                     styleString: 'font-size:14px; color:var(--ios-gray); max-width:400px; margin:0 auto 24px;'
                 }),
 
-                // Button
                 ui_createElement('button', {
                     text: buttonText,
                     styleString: `
-                        padding:10px 20px; background-color:var(--ios-blue);
-                        color:white; border:none; border-radius:10px;
-                        font-size:14px; font-weight:500; cursor:pointer;
+                        padding:10px 20px;
+                        background-color:var(--ios-blue);
+                        color:white;
+                        border:none;
+                        border-radius:10px;
+                        font-size:14px;
+                        font-weight:500;
+                        cursor:pointer;
                         box-shadow:0 2px 8px rgba(0, 122, 255, 0.3);
                         transition:all 0.2s ease;
                     `,
@@ -2870,10 +3297,8 @@
             customStyle = ''
         } = config;
 
-        // Return null if no value provided
         if (!value || value === 'N/A') return null;
 
-        // Set background based on color
         const styleString = `
             ${UI_STYLES.badges[size] || UI_STYLES.badges.medium}
             background-color: ${color}15;
@@ -2886,31 +3311,28 @@
         const badge = ui_createElement('div', {
             styleString,
             events: {
-                mouseenter: (e) => {
+                mouseenter: e => {
                     e.target.style.transform = 'translateY(-2px)';
                     e.target.style.boxShadow = `0 2px 5px ${color}20`;
                 },
-                mouseleave: (e) => {
+                mouseleave: e => {
                     e.target.style.transform = 'translateY(0)';
                     e.target.style.boxShadow = 'none';
                 }
             }
         });
 
-        // Create label part if provided
         if (label) {
-            const labelSpan = ui_createElement('span', {
+            badge.appendChild(ui_createElement('span', {
                 text: `${label}:`,
-                styleString: 'opacity: 0.8; font-weight: 400;'
-            });
-            badge.appendChild(labelSpan);
+                styleString: 'opacity: 0.8; font-weight: 400; margin-right: 4px;'
+            }));
         }
 
-        // Create value part
-        const valueSpan = ui_createElement('span', {
-            text: value
-        });
-        badge.appendChild(valueSpan);
+        badge.appendChild(ui_createElement('span', {
+            text: value,
+            styleString: 'font-weight: 500;'
+        }));
 
         return badge;
     }
@@ -2923,23 +3345,25 @@
             onClose = () => { }
         } = config;
 
-        // Remove existing modal with the same ID
         const existing = document.getElementById(id);
         if (existing) existing.remove();
 
-        // Create overlay with improved accessibility
         const overlay = ui_createElement('div', {
-            props: { id, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': `${id}-title` },
+            props: {
+                id,
+                role: 'dialog',
+                'aria-modal': 'true',
+                'aria-labelledby': `${id}-title`,
+                tabIndex: -1
+            },
             styleString: UI_STYLES.modal.overlay
         });
 
-        // Create modal container
         const modal = ui_createElement('div', {
-            styleString: UI_STYLES.modal.container + `max-width: ${width};`,
+            styleString: UI_STYLES.modal.container + `max-width: ${width}; will-change: transform, opacity;`,
             props: { role: 'document' }
         });
 
-        // Create header with title and close button
         const header = ui_createElement('div', {
             styleString: UI_STYLES.modal.header
         });
@@ -2953,7 +3377,28 @@
             header.appendChild(titleEl);
         }
 
-        // Close button with improved accessibility
+        function handleClose() {
+            document.removeEventListener('keydown', handleKeydown);
+            overlay.removeEventListener('click', handleOutsideClick);
+
+            modal.style.transform = 'translateY(40px) scale(0.95)';
+            modal.style.opacity = '0';
+            overlay.style.opacity = '0';
+
+            setTimeout(() => {
+                overlay.remove();
+                onClose();
+            }, 300);
+        }
+
+        const handleKeydown = (e) => {
+            if (e.key === 'Escape') handleClose();
+        };
+
+        const handleOutsideClick = (e) => {
+            if (e.target === overlay) handleClose();
+        };
+
         const closeBtn = ui_createElement('button', {
             props: {
                 innerHTML: `
@@ -2962,42 +3407,31 @@
                 </svg>
                 `,
                 'aria-label': 'Close',
-                title: 'Close'
+                title: 'Close',
+                type: 'button'
             },
             styleString: UI_STYLES.modal.closeButton,
             events: {
                 mouseenter: (e) => {
                     e.target.style.backgroundColor = 'rgba(0,0,0,0.1)';
                     e.target.style.color = '#333';
+                    e.target.style.transform = 'scale(1.1)';
                 },
                 mouseleave: (e) => {
                     e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
                     e.target.style.color = '#666';
+                    e.target.style.transform = 'scale(1)';
                 },
-                click: () => {
-                    // Fade out animation
-                    modal.style.transform = 'translateY(40px) scale(0.95)';
-                    modal.style.opacity = '0';
-                    overlay.style.opacity = '0';
-
-                    // Remove after animation completes and call onClose
-                    setTimeout(() => {
-                        overlay.remove();
-                        onClose();
-                    }, 300);
-                }
+                click: handleClose
             }
         });
 
-        // Add keyboard accessibility
-        overlay.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeBtn.click();
-        });
+        document.addEventListener('keydown', handleKeydown);
+        overlay.addEventListener('click', handleOutsideClick);
 
         header.appendChild(closeBtn);
         modal.appendChild(header);
 
-        // Create content container
         const content = ui_createElement('div', {
             styleString: UI_STYLES.modal.content
         });
@@ -3006,23 +3440,22 @@
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // Set initial focus to the modal for keyboard accessibility
-        modal.setAttribute('tabindex', '-1');
-        setTimeout(() => modal.focus(), 100);
-
-        // Animate in
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             overlay.style.opacity = '1';
             modal.style.transform = 'translateY(0) scale(1)';
             modal.style.opacity = '1';
-        }, 10);
+
+            modal.setAttribute('tabindex', '-1');
+            modal.focus();
+        });
 
         return {
             overlay,
             modal,
             header,
             content,
-            closeBtn
+            closeBtn,
+            close: handleClose
         };
     }
 
@@ -3032,39 +3465,67 @@
             onSearch = () => { },
             initialValue = '',
             onFilterChange = null,
-            debounceDelay = 200
+            debounceDelay = 300
         } = options;
 
-        const searchContainer = document.createElement('div');
-        searchContainer.className = 'ios-search-container';
-        searchContainer.style.cssText = 'position:relative; width:100%; max-width:300px;';
+        const searchContainer = ui_createElement('div', {
+            className: 'ios-search-container',
+            styleString: 'position:relative; width:100%; max-width:300px;'
+        });
 
-        // Create search input
-        const input = document.createElement('input');
-        input.className = 'ios-search-input';
-        input.type = 'text';
-        input.placeholder = searchPlaceholder;
-        input.value = initialValue;
-        input.style.cssText = UI_STYLES.controls.search;
+        const input = ui_createElement('input', {
+            className: 'ios-search-input',
+            props: {
+                type: 'text',
+                placeholder: searchPlaceholder,
+                value: initialValue,
+                autocomplete: 'off',
+                spellcheck: false
+            },
+            styleString: UI_STYLES.controls.search
+        });
 
-        // Add icon
-        const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        searchIcon.setAttribute('width', '16');
-        searchIcon.setAttribute('height', '16');
-        searchIcon.setAttribute('viewBox', '0 0 24 24');
-        searchIcon.style.cssText = 'color:var(--ios-blue); opacity:0.6; position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;';
+        const searchIcon = ui_createElement('div', {
+            props: {
+                innerHTML: `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ios-blue)" stroke-width="2" opacity="0.6">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>`
+            },
+            styleString: 'position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none; transition: color 0.3s ease;'
+        });
 
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z');
-        path.setAttribute('fill', 'currentColor');
-        searchIcon.appendChild(path);
+        const clearButton = ui_createElement('button', {
+            props: {
+                innerHTML: '×',
+                type: 'button',
+                'aria-label': 'Clear search'
+            },
+            styleString: 'position:absolute; right:30px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:18px; cursor:pointer; color:#999; display:none; padding:4px;',
+            events: {
+                click: () => {
+                    input.value = '';
 
-        // Add clear button
-        const clearButton = document.createElement('button');
-        clearButton.innerHTML = '×';
-        clearButton.style.cssText = 'position:absolute; right:30px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:18px; cursor:pointer; color:#999; display:none;';
+                    if (filterOP) {
+                        filterOP.setFilter('memberMerchantSearch', '');
+                        filterOP.setFilter('offerMerchantSearch', '');
+                    }
 
-        // Create debounced update function
+                    clearButton.style.display = 'none';
+
+                    if (onFilterChange) {
+                        onFilterChange('');
+                    } else {
+                        renderEngine.renderCurrentView(true);
+                    }
+
+                    input.focus();
+                    onSearch('');
+                }
+            }
+        });
+
         let debounceTimeout;
 
         const triggerFilterChange = (value) => {
@@ -3075,26 +3536,18 @@
             }
         };
 
-        // Handle input with debounce
         input.addEventListener('input', function () {
             const searchValue = this.value.toLowerCase();
 
-            // Update filter state immediately
             if (filterOP) {
                 filterOP.setFilter('memberMerchantSearch', searchValue);
                 filterOP.setFilter('offerMerchantSearch', searchValue);
             }
 
-            // Show/hide clear button immediately
             clearButton.style.display = searchValue ? 'block' : 'none';
-
-            // Call the search handler
             onSearch(searchValue);
-
-            // Show visual feedback that something is happening
             searchIcon.style.color = 'var(--ios-orange)';
 
-            // Debounce the actual filtering/rendering
             clearTimeout(debounceTimeout);
             debounceTimeout = setTimeout(() => {
                 triggerFilterChange(searchValue);
@@ -3102,21 +3555,14 @@
             }, debounceDelay);
         });
 
-        // Clear button functionality
-        clearButton.addEventListener('click', () => {
-            input.value = '';
-            if (filterOP) {
-                filterOP.setFilter('memberMerchantSearch', '');
-                filterOP.setFilter('offerMerchantSearch', '');
-            }
-            clearButton.style.display = 'none';
+        input.addEventListener('focus', () => {
+            searchContainer.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.1)';
+            input.style.borderColor = 'var(--ios-blue)';
+        });
 
-            // Clear any pending debounce
-            clearTimeout(debounceTimeout);
-
-            // Immediately trigger update for clearing
-            triggerFilterChange('');
-            input.focus();
+        input.addEventListener('blur', () => {
+            searchContainer.style.boxShadow = 'none';
+            input.style.borderColor = '#e0e0e0';
         });
 
         searchContainer.appendChild(input);
@@ -3124,13 +3570,22 @@
         searchContainer.appendChild(clearButton);
         container.appendChild(searchContainer);
 
+        if (initialValue) {
+            clearButton.style.display = 'block';
+        }
+
         return {
             container: searchContainer,
-            input: input,
+            input,
             getValue: () => input.value.toLowerCase(),
             setValue: (val) => {
                 input.value = val;
                 clearButton.style.display = val ? 'block' : 'none';
+
+                if (filterOP) {
+                    filterOP.setFilter('memberMerchantSearch', val);
+                    filterOP.setFilter('offerMerchantSearch', val);
+                }
             }
         };
     }
@@ -3141,17 +3596,14 @@
         tableElement.className = 'ios-table';
         tableElement.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; font-size:var(--ios-table-cell-font-size); color:var(--ios-text-secondary); border-radius:var(--ios-table-border-radius); overflow:hidden; box-shadow:var(--ios-shadow-sm); border:var(--ios-border-light); background-color:var(--ios-background); display:table;';
 
-        // Store the cellRenderer for future reference
         tableElement.cellRenderer = cellRenderer;
 
-        // Create header
         const thead = document.createElement('thead');
         thead.className = 'ios-table-head';
         thead.style.cssText = 'background:var(--ios-header-bg); border-bottom:var(--ios-border-light); position:sticky; top:0; z-index:10; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);';
 
         const headerRow = document.createElement('tr');
 
-        // Get current sort state
         const currentView = renderEngine.getCurrentView();
         const sortState = currentView ? renderEngine.restoreSortState(currentView) : { key: '', direction: 1 };
 
@@ -3160,12 +3612,10 @@
             th.textContent = headerItem.label;
             th.style.cssText = 'padding:var(--ios-table-cell-padding); font-size:var(--ios-table-header-font-size); font-weight:600; color:var(--ios-text-secondary); text-align:center; vertical-align:middle; border-right:var(--ios-border-light);';
 
-            // Apply column width if specified
             if (colWidths && colWidths[headerItem.key]) {
                 th.style.width = colWidths[headerItem.key];
             }
 
-            // Add sort functionality
             if (sortableKeys && sortableKeys.includes(headerItem.key) && sortHandler) {
                 th.className = 'sortable';
                 th.setAttribute('data-sort-key', headerItem.key);
@@ -3173,23 +3623,19 @@
                 th.style.paddingRight = '28px';
                 th.style.cursor = 'pointer';
 
-                // Sort indicator container
                 const sortButton = document.createElement('div');
                 sortButton.className = 'ios-sort-button';
                 sortButton.style.cssText = 'position:absolute; right:8px; top:50%; transform:translateY(-50%); display:flex; align-items:center; justify-content:center;';
 
-                // Create sort indicator
                 const sortIcon = document.createElement('div');
                 sortIcon.className = 'ios-sort-indicator';
                 sortIcon.style.cssText = 'width:8px; height:8px; transition:all var(--ios-anim-fast) ease; opacity:0.4;';
 
-                // Set current sort indicator if this column is sorted
                 if (sortState.key === headerItem.key) {
                     sortIcon.classList.add('active');
                     sortIcon.classList.add(sortState.direction === 1 ? 'asc' : 'desc');
                     sortIcon.style.opacity = '1';
 
-                    // Show appropriate icon based on sort direction
                     if (sortState.direction === 1) {
                         sortIcon.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-blue)" stroke-width="1.5">
                             <path d="M4 1v6M4 1L2 3M4 1L6 3"/>
@@ -3200,17 +3646,14 @@
                         </svg>`;
                     }
                 } else {
-                    // Default unsorted icon
                     sortIcon.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="var(--ios-gray)" stroke-width="1">
                         <path d="M4 1v6M1 4h6"/>
                     </svg>`;
                 }
 
-                // Handle click for sorting
                 th.addEventListener('click', () => {
                     sortHandler(headerItem.key);
 
-                    // Reset all indicators
                     th.closest('tr').querySelectorAll('.ios-sort-indicator').forEach(icon => {
                         icon.classList.remove('active', 'asc', 'desc');
                         icon.style.opacity = '0.4';
@@ -3219,7 +3662,6 @@
                         </svg>`;
                     });
 
-                    // Animate current sort icon
                     setTimeout(() => {
                         sortIcon.classList.add('ios-sort-animation');
                         setTimeout(() => sortIcon.classList.remove('ios-sort-animation'), 300);
@@ -3236,10 +3678,8 @@
         thead.appendChild(headerRow);
         tableElement.appendChild(thead);
 
-        // Create body
         const tbody = document.createElement('tbody');
 
-        // Handle empty state
         if (!items || items.length === 0) {
             const emptyRow = document.createElement('tr');
             const emptyCell = document.createElement('td');
@@ -3264,8 +3704,9 @@
             emptyRow.appendChild(emptyCell);
             tbody.appendChild(emptyRow);
         } else {
-            // Create rows with optimized rendering
             const fragment = document.createDocumentFragment();
+            const isSearchActive = currentView === 'MEMBER' && filterOP.getFilters().memberMerchantSearch;
+
             items.forEach((item, idx) => {
                 const row = document.createElement('tr');
                 row.style.cssText = 'transition:background-color var(--ios-anim-fast) ease;';
@@ -3274,107 +3715,72 @@
                     row.style.backgroundColor = 'var(--ios-secondary-bg)';
                 }
 
-                // Check for highlighting
-                function shouldHighlightItem(item) {
-                    if (!filterOP.getFilters().memberMerchantSearch) return { shouldHighlight: false };
-
+                if (isSearchActive) {
                     const searchTerm = filterOP.getFilters().memberMerchantSearch.trim().toLowerCase();
-                    if (!searchTerm) return { shouldHighlight: false };
+                    if (searchTerm) {
+                        const accountMatches = (item.account_token || '').toLowerCase().includes(searchTerm) ||
+                            (item.embossed_name || '').toLowerCase().includes(searchTerm) ||
+                            (item.description || '').toLowerCase().includes(searchTerm);
 
-                    // Check direct matches
-                    const accountMatches =
-                        (item.account_token || '').toLowerCase().includes(searchTerm) ||
-                        (item.embossed_name || '').toLowerCase().includes(searchTerm) ||
-                        (item.description || '').toLowerCase().includes(searchTerm);
+                        const offers_current = glbVer.get('offers_current');
+                        const matchingEnrolledOffers = offers_current?.filter(offer => {
+                            return (offer.name || '').toLowerCase().includes(searchTerm) &&
+                                Array.isArray(offer.enrolledCards) &&
+                                offer.enrolledCards.includes(item.account_token);
+                        });
 
-                    if (accountMatches) return { shouldHighlight: true, matchType: 'account' };
+                        const matchingEligibleOffers = offers_current?.filter(offer => {
+                            return (offer.name || '').toLowerCase().includes(searchTerm) &&
+                                Array.isArray(offer.eligibleCards) &&
+                                offer.eligibleCards.includes(item.account_token);
+                        });
 
-                    // Check related offers
-                    const offers_current = glbVer.get('offers_current');
-                    const matchingEnrolledOffers = offers_current?.filter(offer => {
-                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
-                        const isEnrolled = Array.isArray(offer.enrolledCards) &&
-                            offer.enrolledCards.includes(item.account_token);
-                        return nameMatch && isEnrolled;
-                    });
+                        const shouldHighlight = accountMatches ||
+                            matchingEnrolledOffers?.length > 0 ||
+                            matchingEligibleOffers?.length > 0;
 
-                    const matchingEligibleOffers = offers_current?.filter(offer => {
-                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
-                        const isEligible = Array.isArray(offer.eligibleCards) &&
-                            offer.eligibleCards.includes(item.account_token);
-                        return nameMatch && isEligible;
-                    });
+                        if (shouldHighlight) {
+                            row.classList.add('ios-highlight-row');
+                            row.dataset.highlighted = 'true';
 
-                    return {
-                        shouldHighlight: matchingEnrolledOffers.length > 0 || matchingEligibleOffers.length > 0,
-                        matchType: matchingEnrolledOffers.length > 0 ? 'enrolled' :
-                            (matchingEligibleOffers.length > 0 ? 'eligible' : null),
-                        matchingEnrolledOffers,
-                        matchingEligibleOffers
-                    };
-                }
-
-                if (currentView === 'MEMBER' && filterOP.getFilters().memberMerchantSearch) {
-                    const highlightData = shouldHighlightItem(item);
-
-                    if (highlightData.shouldHighlight) {
-                        row.classList.add('ios-highlight-row');
-                        row.dataset.highlighted = 'true';
-
-                        // Apply different highlight styles based on match type
-                        if (highlightData.matchType === 'enrolled') {
-                            // Green highlight for enrolled offers
-                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
-                            row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
-                        } else if (highlightData.matchType === 'eligible') {
-                            // Blue highlight for eligible offers
-                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                            row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
-                        } else {
-                            // Default yellow highlight for direct account matches
-                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
-                            row.style.borderLeft = '3px solid var(--ios-highlight-border)';
-                        }
-
-                        // Store match data for tooltips or additional UI features
-                        if (highlightData.matchingEnrolledOffers?.length > 0) {
-                            row.dataset.matchedEnrolledOffers = highlightData.matchingEnrolledOffers.length;
-                        }
-                        if (highlightData.matchingEligibleOffers?.length > 0) {
-                            row.dataset.matchedEligibleOffers = highlightData.matchingEligibleOffers.length;
+                            if (matchingEnrolledOffers?.length > 0) {
+                                row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
+                                row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
+                                row.dataset.matchedEnrolledOffers = matchingEnrolledOffers.length;
+                            } else if (matchingEligibleOffers?.length > 0) {
+                                row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                                row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
+                                row.dataset.matchedEligibleOffers = matchingEligibleOffers.length;
+                            } else {
+                                row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                                row.style.borderLeft = '3px solid var(--ios-highlight-border)';
+                            }
                         }
                     }
                 }
 
-                // Create cells
                 headers.forEach(headerItem => {
                     const td = document.createElement('td');
                     td.style.cssText = 'padding:var(--ios-table-cell-padding); border-bottom:var(--ios-border-light); vertical-align:middle; text-align:center;';
 
-                    // Apply column width if specified
                     if (colWidths && colWidths[headerItem.key]) {
                         td.style.width = colWidths[headerItem.key];
                         td.style.maxWidth = colWidths[headerItem.key];
                     }
 
                     try {
-                        // Get content using cell renderer
                         const content = cellRenderer(item, headerItem);
 
-                        // Handle different types of content
                         if (content instanceof Node) {
                             td.appendChild(content);
                         } else if (typeof content === 'string') {
-                            // Format currency
                             if (/^\$?\d+(\.\d{2})?$/.test(content)) {
                                 const span = document.createElement('span');
                                 span.className = 'ios-currency';
                                 span.style.cssText = 'font-variant-numeric:tabular-nums; font-weight:500; text-align:center;';
                                 span.textContent = content;
                                 td.appendChild(span);
-                            }
-                            // Format status indicators
-                            else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
+                            } else if (['active', 'inactive', 'pending', 'completed', 'failed', 'success', 'canceled'].includes(content.toLowerCase())) {
                                 const statusSpan = document.createElement('span');
                                 statusSpan.className = `ios-status ${content.toLowerCase()}`;
                                 statusSpan.textContent = content;
@@ -3390,9 +3796,7 @@
 
                                 statusSpan.style.cssText = `display:inline-flex; align-items:center; justify-content:center; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:500; ${statusStyle}`;
                                 td.appendChild(statusSpan);
-                            }
-                            // Regular text content
-                            else {
+                            } else {
                                 td.textContent = content || '';
                             }
                         } else {
@@ -3748,19 +4152,21 @@
         }
     }
 
-    // Toggle the minimized/expanded state of the UI container
+
     function ui_toggleMinimize(container, uiElements) {
         const isMinimized = container.classList.contains('amaxoffer-minimized');
 
         container.style.overflow = 'hidden';
 
         if (isMinimized) {
-            // Expanding
             container.classList.remove('amaxoffer-minimized');
             container.classList.add('amaxoffer-expanded');
 
-            setTimeout(() => {
+            container.setAttribute('aria-expanded', 'true');
+
+            requestAnimationFrame(() => {
                 uiElements.toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>';
+                uiElements.toggleBtn.setAttribute('aria-label', 'Minimize');
 
                 uiElements.content.style.display = 'block';
                 uiElements.viewBtns.style.display = 'flex';
@@ -3779,19 +4185,18 @@
                 container.style.overflow = '';
                 const currentView = renderEngine.getCurrentView();
 
-                // Only force re-render if needed
                 if (!currentView || uiElements.content.innerHTML === '' || uiElements.content.textContent === 'Loading...') {
                     renderEngine.renderCurrentView(true);
                 }
-            }, 50);
+            });
         } else {
-            // Minimizing - don't hide content elements, just container
             uiElements.toggleBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
+            uiElements.toggleBtn.setAttribute('aria-label', 'Expand');
 
             container.classList.add('amaxoffer-minimized');
             container.classList.remove('amaxoffer-expanded');
+            container.setAttribute('aria-expanded', 'false');
 
-            // Keep content elements in DOM but hide visually
             uiElements.content.style.display = 'none';
             uiElements.viewBtns.style.display = 'none';
             uiElements.btnRefresh.style.display = 'none';
@@ -3804,41 +4209,108 @@
     }
 
     function ui_showNotification(message, type = 'info', duration = 3000) {
-        const notifDiv = document.createElement('div');
-        notifDiv.className = `amaxoffer-notification ${type}`;
-        notifDiv.textContent = message;
-        notifDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 18px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            color: white;
-            font-size: 14px;
-            z-index: 10002;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
-            background-color: ${type === 'error' ? 'var(--ios-red)' :
-                type === 'success' ? 'var(--ios-green)' :
-                    'var(--ios-blue)'};
-        `;
+        // Remove any existing notifications with the same message
+        document.querySelectorAll('.amaxoffer-notification').forEach(notif => {
+            if (notif.textContent === message) notif.remove();
+        });
+
+        const colors = {
+            error: 'var(--ios-red)',
+            success: 'var(--ios-green)',
+            info: 'var(--ios-blue)',
+            warning: 'var(--ios-orange)'
+        };
+
+        const icons = {
+            error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+            success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+            info: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+            warning: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>'
+        };
+
+        const notifDiv = ui_createElement('div', {
+            className: `amaxoffer-notification ${type}`,
+            props: {
+                innerHTML: `${icons[type] || ''}<span>${message}</span>`,
+                role: 'alert',
+                'aria-live': 'polite'
+            },
+            styleString: `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 18px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                color: white;
+                font-size: 14px;
+                z-index: 10002;
+                opacity: 0;
+                transform: translateY(20px);
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                background-color: ${colors[type] || colors.info};
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                max-width: 320px;
+            `
+        });
 
         document.body.appendChild(notifDiv);
 
-        // Animate in
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             notifDiv.style.opacity = '1';
             notifDiv.style.transform = 'translateY(0)';
-        }, 10);
+        });
 
-        // Animate out and remove
+        // Add close button
+        const closeBtn = ui_createElement('button', {
+            props: {
+                innerHTML: '×',
+                'aria-label': 'Dismiss notification',
+                type: 'button'
+            },
+            styleString: `
+                background: none;
+                border: none;
+                color: white;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 0;
+                margin-left: 12px;
+                opacity: 0.7;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `,
+            events: {
+                click: () => {
+                    notifDiv.style.opacity = '0';
+                    notifDiv.style.transform = 'translateY(20px)';
+                    setTimeout(() => notifDiv.remove(), 300);
+                },
+                mouseenter: e => { e.target.style.opacity = '1'; },
+                mouseleave: e => { e.target.style.opacity = '0.7'; }
+            }
+        });
+
+        notifDiv.appendChild(closeBtn);
+
         setTimeout(() => {
-            notifDiv.style.opacity = '0';
-            notifDiv.style.transform = 'translateY(20px)';
-            setTimeout(() => notifDiv.remove(), 300);
+            if (document.body.contains(notifDiv)) {
+                notifDiv.style.opacity = '0';
+                notifDiv.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    if (document.body.contains(notifDiv)) {
+                        notifDiv.remove();
+                    }
+                }, 300);
+            }
         }, duration);
+
+        return notifDiv;
     }
 
     function ui_returnLogo(logoUrl, altText) {
@@ -3847,9 +4319,18 @@
                 styleString: 'display:flex; justify-content:center; align-items:center; height:36px;',
                 children: [
                     ui_createElement('img', {
-                        props: { src: logoUrl, alt: altText || "Logo" },
+                        props: {
+                            src: logoUrl,
+                            alt: altText || "Logo",
+                            loading: "lazy",
+                            width: "36",
+                            height: "36"
+                        },
                         styleString: 'max-width:36px; max-height:36px; border-radius:4px; transition:transform 0.2s ease;',
                         events: {
+                            error: e => {
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2NjYyI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgMThjLTQuNDEgMC04LTMuNTktOC04czMuNTktOCA4LTggOCAzLjU5IDggOC0zLjU5IDgtOCA4eiIvPjwvc3ZnPg==';
+                            },
                             mouseenter: e => e.target.style.transform = 'scale(1.15)',
                             mouseleave: e => e.target.style.transform = 'scale(1)'
                         }
@@ -3868,6 +4349,7 @@
             ]
         });
     }
+
 
     // =========================================================================
     // Members Page Rendering Functions
@@ -4055,8 +4537,8 @@
         ];
 
         const colWidths = {
-            cardIndex: "60px", small_card_art: "70px", cardEnding: "110px",
-            embossed_name: "180px", relationship: "85px", account_setup_date: "100px",
+            cardIndex: "50px", small_card_art: "55px", cardEnding: "55px",
+            embossed_name: "160px", relationship: "90px", account_setup_date: "100px",
             account_status: "90px", StatementBalance: "100px", pending: "100px",
             remainingStaBal: "110px", eligibleOffers: "90px", enrolledOffers: "90px",
             priority: "80px", exclude: "80px"
@@ -4175,7 +4657,7 @@
                                     styleString: 'font-size:12px; color:var(--ios-blue); font-weight:600;'
                                 }),
                                 ui_createElement('span', {
-                                    text: `→ ${parentCardNum}`,
+                                    text: `→${parentCardNum}`,
                                     styleString: 'font-size:11px; color:var(--ios-gray);'
                                 })
                             ]
@@ -4820,11 +5302,8 @@
     function offer_renderPage() {
         const containerDiv = document.createElement('div');
         containerDiv.style.cssText = UI_STYLES.pageContainer;
-
-        // Add components sequentially
         containerDiv.appendChild(offer_renderStatsBar());
 
-        // Create tab navigation for current vs history
         const tabContainer = document.createElement('div');
         tabContainer.style.cssText = 'display:flex; margin-bottom:16px; background-color:rgba(255,255,255,0.6); border-radius:10px; padding:4px; border:1px solid var(--ios-border);';
 
@@ -4840,7 +5319,6 @@
         displayContainer.id = 'offers-display-container';
         displayContainer.appendChild(offer_renderTableView());
 
-        // Tab click handlers
         currentTab.addEventListener('click', () => {
             currentTab.style.backgroundColor = 'var(--ios-blue)';
             currentTab.style.color = 'white';
@@ -5216,10 +5694,8 @@
     }
 
     function offer_renderTableView() {
-        // Get processed offers
-        const processedOffers = filterOP.getFilteredOffers();
+        let processedOffers = filterOP.getFilteredOffers();
 
-        // Handle empty state
         if (processedOffers.length === 0) {
             return ui_createEmptyState(document.createElement('div'), {
                 title: 'No Offers Found',
@@ -5234,7 +5710,23 @@
             });
         }
 
-        // Define table headers and column widths
+        if (offer_sortOrder && offer_sortOrder.length > 0) {
+            const offerIndexMap = new Map();
+            offer_sortOrder.forEach((id, index) => {
+                offerIndexMap.set(id, index);
+            });
+
+            processedOffers.sort((a, b) => {
+                const indexA = offerIndexMap.has(a.offerId) ? offerIndexMap.get(a.offerId) : -1;
+                const indexB = offerIndexMap.has(b.offerId) ? offerIndexMap.get(b.offerId) : -1;
+
+                if (indexA === -1 && indexB === -1) return 0;
+                if (indexA === -1) return -1;
+                if (indexB === -1) return 1;
+                return indexA - indexB;
+            });
+        }
+
         const headers = [
             { label: "★", key: "favorite" },
             { label: "Logo", key: "logo" },
@@ -5389,9 +5881,9 @@
                             className: 'eligible-badge',
                             props: {
                                 innerHTML: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-                              <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
-                              <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
-                            </svg>${eligibleCount}`
+                                  <path d="M20 12v6M16 20h8M4 20h2M14 4h6M20 8V4M4 4h2M4 16h2M4 12h2M4 8h2"/>
+                                  <circle cx="10" cy="12" r="8" stroke-dasharray="2 2"/>
+                                </svg>${eligibleCount}`
                             },
                             styleString: `
                                 border-radius:16px;
@@ -5428,9 +5920,9 @@
                             className: 'enrolled-badge',
                             props: {
                                 innerHTML: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                              <path d="M22 4L12 14.01l-3-3"/>
-                            </svg>${enrolledCount}`
+                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                  <path d="M22 4L12 14.01l-3-3"/>
+                                </svg>${enrolledCount}`
                             },
                             styleString: `
                                 border-radius:16px;
@@ -5504,17 +5996,14 @@
             return button;
         }
 
-        // Define sortable columns
         const sortableKeys = [
             "favorite", "name", "achievement_type", "category",
             "expiry_date", "threshold", "reward", "percentage",
             "eligibleCards", "enrolledCards"
         ];
 
-        // Create the table
-        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offer_sortTable, sortableKeys);
+        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offer_sortTable_keyUpd, sortableKeys);
 
-        // Make rows clickable
         tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
             if (index < processedOffers.length) {
                 row.style.cursor = 'pointer';
@@ -5534,23 +6023,25 @@
     }
 
     function offer_toggleFavorite(offer) {
-        offer.favorite = !offer.favorite;
-
-        // Find and update the original offer in the glbVer
         glbVer.update('offers_current', offers_current => {
-            return offers_current.map(o => o.offerId === offer.offerId ?
-                { ...o, favorite: offer.favorite } : o);
+            return offers_current.map(o => {
+                if (o.offerId === offer.offerId) {
+                    return { ...o, favorite: !o.favorite };
+                }
+                return o;
+            });
         });
 
-        statsOP.invalidate('offers_current');
-        storageOP.saveDataChanges('favorite');
+        const updatedOffer = glbVer.get('offers_current').find(o => o.offerId === offer.offerId);
+        const isFavorite = updatedOffer ? updatedOffer.favorite : !offer.favorite;
 
-        // Update the UI element that triggered this
+        statsOP.invalidate('OFFER');
+
         const event = window.event;
         if (event && event.target) {
             const favoriteBtn = event.target.closest('button');
             if (favoriteBtn) {
-                favoriteBtn.innerHTML = offer.favorite ?
+                favoriteBtn.innerHTML = isFavorite ?
                     '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ff9500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' :
                     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
                 favoriteBtn.classList.add('ios-sort-animation');
@@ -5560,16 +6051,14 @@
 
         const stats = statsOP.getOffersStats();
 
-        // Use the data attribute to directly find the favorites stat item
         const favoritesStatItem = document.querySelector('[data-stat-type="favorites"]');
         if (favoritesStatItem) {
             const countElement = favoritesStatItem.querySelector('[data-stat-value="true"]');
             if (countElement) {
                 countElement.textContent = stats.favoriteOffers;
-                // Add a brief animation to highlight the change
                 countElement.style.transition = 'all 0.3s ease';
                 countElement.style.transform = 'scale(1.05)';
-                countElement.style.color = offer.favorite ? '#ff9500' : 'rgb(255, 149, 0)';
+                countElement.style.color = isFavorite ? '#ff9500' : 'rgb(255, 149, 0)';
                 setTimeout(() => {
                     countElement.style.transform = 'scale(1)';
                 }, 300);
@@ -5577,18 +6066,18 @@
         }
     }
 
-    function offer_sortTable(key) {
+    function offer_sortTable_keyUpd(key) {
         const sortState = renderEngine.restoreSortState('OFFER');
         let direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        if (key === "favorite" || key === "eligibleCards" || key === "enrolledCards") {
-            if (sortState.key !== key) direction = -1;
+        if ((key === "favorite" || key === "eligibleCards" || key === "enrolledCards") &&
+            sortState.key !== key) {
+            direction = -1;
         }
 
         renderEngine.saveSortState('OFFER', key, direction);
 
-        const filteredOffers = filterOP.getFilteredOffers();
-        let sortedOffers = [...filteredOffers];
+        const offers = glbVer.get('offers_current') || [];
 
         const sortFunctions = {
             favorite: (a, b) => direction * (Number(b.favorite) - Number(a.favorite)),
@@ -5619,26 +6108,26 @@
             enrolledCards: (a, b) => direction * ((a.enrolledCards?.length || 0) - (b.enrolledCards?.length || 0))
         };
 
-        if (sortFunctions[key]) {
-            sortedOffers.sort(sortFunctions[key]);
-        } else {
-            sortedOffers.sort((a, b) => direction * ((a[key] || "").toString().localeCompare((b[key] || "").toString())));
-        }
-
-        glbVer.set('offers_current', sortedOffers);
+        const sortedOffers = [...offers].sort(
+            sortFunctions[key] ||
+            ((a, b) => direction * ((a[key] || "").toString().localeCompare((b[key] || "").toString())))
+        );
+        offer_sortOrder = sortedOffers.map(offer => offer.offerId);
 
         const displayContainer = document.getElementById('offers-display-container');
         if (displayContainer) {
             displayContainer.innerHTML = "";
             displayContainer.appendChild(offer_renderTableView());
         }
+
     }
+
 
     function offer_popCard(offerId, mode = 'details', offer = null) {
         const offerObj = offer || glbVer.get('offers_current').find(o => o.offerId === offerId);
         if (!offerObj) return;
 
-        const { overlay, content, closeBtn } = ui_createModal({
+        const { overlay, content, closeBtn, close } = ui_createModal({
             id: 'offer-details-modal',
             width: '800px',
             title: offerObj.name,
@@ -5662,8 +6151,7 @@
 
         const tabContents = setupTabs(['Cards', 'Details', 'Terms'], tabContainer);
 
-        const headerInfo = createOfferHeaderInfo(offerObj);
-        content.appendChild(headerInfo);
+        content.appendChild(createOfferHeaderInfo(offerObj));
         content.appendChild(tabContainer);
 
         Object.values(tabContents).forEach(el => content.appendChild(el));
@@ -5671,8 +6159,6 @@
         populateCardsTab(tabContents.cards, offerObj, mode);
         populateDetailsTab(tabContents.details, offerObj);
         populateTermsTab(tabContents.terms, offerObj);
-
-        document.body.appendChild(overlay);
 
         function setupTabs(tabNames, container) {
             const contents = {};
@@ -5731,9 +6217,7 @@
             });
         }
 
-        // Cards tab with unified approach for all modes
         function populateCardsTab(container, offer, mode) {
-            // Get relevant cards based on mode
             let cardItems = [];
 
             if (mode === 'eligible') {
@@ -5741,14 +6225,12 @@
             } else if (mode === 'enrolled') {
                 cardItems = offer.enrolledCards.map(token => ({ token, status: 'enrolled' }));
             } else {
-                // Details mode - show both
                 cardItems = [
                     ...offer.eligibleCards.map(token => ({ token, status: 'eligible' })),
                     ...offer.enrolledCards.map(token => ({ token, status: 'enrolled' }))
                 ];
             }
 
-            // Add "Enroll All" button for eligible cards
             if (mode !== 'enrolled' && offer.eligibleCards.length > 0) {
                 container.appendChild(ui_createBtn({
                     label: `Enroll All Eligible Cards (${offer.eligibleCards.length})`,
@@ -5760,13 +6242,11 @@
                 }));
             }
 
-            // Add table header
             container.appendChild(ui_createElement('h3', {
                 text: `Cards ${cardItems.length > 0 ? `(${cardItems.length})` : ''}`,
                 styleString: UI_STYLES.text.subtitle
             }));
 
-            // Handle empty state
             if (cardItems.length === 0) {
                 container.appendChild(ui_createElement('div', {
                     text: `No ${mode === 'eligible' ? 'eligible' : mode === 'enrolled' ? 'enrolled' : ''} cards found for this offer.`,
@@ -5775,50 +6255,40 @@
                 return;
             }
 
-            // Create and add cards table
             container.appendChild(createCardsTable(cardItems, offer));
         }
 
-        // Handle enrollment of all cards for an offer
         async function handleEnrollAll(e, offer) {
             const btn = e.currentTarget;
 
-            // Update button state
             btn.innerHTML = '<div class="loading-spinner" style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top:2px solid white;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;"></div>Enrolling...';
             btn.disabled = true;
 
             try {
-                // Save eligible tokens before enrollment
                 const eligibleTokens = [...offer.eligibleCards];
-
-                // Perform enrollment
                 const result = await API.batchEnrollOffers(offer.source_id);
 
                 if (result.success === 0) {
                     throw new Error("No cards were enrolled successfully");
                 }
 
-                // Update button state
                 btn.innerHTML = '✓ All Cards Enrolled';
                 btn.style.backgroundColor = 'var(--ios-green)';
-
-                // Show success message
                 ui_showNotification(`Successfully enrolled ${result.success} cards`, 'success');
 
-                // Update cards table
-                updateTableAfterBatchEnrollment(eligibleTokens);
+                // Refresh table after enrollment
+                const cardTab = document.querySelector('.cards-tab') || tabContents.cards;
+                if (cardTab) {
+                    cardTab.innerHTML = '';
+                    populateCardsTab(cardTab, offer, 'enrolled');
+                }
 
             } catch (err) {
                 console.error('Error:', err);
-
-                // Show error state
                 btn.innerHTML = '× Error - Try Again';
                 btn.style.backgroundColor = 'var(--ios-red)';
-
-                // Show error notification
                 ui_showNotification(`Enrollment failed: ${err.message}`, 'error');
 
-                // Reset button after delay
                 setTimeout(() => {
                     btn.disabled = false;
                     btn.innerHTML = `Enroll All Eligible Cards (${offer.eligibleCards.length})`;
@@ -5826,7 +6296,7 @@
                 }, 2000);
             }
         }
-        // Create cards table with common style for all modes
+
         function createCardsTable(cardItems, offer) {
             const headers = [
                 { label: "Index", key: "cardIndex" },
@@ -5846,7 +6316,6 @@
                 action: "80px"
             };
 
-            // Map card tokens to table items
             const items = cardItems.map(item => {
                 const account = glbVer.get('accounts').find(acc => acc.account_token === item.token);
                 if (!account) return null;
@@ -5863,7 +6332,6 @@
                 };
             }).filter(Boolean);
 
-            // Sort: eligible first, then by cardIndex
             items.sort((a, b) => {
                 if (a.status !== b.status) {
                     return a.status === 'eligible' ? -1 : 1;
@@ -5874,7 +6342,6 @@
                 return aMain - bMain;
             });
 
-            // Cell renderer for table
             const cellRenderer = (item, header) => {
                 const key = header.key;
                 switch (key) {
@@ -5896,110 +6363,211 @@
             };
 
             return ui_renderDataTable(headers, colWidths, items, cellRenderer);
+        }
 
-            // Create enroll button for eligible card
-            function createEnrollButton(item, offer) {
-                return ui_createElement('button', {
-                    text: 'Enroll',
-                    styleString: `
-                        padding: 4px 10px;
-                        background-color: rgba(0, 122, 255, 0.1);
-                        color: var(--ios-blue);
-                        border: none;
-                        border-radius: 8px;
-                        font-size: 12px;
-                        cursor: pointer;
-                        transition: all 0.2s ease;
-                    `,
-                    events: {
-                        mouseenter: e => { e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.2)'; },
-                        mouseleave: e => { e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.1)'; },
-                        click: async e => { await handleSingleEnrollment(e, item._token, offer); }
-                    }
-                });
-            }
-
-            // Create enrolled label
-            function createEnrolledLabel() {
-                return ui_createElement('span', {
-                    text: 'Enrolled',
-                    styleString: `
-                        display: inline-block;
-                        padding: 4px 10px;
-                        background-color: rgba(52, 199, 89, 0.1);
-                        color: var(--ios-green);
-                        border-radius: 8px;
-                        font-size: 12px;
-                    `
-                });
-            }
-
-            // Handle enrollment of a single card
-            async function handleSingleEnrollment(e, token, offer) {
-                const btn = e.target;
-                const originalHTML = btn.innerHTML;
-
-                // Update UI to show loading state
-                btn.innerHTML = '<div class="spinner" style="width:10px;height:10px;border:1px solid rgba(0,122,255,0.3);border-top:1px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>';
-                btn.disabled = true;
-
-                try {
-                    const result = await API.enrollInOffer(token, offer.offerId);
-
-                    if (result.result) {
-                        // Success - Update UI and data
-                        btn.innerHTML = '✓';
-                        btn.style.backgroundColor = 'var(--ios-green)';
-                        btn.style.color = 'white';
-
-                        // Update offer data
-                        updateOfferEnrollmentStatus(offer, token, true);
-
-                        // Update the row
-                        updateUIAfterEnrollment(btn, offer);
-
-                        // Save changes to storage
-                        storageOP.saveDataChanges('enrollment');
-                    } else {
-                        handleEnrollmentError(btn, originalHTML, result.explanationMessage);
-                    }
-                } catch (error) {
-                    console.error('Error enrolling card:', error);
-                    handleEnrollmentError(btn, originalHTML, error.message);
+        function createEnrollButton(item, offer) {
+            return ui_createElement('button', {
+                text: 'Enroll',
+                styleString: `
+                    padding: 4px 10px;
+                    background-color: rgba(0, 122, 255, 0.1);
+                    color: var(--ios-blue);
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                `,
+                events: {
+                    mouseenter: e => { e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.2)'; },
+                    mouseleave: e => { e.target.style.backgroundColor = 'rgba(0, 122, 255, 0.1)'; },
+                    click: async e => { await handleSingleEnrollment(e, item._token, offer); }
                 }
-            }
+            });
+        }
 
-            // Handle enrollment error
-            function handleEnrollmentError(btn, originalHTML, errorMessage) {
-                // Show error state
-                btn.innerHTML = '×';
-                btn.style.backgroundColor = 'var(--ios-red)';
-                btn.style.color = 'white';
+        function createEnrolledLabel() {
+            return ui_createElement('span', {
+                text: 'Enrolled',
+                styleString: `
+                    display: inline-block;
+                    padding: 4px 10px;
+                    background-color: rgba(52, 199, 89, 0.1);
+                    color: var(--ios-green);
+                    border-radius: 8px;
+                    font-size: 12px;
+                `
+            });
+        }
 
-                // Log and show error message
-                console.error('Enrollment error:', errorMessage);
-                if (errorMessage) {
-                    ui_showNotification(`Enrollment failed: ${errorMessage}`, 'error');
+        async function handleSingleEnrollment(e, token, offer) {
+            const btn = e.target;
+            const originalHTML = btn.innerHTML;
+
+            btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border:2px solid rgba(0,122,255,0.3);border-top:2px solid var(--ios-blue);border-radius:50%;animation:spin 1s linear infinite;"></div>';
+            btn.style.pointerEvents = 'none';
+            btn.disabled = true;
+
+            try {
+                console.log(`Attempting to enroll "${offer.name}" on card with token ${token}...`);
+                const res = await API.enrollInOffer(token, offer.offerId);
+
+                if (res.result) {
+                    const account = glbVer.get('accounts').find(acc => acc.account_token === token);
+                    const cardEnding = account ? account.cardEnding : 'unknown';
+                    const memberName = account ? account.embossed_name : 'unknown member';
+
+                    console.log(`Enrolled "${offer.name}" on card ${cardEnding} (${memberName}) successfully`);
+
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>';
+                    btn.style.backgroundColor = 'var(--ios-green)';
+                    btn.style.color = 'white';
+
+                    const idx = offer.eligibleCards.indexOf(token);
+                    if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                    if (!offer.enrolledCards.includes(token)) offer.enrolledCards.push(token);
+
+                    API.updateCardOfferCounts();
+                    storageOP.saveItem('offers_current');
+                    storageOP.saveItem('accounts');
+                    statsOP.invalidate('OFFER');
+                    renderEngine.markChanged('OFFER');
+
+                    ui_showNotification(`Successfully enrolled "${offer.name}" for card ${cardEnding}`, 'success');
+
+                    const row = btn.closest('tr');
+                    if (row) {
+                        row.style.transition = 'all 0.5s ease';
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateX(100%)';
+
+                        setTimeout(() => {
+                            row.remove();
+
+                            const eligibleRows = document.querySelectorAll('.accordion-body tr');
+                            if (eligibleRows.length === 0) {
+                                const closeBtn = document.querySelector('#offer-details-modal button[aria-label="Close"]');
+                                if (closeBtn) {
+                                    closeBtn.click();
+                                    setTimeout(() => {
+                                        offer_popCard(offer.offerId, 'enrolled', offer);
+                                    }, 300);
+                                }
+                            }
+                        }, 500);
+                    }
+                } else {
+                    console.error(`Failed to enroll "${offer.name}": ${res.explanationMessage || 'Unknown error'}`);
+                    handleEnrollmentError(btn, originalHTML, res.explanationMessage);
                 }
-
-                // Reset button after delay
-                setTimeout(() => {
-                    btn.innerHTML = originalHTML;
-                    btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                    btn.style.color = 'var(--ios-blue)';
-                    btn.disabled = false;
-                }, 2000);
+            } catch (error) {
+                console.error(`Error enrolling offer "${offer.name}":`, error);
+                handleEnrollmentError(btn, originalHTML, error.message);
             }
         }
 
-        // Details tab content
+        function handleEnrollmentError(btn, originalHTML, errorMessage) {
+            btn.innerHTML = '×';
+            btn.style.backgroundColor = 'var(--ios-red)';
+            btn.style.color = 'white';
+
+            console.error('Enrollment error:', errorMessage);
+            if (errorMessage) {
+                ui_showNotification(`Enrollment failed: ${errorMessage}`, 'error');
+            }
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                btn.style.color = 'var(--ios-blue)';
+                btn.disabled = false;
+                btn.style.pointerEvents = 'auto';
+            }, 2000);
+        }
+
+        function handleEnrollmentError(btn, originalHTML, errorMessage) {
+            btn.innerHTML = '×';
+            btn.style.backgroundColor = 'var(--ios-red)';
+            btn.style.color = 'white';
+
+            console.error('Enrollment error:', errorMessage);
+            if (errorMessage) {
+                ui_showNotification(`Enrollment failed: ${errorMessage}`, 'error');
+            }
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                btn.style.color = 'var(--ios-blue)';
+                btn.disabled = false;
+            }, 2000);
+        }
+
+        function updateOfferEnrollmentStatus(offer, token, isEnrollment) {
+            if (isEnrollment) {
+                const idx = offer.eligibleCards.indexOf(token);
+                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
+                if (!offer.enrolledCards.includes(token)) {
+                    offer.enrolledCards.push(token);
+                }
+            } else {
+                const idx = offer.enrolledCards.indexOf(token);
+                if (idx !== -1) offer.enrolledCards.splice(idx, 1);
+            }
+
+            glbVer.update('offers_current', offers_current => {
+                return offers_current.map(o => o.offerId === offer.offerId ?
+                    {
+                        ...o,
+                        eligibleCards: [...offer.eligibleCards],
+                        enrolledCards: [...offer.enrolledCards]
+                    } : o);
+            });
+
+            API.updateCardOfferCounts();
+        }
+
         function populateDetailsTab(container, offer) {
             if (!offer.long_description && !offer.terms) {
                 container.appendChild(ui_createBtn({
                     label: 'Load Detailed Information',
                     type: 'primary',
                     customStyle: 'margin:40px auto; display:block;',
-                    onClick: async e => loadDetailedInfo(e, offer)
+                    onClick: async e => {
+                        const btn = e.currentTarget;
+                        btn.textContent = 'Loading...';
+                        btn.disabled = true;
+
+                        try {
+                            const account = glbVer.get('accounts').find(acc =>
+                                acc.account_status?.trim().toLowerCase() === "active" &&
+                                (offer.eligibleCards?.includes(acc.account_token) || offer.enrolledCards?.includes(acc.account_token))
+                            );
+
+                            if (account) {
+                                const details = await API.fetchOfferDetails(account.account_token, offer.offerId);
+
+                                if (details && (details.terms || details.long_description)) {
+                                    offer.terms = details.terms;
+                                    offer.long_description = details.long_description;
+                                    storageOP.saveItem('offers_current');
+
+                                    populateDetailsTab(container, offer);
+                                    populateTermsTab(tabContents.terms, offer);
+                                } else {
+                                    throw new Error("No detailed information available");
+                                }
+                            } else {
+                                throw new Error("No active card found for this offer");
+                            }
+                        } catch (error) {
+                            btn.textContent = 'Unable to Load Details';
+                            setTimeout(() => {
+                                btn.textContent = 'Try Again';
+                                btn.disabled = false;
+                            }, 2000);
+                        }
+                    }
                 }));
             } else if (offer.long_description) {
                 container.appendChild(ui_createElement('h3', {
@@ -6016,48 +6584,8 @@
                     styleString: 'text-align:center; padding:30px; color:#888; background-color:rgba(0,0,0,0.02); border-radius:12px;'
                 }));
             }
-
-            // Load detailed information
-            async function loadDetailedInfo(e, offer) {
-                const btn = e.currentTarget;
-                btn.textContent = 'Loading...';
-                btn.disabled = true;
-
-                try {
-                    const account = glbVer.get('accounts').find(acc =>
-                        acc.account_status?.trim().toLowerCase() === "active" &&
-                        (offer.eligibleCards?.includes(acc.account_token) || offer.enrolledCards?.includes(acc.account_token))
-                    );
-
-                    if (account) {
-                        const details = await API.fetchOfferDetails(account.account_token, offer.offerId);
-
-                        if (details && (details.terms || details.long_description)) {
-                            // Update offer data
-                            offer.terms = details.terms;
-                            offer.long_description = details.long_description;
-                            storageOP.saveItem('offers_current');
-
-                            // Update UI
-                            populateDetailsTab(container, offer);
-                            populateTermsTab(tabContents.terms, offer);
-                        } else {
-                            throw new Error("No detailed information available");
-                        }
-                    } else {
-                        throw new Error("No active card found for this offer");
-                    }
-                } catch (error) {
-                    btn.textContent = 'Unable to Load Details';
-                    setTimeout(() => {
-                        btn.textContent = 'Try Again';
-                        btn.disabled = false;
-                    }, 2000);
-                }
-            }
         }
 
-        // Terms tab content
         function populateTermsTab(container, offer) {
             if (!offer.terms) {
                 container.appendChild(ui_createElement('div', {
@@ -6067,100 +6595,10 @@
             } else {
                 container.appendChild(ui_createElement('div', {
                     props: { innerHTML: offer.terms },
-                    styleString: 'font-size:14px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px;'
+                    styleString: 'font-size:14px; line-height:1.6; color:#333; padding:16px; background-color:rgba(0,0,0,0.02); border-radius:12px; overflow-wrap: break-word;'
                 }));
             }
         }
-
-        function updateOfferEnrollmentStatus(offer, token, isEnrollment) {
-            if (isEnrollment) {
-                // Remove from eligible, add to enrolled
-                const idx = offer.eligibleCards.indexOf(token);
-                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                if (!offer.enrolledCards.includes(token)) {
-                    offer.enrolledCards.push(token);
-                }
-            } else {
-                // Remove from enrolled (for potential future unenroll functionality)
-                const idx = offer.enrolledCards.indexOf(token);
-                if (idx !== -1) offer.enrolledCards.splice(idx, 1);
-            }
-
-            // Update global state
-            glbVer.update('offers_current', offers_current => {
-                return offers_current.map(o => o.offerId === offer.offerId ?
-                    {
-                        ...o,
-                        eligibleCards: [...offer.eligibleCards],
-                        enrolledCards: [...offer.enrolledCards]
-                    } : o);
-            });
-
-            // Update card counts
-            API.updateCardOfferCounts();
-        }
-
-        function updateUIAfterEnrollment(btn, offer) {
-            const row = btn.closest('tr');
-            if (!row) return;
-
-            // Update button state
-            btn.innerHTML = 'Enrolled';
-            btn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-            btn.style.color = 'var(--ios-green)';
-            btn.disabled = true;
-
-            // Highlight row briefly
-            row.style.transition = 'background-color 1.5s ease';
-            row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-            setTimeout(() => row.style.backgroundColor = '', 1500);
-
-            // Update "Enroll All" button if present
-            updateEnrollAllButton(offer);
-        }
-
-        function updateEnrollAllButton(offer) {
-            const enrollAllBtn = document.querySelector('.accordion-content button, .cards-tab button');
-            if (enrollAllBtn && enrollAllBtn.textContent.includes('Enroll All')) {
-                const remaining = offer.eligibleCards.length;
-                if (remaining === 0) {
-                    enrollAllBtn.innerHTML = 'All Cards Enrolled';
-                    enrollAllBtn.style.backgroundColor = 'var(--ios-green)';
-                    enrollAllBtn.disabled = true;
-                } else {
-                    enrollAllBtn.innerHTML = `Enroll All Eligible Cards (${remaining})`;
-                }
-            }
-        }
-
-        function updateTableAfterBatchEnrollment(previouslyEligibleTokens) {
-            const table = document.querySelector('.cards-tab table');
-            if (!table) return;
-
-            // Update rows
-            const rows = table.querySelectorAll('tbody tr');
-            rows.forEach(row => {
-                const tokenData = row.getAttribute('data-account-token');
-                if (!tokenData || !previouslyEligibleTokens.includes(tokenData)) return;
-
-                const actionCell = row.querySelector('td:last-child');
-                const actionBtn = actionCell?.querySelector('button');
-
-                if (actionBtn && actionBtn.textContent === 'Enroll') {
-                    // Update button
-                    actionBtn.innerHTML = 'Enrolled';
-                    actionBtn.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                    actionBtn.style.color = 'var(--ios-green)';
-                    actionBtn.disabled = true;
-
-                    // Highlight row briefly
-                    row.style.transition = 'background-color 1.5s ease';
-                    row.style.backgroundColor = 'rgba(52, 199, 89, 0.1)';
-                    setTimeout(() => row.style.backgroundColor = '', 1500);
-                }
-            });
-        }
-
     }
 
     // =========================================================================
@@ -6168,18 +6606,13 @@
     // =========================================================================
 
     function benefit_renderPage() {
-        // Ensure we have benefit data
-        if (!glbVer.get('benefits') || glbVer.get('benefits').length === 0) {
-            // This will be handled by API in real implementation
-            console.log("No benefits data available");
-        }
-
+        const benefits = glbVer.get('benefits') || [];
         const containerDiv = ui_createElement('div', {
             styleString: `${UI_STYLES.pageContainer} max-width:1000px; margin:0 auto;`
         });
 
-        // Process all data once before rendering
-        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefit_processAndGroup(glbVer.get('benefits'));
+        // Process benefits data once efficiently
+        const { sortedBenefitGroups, statusCounts } = benefit_processAndGroup(benefits);
 
         // Add benefits overview
         containerDiv.appendChild(benefit_renderStatsSummary(statusCounts));
@@ -6193,29 +6626,31 @@
         containerDiv.appendChild(benefit_createStatusKey(statusLegendConfig));
 
         // Handle empty state
-        if (sortedBenefitGroups.length === 0) {
+        if (!sortedBenefitGroups || sortedBenefitGroups.length === 0) {
             containerDiv.appendChild(createEmptyState());
         } else {
-            // Add filter controls
-            containerDiv.appendChild(benefit_createFilters());
+            // Add filter controls with search capability
+            containerDiv.appendChild(benefit_createFilters(sortedBenefitGroups));
 
-            // Create benefit accordions
+            // Create benefit accordions with performance optimizations
             const accordionContainer = ui_createElement('div', {
-                className: 'accordion-container',
+                className: 'accordion-container benefits-accordion',
                 styleString: 'display:flex; flex-direction:column; gap:16px;'
             });
 
-            // Add each benefit group as an accordion item
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             sortedBenefitGroups.forEach(groupObj => {
-                accordionContainer.appendChild(benefit_createExpandableItem(groupObj, statusLegendConfig));
+                fragment.appendChild(benefit_createExpandableItem(groupObj, statusLegendConfig));
             });
 
+            accordionContainer.appendChild(fragment);
             containerDiv.appendChild(accordionContainer);
         }
 
         return containerDiv;
 
-        // Create empty state for no benefits
+        // Local function for empty state
         function createEmptyState() {
             return ui_createElement('div', {
                 styleString: 'text-align:center; padding:40px 20px; background-color:rgba(0,0,0,0.02); border-radius:12px; margin-top:20px;',
@@ -6223,12 +6658,12 @@
                     ui_createElement('div', {
                         props: {
                             innerHTML: `
-                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                    `},
+                            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        `},
                         styleString: 'margin-bottom:20px;'
                     }),
                     ui_createElement('h3', {
@@ -6243,8 +6678,21 @@
                         label: 'Refresh Benefits',
                         type: 'primary',
                         onClick: async () => {
-                            await API.fetchAllBenefits();
-                            renderEngine.renderCurrentView();
+                            try {
+                                const refreshBtn = document.querySelector('.accordion-container ~ div button');
+                                if (refreshBtn) {
+                                    refreshBtn.disabled = true;
+                                    refreshBtn.textContent = 'Refreshing...';
+                                }
+
+                                await API.fetchAllBenefits();
+                                renderEngine.renderCurrentView(true);
+
+                                ui_showNotification('Benefits refreshed successfully', 'success');
+                            } catch (error) {
+                                ui_showNotification('Failed to refresh benefits', 'error');
+                                console.error('Benefits refresh error:', error);
+                            }
                         }
                     })
                 ]
@@ -6253,25 +6701,52 @@
     }
 
     function benefit_processAndGroup(benefits) {
-        const statusCounts = statsOP.getBenefitsStats(benefits);
+        // Calculate status counts once and efficiently
+        const statusCounts = {
+            total: benefits.length || 0,
+            achieved: 0,
+            inProgress: 0,
+            notStarted: 0
+        };
 
-        const groupedBenefits = benefits.reduce((grouped, trackerObj) => {
-            const key = trackerObj.benefitId;
+        // Pre-fetch accounts to avoid repeated lookups
+        const accountsMap = new Map();
+        glbVer.get('accounts').forEach(acc => {
+            accountsMap.set(acc.account_token, acc);
+        });
 
-            const spentAmount = parseFloat(trackerObj.tracker?.spentAmount) || 0;
-            if (spentAmount <= 0) {
-                trackerObj.status = "NOT_STARTED";
+        // Group benefits with enhanced status tracking
+        const groupedBenefits = benefits.reduce((grouped, tracker) => {
+            const key = tracker.benefitId;
+
+            // Determine status efficiently
+            const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
+            const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
+
+            if (spentAmount >= targetAmount && targetAmount > 0) {
+                tracker.status = "ACHIEVED";
+                statusCounts.achieved++;
+            } else if (spentAmount > 0) {
+                tracker.status = "IN_PROGRESS";
+                statusCounts.inProgress++;
+            } else {
+                tracker.status = "NOT_STARTED";
+                statusCounts.notStarted++;
             }
 
-            if (!trackerObj.cardEnding && trackerObj.accountToken) {
-                const account = glbVer.get('accounts').find(acc => acc.account_token === trackerObj.accountToken);
+            // Link card info if missing
+            if (!tracker.cardEnding && tracker.accountToken) {
+                const account = accountsMap.get(tracker.accountToken);
                 if (account) {
-                    trackerObj.cardEnding = account.cardEnding;
+                    tracker.cardEnding = account.cardEnding;
+                    tracker.cardDescription = account.description;
+                    tracker.cardArt = account.small_card_art;
                 }
             }
 
+            // Add to grouped collection
             grouped[key] = grouped[key] || [];
-            grouped[key].push(trackerObj);
+            grouped[key].push(tracker);
 
             return grouped;
         }, {});
@@ -6286,8 +6761,8 @@
     }
 
     function benefit_sortBenefits(groupedBenefits) {
-        // Expanded mapping of benefit IDs to display order and custom names
-        const benefitSortMapping = {
+        // Benefit sorting configuration - extracted for better maintenance
+        const BENEFIT_SORT_CONFIG = {
             // Credits
             "200-afc-tracker": { order: 1, newName: "$200 Platinum Flight Credit", category: "Travel" },
             "$200-airline-statement-credit": { order: 2, newName: "$200 Aspire Flight Credit", category: "Travel" },
@@ -6304,40 +6779,44 @@
         };
 
         // Create array of objects with enhanced metadata
-        const groupArray = Object.entries(groupedBenefits).map(([key, group]) => {
+        return Object.entries(groupedBenefits).map(([key, group]) => {
             const firstTracker = group[0];
+            if (!firstTracker) return null;
+
             const benefitIdKey = (firstTracker.benefitId || "").toLowerCase().trim();
             const benefitNameKey = (firstTracker.benefitName || "").toLowerCase().trim();
 
-            const sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
+            const sortData = BENEFIT_SORT_CONFIG[benefitIdKey] || BENEFIT_SORT_CONFIG[benefitNameKey];
             const periodInfo = benefit_extractPeriod(firstTracker);
+
+            // Compute tracker statistics once
+            const totalAmount = group.reduce((sum, t) => sum + (parseFloat(t.tracker?.spentAmount) || 0), 0);
+            const targetAmount = group.reduce((sum, t) => sum + (parseFloat(t.tracker?.targetAmount) || 0), 0);
+            const percentComplete = targetAmount > 0 ? Math.min(100, (totalAmount / targetAmount) * 100) : 0;
 
             return {
                 key,
                 trackers: group,
-                order: sortData?.order || Infinity,
+                order: sortData?.order || 99,
                 displayName: sortData?.newName || firstTracker.benefitName || "",
                 category: sortData?.category || benefit_inferCategoryFromTitle(firstTracker),
                 periodType: periodInfo.periodType,
-                periodLabel: periodInfo.periodLabel
+                periodLabel: periodInfo.periodLabel,
+                totalAmount,
+                targetAmount,
+                percentComplete,
+                trackerCount: group.length
             };
-        });
-
-        // Sort primarily by order, then by category, then by name
-        return groupArray.sort((a, b) => {
-            // Sort by predefined order first
-            if (a.order !== b.order) {
-                return a.order - b.order;
-            }
-
-            // Then by category if orders are the same
-            if (a.category !== b.category) {
-                return a.category.localeCompare(b.category);
-            }
-
-            // Finally by name
-            return (a.displayName || "").localeCompare(b.displayName || "");
-        });
+        })
+            .filter(Boolean)
+            .sort((a, b) => {
+                // First by order
+                if (a.order !== b.order) return a.order - b.order;
+                // Then by category
+                if (a.category !== b.category) return a.category.localeCompare(b.category);
+                // Then by name
+                return a.displayName.localeCompare(b.displayName);
+            });
     }
 
     function benefit_renderStatsSummary(statusCounts) {
@@ -6425,21 +6904,33 @@
         });
     }
 
-    function benefit_createFilters() {
-        return ui_createElement('div', {
+    function benefit_createFilters(benefitGroups) {
+        // Extract unique categories and period types for filter options
+        const categories = [...new Set(benefitGroups.map(group => group.category))].filter(Boolean);
+        const periodTypes = [...new Set(benefitGroups.map(group => group.periodType))].filter(Boolean);
+
+        const filterContainer = ui_createElement('div', {
+            className: 'benefits-filter-container',
             styleString: `
-            display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
-            padding:16px; background-color:rgba(255,255,255,0.6);
-            border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05);
-            align-items:center;
-        `,
+                display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
+                padding:16px; background-color:rgba(255,255,255,0.6);
+                border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05);
+                align-items:center;
+            `,
             children: [
                 createSearchInput(),
                 createStatusFilter(),
+                createCategoryFilter(categories),
+                createPeriodFilter(periodTypes),
                 createCardFilter(),
                 createResetButton()
-            ]
+            ].filter(Boolean)
         });
+
+        // Apply initial filters on creation
+        setTimeout(() => applyFilters(), 100);
+
+        return filterContainer;
 
         function createSearchInput() {
             const searchWrapper = ui_createElement('div', {
@@ -6447,15 +6938,17 @@
             });
 
             const searchInput = ui_createElement('input', {
+                className: 'benefit-search-input',
                 props: {
                     type: 'text',
-                    placeholder: 'Search benefits...'
+                    placeholder: 'Search benefits...',
+                    'aria-label': 'Search benefits'
                 },
                 styleString: `
-                width:100%; padding:10px 12px; padding-left:36px;
-                border-radius:8px; border:1px solid #ddd;
-                font-size:14px; outline:none; transition:all 0.2s ease;
-            `,
+                    width:100%; padding:10px 12px; padding-left:36px;
+                    border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; transition:all 0.2s ease;
+                `,
                 events: {
                     focus: e => {
                         e.target.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.2)';
@@ -6473,11 +6966,11 @@
             searchWrapper.appendChild(ui_createElement('div', {
                 props: {
                     innerHTML: `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    `
                 },
                 styleString: 'position:absolute; top:50%; left:12px; transform:translateY(-50%);'
             }));
@@ -6487,10 +6980,14 @@
 
         function createStatusFilter() {
             return ui_createElement('select', {
+                className: 'benefit-status-filter',
+                props: {
+                    'aria-label': 'Filter by status'
+                },
                 styleString: `
-                padding:10px 12px; border-radius:8px; border:1px solid #ddd;
-                font-size:14px; outline:none; background-color:white; cursor:pointer;
-            `,
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
                 children: [
                     { value: 'all', label: 'All Statuses' },
                     { value: 'ACHIEVED', label: 'Completed' },
@@ -6508,10 +7005,74 @@
             });
         }
 
+        function createCategoryFilter(categories) {
+            if (!categories || categories.length <= 1) return null;
+
+            return ui_createElement('select', {
+                className: 'benefit-category-filter',
+                props: {
+                    'aria-label': 'Filter by category'
+                },
+                styleString: `
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
+                children: [
+                    { value: 'all', label: 'All Categories' },
+                    ...categories.map(cat => ({ value: cat.toLowerCase(), label: cat }))
+                ].map(option =>
+                    ui_createElement('option', {
+                        props: { value: option.value },
+                        text: option.label
+                    })
+                ),
+                events: {
+                    change: () => applyFilters()
+                }
+            });
+        }
+
+        function createPeriodFilter(periodTypes) {
+            if (!periodTypes || periodTypes.length <= 1) return null;
+
+            return ui_createElement('select', {
+                className: 'benefit-period-filter',
+                props: {
+                    'aria-label': 'Filter by period'
+                },
+                styleString: `
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
+                children: [
+                    { value: 'all', label: 'All Periods' },
+                    ...periodTypes.map(period => ({
+                        value: period.toLowerCase(),
+                        label: period.charAt(0).toUpperCase() + period.slice(1)
+                    }))
+                ].map(option =>
+                    ui_createElement('option', {
+                        props: { value: option.value },
+                        text: option.label
+                    })
+                ),
+                events: {
+                    change: () => applyFilters()
+                }
+            });
+        }
+
         function createCardFilter() {
-            // Get unique account tokens directly
-            const uniqueAccounts = [...new Set(glbVer.get('benefits').map(benefit => benefit.accountToken))]
-                .filter(Boolean)
+            const uniqueAccounts = new Set();
+            benefitGroups.forEach(group => {
+                group.trackers.forEach(tracker => {
+                    if (tracker.accountToken) uniqueAccounts.add(tracker.accountToken);
+                });
+            });
+
+            if (uniqueAccounts.size <= 1) return null;
+
+            const accountOptions = Array.from(uniqueAccounts)
                 .map(token => {
                     const account = glbVer.get('accounts').find(acc => acc.account_token === token);
                     return account ? {
@@ -6522,13 +7083,17 @@
                 .filter(Boolean);
 
             return ui_createElement('select', {
+                className: 'benefit-card-filter',
+                props: {
+                    'aria-label': 'Filter by card'
+                },
                 styleString: `
-                padding:10px 12px; border-radius:8px; border:1px solid #ddd;
-                font-size:14px; outline:none; background-color:white; cursor:pointer;
-            `,
+                    padding:10px 12px; border-radius:8px; border:1px solid #ddd;
+                    font-size:14px; outline:none; background-color:white; cursor:pointer;
+                `,
                 children: [
                     { value: 'all', label: 'All Cards' },
-                    ...uniqueAccounts
+                    ...accountOptions
                 ].map(option =>
                     ui_createElement('option', {
                         props: { value: option.value },
@@ -6543,23 +7108,23 @@
 
         function createResetButton() {
             return ui_createElement('button', {
+                className: 'benefit-reset-button',
                 text: 'Reset Filters',
                 styleString: `
-                padding:10px 16px; border-radius:8px; border:none;
-                background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary);
-                font-size:14px; cursor:pointer; transition:all 0.2s ease;
-            `,
+                    padding:10px 16px; border-radius:8px; border:none;
+                    background-color:rgba(142, 142, 147, 0.1); color:var(--ios-text-secondary);
+                    font-size:14px; cursor:pointer; transition:all 0.2s ease;
+                `,
                 events: {
                     mouseenter: e => e.target.style.backgroundColor = 'rgba(142, 142, 147, 0.2)',
                     mouseleave: e => e.target.style.backgroundColor = 'rgba(142, 142, 147, 0.1)',
                     click: () => {
-                        const searchInput = document.querySelector('.accordion-container ~ div input');
-                        const statusFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(1)');
-                        const cardFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(2)');
+                        // Reset all filter elements
+                        const filterSelects = document.querySelectorAll('.benefits-filter-container select');
+                        const searchInput = document.querySelector('.benefit-search-input');
 
                         if (searchInput) searchInput.value = '';
-                        if (statusFilter) statusFilter.value = 'all';
-                        if (cardFilter) cardFilter.value = 'all';
+                        filterSelects.forEach(select => select.value = 'all');
 
                         applyFilters();
                     }
@@ -6568,87 +7133,182 @@
         }
 
         function applyFilters() {
-            const searchInput = document.querySelector('.accordion-container ~ div input');
-            const statusFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(1)');
-            const cardFilter = document.querySelector('.accordion-container ~ div select:nth-of-type(2)');
+            const searchInput = document.querySelector('.benefit-search-input');
+            const statusFilter = document.querySelector('.benefit-status-filter');
+            const categoryFilter = document.querySelector('.benefit-category-filter');
+            const periodFilter = document.querySelector('.benefit-period-filter');
+            const cardFilter = document.querySelector('.benefit-card-filter');
 
-            const searchTerm = searchInput?.value.toLowerCase() || '';
+            const searchTerm = (searchInput?.value || '').toLowerCase();
             const selectedStatus = statusFilter?.value || 'all';
+            const selectedCategory = categoryFilter?.value || 'all';
+            const selectedPeriod = periodFilter?.value || 'all';
             const selectedCardToken = cardFilter?.value || 'all';
 
-            document.querySelectorAll('.accordion-item').forEach(item => {
-                const titleText = item.querySelector('.accordion-title')?.textContent.toLowerCase() || '';
+            // Apply filters to all accordion items
+            const accordionItems = document.querySelectorAll('.accordion-item');
+            let visibleCount = 0;
 
-                // Status filter
-                const hasStatus = selectedStatus === 'all' ||
-                    item.querySelector(`.mini-card[data-status="${selectedStatus}"]`);
-
-                // Card filter by account token directly
-                const hasCard = selectedCardToken === 'all' ||
-                    Array.from(item.querySelectorAll('.mini-card'))
-                        .some(el => el.dataset.accountToken === selectedCardToken);
+            accordionItems.forEach(item => {
+                let visible = true;
 
                 // Text search filter
-                const matchesSearch = searchTerm === '' || titleText.includes(searchTerm);
+                if (searchTerm) {
+                    const title = item.querySelector('.accordion-title')?.textContent.toLowerCase() || '';
+                    if (!title.includes(searchTerm)) visible = false;
+                }
 
-                // Show/hide based on all filters
-                item.style.display = (matchesSearch && hasStatus && hasCard) ? 'block' : 'none';
+                // Status filter
+                if (visible && selectedStatus !== 'all') {
+                    const hasStatus = item.querySelector(`.mini-card[data-status="${selectedStatus}"]`) !== null;
+                    if (!hasStatus) visible = false;
+                }
+
+                // Category filter
+                if (visible && selectedCategory !== 'all') {
+                    const category = item.getAttribute('data-category')?.toLowerCase();
+                    if (category !== selectedCategory) visible = false;
+                }
+
+                // Period filter
+                if (visible && selectedPeriod !== 'all') {
+                    const periodType = item.getAttribute('data-period-type')?.toLowerCase();
+                    if (periodType !== selectedPeriod) visible = false;
+                }
+
+                // Card filter
+                if (visible && selectedCardToken !== 'all') {
+                    const hasCard = Array.from(item.querySelectorAll('.mini-card'))
+                        .some(el => el.getAttribute('data-account-token') === selectedCardToken);
+                    if (!hasCard) visible = false;
+                }
+
+                // Show or hide the item
+                item.style.display = visible ? 'block' : 'none';
+                if (visible) visibleCount++;
             });
+
+            // Show empty state if no results
+            const emptyState = document.querySelector('.no-results-state');
+            if (visibleCount === 0) {
+                if (!emptyState) {
+                    const noResults = ui_createElement('div', {
+                        className: 'no-results-state',
+                        styleString: 'text-align:center; padding:30px; background-color:rgba(0,0,0,0.02); border-radius:12px; margin-top:20px;',
+                        children: [
+                            ui_createElement('div', {
+                                text: 'No benefits match your filters',
+                                styleString: 'font-size:16px; font-weight:600; margin-bottom:10px;'
+                            }),
+                            ui_createElement('div', {
+                                text: 'Try adjusting your filter criteria',
+                                styleString: 'color:#666; font-size:14px;'
+                            })
+                        ]
+                    });
+
+                    const container = document.querySelector('.accordion-container');
+                    if (container) {
+                        container.appendChild(noResults);
+                    }
+                }
+            } else if (emptyState) {
+                emptyState.remove();
+            }
         }
     }
 
     function benefit_createExpandableItem(groupObj, statusConfig) {
+        // Pre-calculate status counts once for better performance
+        const statusCounts = {};
+        groupObj.trackers.forEach(tracker => {
+            statusCounts[tracker.status] = (statusCounts[tracker.status] || 0) + 1;
+        });
+
         const accordionItem = ui_createElement('div', {
             className: 'accordion-item',
             styleString: UI_STYLES.accordion.item,
             events: {
                 mouseenter: e => {
-                    e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
-                    e.target.style.transform = 'translateY(-3px)';
+                    if (!e.currentTarget.classList.contains('active')) {
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
+                        e.currentTarget.style.transform = 'translateY(-3px)';
+                    }
                 },
                 mouseleave: e => {
-                    e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                    e.target.style.transform = 'translateY(0)';
+                    if (!e.currentTarget.classList.contains('active')) {
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                    }
                 }
             },
-            props: { 'data-category': groupObj.category || 'Other' }
+            props: {
+                'data-category': groupObj.category || 'Other',
+                'data-period-type': groupObj.periodType || 'Other',
+                'data-trackers': groupObj.trackerCount || 0
+            }
         });
 
-        // Add data attributes for filtering
-        groupObj.trackers.forEach(tracker => {
-            accordionItem.setAttribute(`data-has-${tracker.status.toLowerCase()}`, 'true');
+        // Set data attributes for filtering
+        Object.entries(statusCounts).forEach(([status, count]) => {
+            accordionItem.setAttribute(`data-${status.toLowerCase()}-count`, count);
+            accordionItem.setAttribute(`data-has-${status.toLowerCase()}`, 'true');
         });
 
-        // Create header
+        // Create accordion header
         const headerDiv = ui_createElement('div', {
             className: 'accordion-header',
-            styleString: UI_STYLES.accordion.header
+            styleString: UI_STYLES.accordion.header,
+            props: {
+                tabIndex: '0',
+                role: 'button',
+                'aria-expanded': 'false',
+                'aria-controls': `accordion-body-${groupObj.key}`
+            }
         });
 
-        // Create body with content
+        // Create accordion body with deferred content loading
         const bodyDiv = ui_createElement('div', {
             className: 'accordion-body',
-            styleString: UI_STYLES.accordion.body
+            styleString: UI_STYLES.accordion.body,
+            props: {
+                id: `accordion-body-${groupObj.key}`,
+                'aria-hidden': 'true',
+                'data-loaded': 'false'
+            }
         });
 
-        // Add header content
+        // Create header content with better organization
         headerDiv.appendChild(createHeaderContent(groupObj, statusConfig));
 
-        // Add arrow indicator
-        const arrowIcon = createArrowIcon();
+        // Create arrow icon
+        const arrowIcon = ui_createElement('div', {
+            styleString: 'transition:transform 0.3s ease; position:absolute; right:20px; top:20px;',
+            props: {
+                innerHTML: `
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M7 10l5 5 5-5" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>`
+            }
+        });
         headerDiv.appendChild(arrowIcon);
 
-        // Add body content with tracker cards
-        bodyDiv.appendChild(createBodyContent(groupObj));
-
-        // Store references for toggle functionality
+        // Store references for easier access
         headerDiv.bodyRef = bodyDiv;
         headerDiv.arrowRef = arrowIcon;
         headerDiv.parentItem = accordionItem;
 
-        // Add click handler
-        headerDiv.addEventListener('click', () => {
-            benefit_toggleItemExpansion(headerDiv);
+        // Set up event listeners for accessibility and interaction
+        headerDiv.addEventListener('click', e => {
+            e.stopPropagation();
+            benefit_toggleItemExpansion(headerDiv, true);
+        });
+
+        headerDiv.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                benefit_toggleItemExpansion(headerDiv, true);
+            }
         });
 
         accordionItem.appendChild(headerDiv);
@@ -6656,35 +7316,31 @@
 
         return accordionItem;
 
-        // Create header content with title, category, indicators
+        // Local function to create header content
         function createHeaderContent(groupObj, statusConfig) {
             return ui_createElement('div', {
                 styleString: 'display:flex; flex-direction:column; gap:10px;',
                 children: [
-                    // Title section with category badge
                     ui_createElement('div', {
                         styleString: `${UI_STYLES.containers.flexRow} gap:12px;`,
                         children: [
-                            // Category badge
                             ui_createElement('div', {
                                 text: groupObj.category || 'Other',
                                 styleString: 'font-size:11px; padding:4px 8px; background-color:rgba(0,0,0,0.05); color:#666; border-radius:4px; font-weight:500; align-self:flex-start;'
                             }),
 
-                            // Period badge - Moved between category and title
                             groupObj.periodLabel ? ui_createElement('div', {
                                 text: groupObj.periodLabel,
                                 styleString: 'font-size:12px; padding:4px 10px; background-color:rgba(0,122,255,0.08); color:var(--ios-blue); border-radius:12px; font-weight:500;'
                             }) : null,
 
-                            // Title with icon
                             ui_createElement('div', {
                                 styleString: `${UI_STYLES.containers.flexRow} flex:1;`,
                                 children: [
                                     benefit_getCategoryIcon(groupObj.category),
                                     ui_createElement('span', {
                                         className: 'accordion-title',
-                                        text: groupObj.displayName || groupObj.trackers[0].benefitName || "",
+                                        text: groupObj.displayName || "Unnamed Benefit",
                                         styleString: 'font-size:17px; font-weight:600; color:#333;'
                                     })
                                 ]
@@ -6692,191 +7348,178 @@
                         ].filter(Boolean)
                     }),
 
-                    // Card status indicators
                     ui_createElement('div', {
                         className: 'mini-bar',
                         styleString: 'display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;',
-                        children: createStatusIndicators(groupObj, statusConfig)
+                        children: groupObj.trackers.map(createTrackerMiniCard)
                     })
                 ]
             });
         }
 
-        // Create arrow icon for accordions
-        function createArrowIcon() {
-            const arrowIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            arrowIcon.setAttribute('viewBox', '0 0 24 24');
-            arrowIcon.setAttribute('width', '24');
-            arrowIcon.setAttribute('height', '24');
-            arrowIcon.style.cssText = 'transition:transform 0.3s ease; position:absolute; right:20px; top:20px;';
+        // Local function to create tracker mini-cards
+        function createTrackerMiniCard(tracker) {
+            const statusKey = tracker.status === 'ACHIEVED' ? 'achieved' :
+                tracker.status === 'IN_PROGRESS' ? 'inProgress' : 'notStarted';
+            const statusStyle = UI_STYLES.status[statusKey];
 
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M7 10l5 5 5-5');
-            path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#888');
-            path.setAttribute('stroke-width', '2');
-            path.setAttribute('stroke-linecap', 'round');
-            path.setAttribute('stroke-linejoin', 'round');
-
-            arrowIcon.appendChild(path);
-            return arrowIcon;
-        }
-
-        // Create status indicators for each card
-        function createStatusIndicators(groupObj, statusConfig) {
-            // Group trackers by card for cleaner display
-            const cardTrackers = {};
-            groupObj.trackers.forEach(tracker => {
-                // Use accountToken for identification
-                if (tracker.accountToken) {
-                    cardTrackers[tracker.accountToken] = tracker;
-                }
-            });
-
-            // Create indicators
-            return Object.entries(cardTrackers).map(([accountToken, tracker]) => {
-                const statusKey = tracker.status === 'ACHIEVED' ? 'achieved' :
-                    tracker.status === 'IN_PROGRESS' ? 'inProgress' : 'notStarted';
-                const statusStyle = UI_STYLES.status[statusKey];
-
-                return ui_createElement('div', {
-                    className: 'mini-card',
-                    styleString: `
-                    display:flex; align-items:center; gap:6px; padding:6px 10px;
-                    border-radius:8px; font-size:13px; color:#444;
+            return ui_createElement('div', {
+                className: 'mini-card',
+                styleString: `
+                    display:flex;
+                    align-items:center;
+                    gap:6px;
+                    padding:6px 10px;
+                    border-radius:8px;
+                    font-size:13px;
+                    color:#444;
                     background-color:${statusStyle.bgColor};
                     border:1px solid ${statusStyle.borderColor};
                     transition:all 0.2s ease;
                 `,
-                    props: {
-                        'data-status': tracker.status,
-                        'data-account-token': accountToken
+                props: {
+                    'data-status': tracker.status,
+                    'data-account-token': tracker.accountToken || ''
+                },
+                events: {
+                    mouseenter: e => {
+                        e.stopPropagation();
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
                     },
-                    events: {
-                        mouseenter: e => {
-                            e.target.style.transform = 'translateY(-2px)';
-                            e.target.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
-                        },
-                        mouseleave: e => {
-                            e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = 'none';
-                        }
-                    },
-                    children: [
-                        // Status dot
-                        ui_createElement('div', {
-                            styleString: `width:10px; height:10px; border-radius:50%; background-color:${statusStyle.color}; box-shadow:0 1px 2px rgba(0,0,0,0.1);`
-                        }),
-                        // Card ending (for display only)
-                        ui_createElement('span', {
-                            className: 'card-ending',
-                            text: tracker.cardEnding,
-                            styleString: 'font-weight:500;'
-                        }),
-                        // Status label
-                        ui_createElement('span', {
-                            text: statusConfig[tracker.status]?.label || tracker.status,
-                            styleString: 'font-size:11px; opacity:0.8;'
-                        })
-                    ]
-                });
-            });
-        }
-
-        // Create body content with tracker cards
-        function createBodyContent(groupObj) {
-            return ui_createElement('div', {
-                styleString: 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;',
-                children: groupObj.trackers.map(tracker =>
-                    benefit_createProgressCard(tracker, groupObj)
-                )
+                    mouseleave: e => {
+                        e.stopPropagation();
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                    }
+                },
+                children: [
+                    ui_createElement('div', {
+                        styleString: `width:10px; height:10px; border-radius:50%; background-color:${statusStyle.color}; box-shadow:0 1px 2px rgba(0,0,0,0.1);`
+                    }),
+                    ui_createElement('span', {
+                        className: 'card-ending',
+                        text: tracker.cardEnding || 'N/A',
+                        styleString: 'font-weight:500;'
+                    }),
+                    ui_createElement('span', {
+                        text: statusConfig[tracker.status]?.label || tracker.status,
+                        styleString: 'font-size:11px; opacity:0.8;'
+                    })
+                ]
             });
         }
     }
 
-    function benefit_toggleItemExpansion(header) {
+    function benefit_toggleItemExpansion(header, scrollIntoView = false) {
+        if (!header) return;
+
         const bodyDiv = header.bodyRef;
         const arrowIcon = header.arrowRef;
         const parentItem = header.parentItem;
 
+        if (!bodyDiv || !arrowIcon || !parentItem) return;
+
         // Determine current state
         const isOpen = bodyDiv.classList.contains('active');
 
-        // First close all other open accordions for cleaner UX
+        // Close all other open accordions first
         document.querySelectorAll('.accordion-header.active').forEach(activeHeader => {
             if (activeHeader !== header && activeHeader.bodyRef) {
-                // Reset previous active item
-                const prevBody = activeHeader.bodyRef;
-                const prevArrow = activeHeader.arrowRef;
-                const prevParent = activeHeader.parentItem;
-
-                // Update classes
-                activeHeader.classList.remove('active');
-                prevBody.classList.remove('active');
-
-                // Reset styles
-                activeHeader.style.backgroundColor = '#f9f9f9';
-                activeHeader.style.borderBottomColor = 'transparent';
-                prevArrow.style.transform = 'rotate(0deg)';
-                prevBody.style.maxHeight = '0';
-                prevBody.style.padding = '0 20px';
-                prevBody.style.opacity = '0';
-
-                // Reset parent styling
-                if (prevParent) {
-                    prevParent.style.borderColor = '#e0e0e0';
-                    prevParent.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                }
+                collapseAccordion(activeHeader);
             }
         });
 
-        // Toggle current accordion with improved animation
+        // Toggle current accordion
         if (!isOpen) {
-            // Open this accordion
+            expandAccordion(header, bodyDiv, arrowIcon, parentItem, scrollIntoView);
+        } else {
+            collapseAccordion(header);
+        }
+
+        // Helper function to expand accordion with animation
+        function expandAccordion(header, bodyDiv, arrowIcon, parentItem, scrollIntoView) {
+            // Mark as active
             header.classList.add('active');
             bodyDiv.classList.add('active');
+            header.setAttribute('aria-expanded', 'true');
+            bodyDiv.setAttribute('aria-hidden', 'false');
 
-            // Animate transitions
+            // Apply animations and styling
             arrowIcon.style.transform = 'rotate(180deg)';
             header.style.backgroundColor = '#f0f0f0';
             header.style.borderBottomColor = '#e0e0e0';
 
-            // Set max height to content height for animation
-            bodyDiv.style.maxHeight = `${bodyDiv.scrollHeight}px`;
+            // Lazy load content if not already loaded
+            if (bodyDiv.getAttribute('data-loaded') !== 'true') {
+                const groupKey = bodyDiv.id.replace('accordion-body-', '');
+                const groupObj = benefit_findGroupByKey(groupKey);
+
+                if (groupObj) {
+                    const fragment = document.createDocumentFragment();
+                    groupObj.trackers.forEach(tracker => {
+                        fragment.appendChild(benefit_createProgressCard(tracker, groupObj));
+                    });
+                    bodyDiv.appendChild(fragment);
+                    bodyDiv.setAttribute('data-loaded', 'true');
+                }
+            }
+
+            // Position it correctly in viewport
+            const headerRect = header.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const distanceFromTop = headerRect.top;
+
+            // If header is too low in viewport, scroll it higher to ensure content fits
+            if (distanceFromTop > viewportHeight / 3) {
+                window.scrollBy({
+                    top: distanceFromTop - 100,
+                    behavior: 'smooth'
+                });
+            }
+
+            // Set full height animation
+            bodyDiv.style.maxHeight = `${bodyDiv.scrollHeight + 20}px`;
             bodyDiv.style.padding = '0 20px 20px 20px';
             bodyDiv.style.opacity = '1';
 
             // Apply active styling to parent
-            if (parentItem) {
-                parentItem.style.borderColor = 'var(--ios-blue)';
-                parentItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
-            }
+            parentItem.style.borderColor = 'var(--ios-blue)';
+            parentItem.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)';
+        }
 
-            // Scroll item into view if needed
-            setTimeout(() => {
-                const headerRect = header.getBoundingClientRect();
-                if (headerRect.top < 0 || headerRect.bottom > window.innerHeight) {
-                    header.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            }, 300);
-        } else {
-            // Close this accordion
+        // Helper function to collapse accordion with animation
+        function collapseAccordion(header) {
+            const bodyRef = header.bodyRef;
+            const arrowRef = header.arrowRef;
+            const parentRef = header.parentItem;
+
+            if (!bodyRef || !arrowRef || !parentRef) return;
+
+            // Remove active classes
             header.classList.remove('active');
-            bodyDiv.classList.remove('active');
+            bodyRef.classList.remove('active');
+            header.setAttribute('aria-expanded', 'false');
+            bodyRef.setAttribute('aria-hidden', 'true');
 
             // Animate transitions
-            arrowIcon.style.transform = 'rotate(0deg)';
+            arrowRef.style.transform = 'rotate(0deg)';
             header.style.backgroundColor = '#f9f9f9';
             header.style.borderBottomColor = 'transparent';
-            bodyDiv.style.maxHeight = '0';
-            bodyDiv.style.padding = '0 20px';
-            bodyDiv.style.opacity = '0';
+            bodyRef.style.maxHeight = '0';
+            bodyRef.style.padding = '0 20px';
+            bodyRef.style.opacity = '0';
 
             // Reset parent styling
-            if (parentItem) {
-                parentItem.style.borderColor = '#e0e0e0';
-                parentItem.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-            }
+            parentRef.style.borderColor = '#e0e0e0';
+            parentRef.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        }
+
+        // Helper function to find group object by key
+        function benefit_findGroupByKey(key) {
+            const benefits = glbVer.get('benefits') || [];
+            const { sortedBenefitGroups } = benefit_processAndGroup(benefits);
+            return sortedBenefitGroups.find(group => group.key === key);
         }
     }
 
@@ -7000,12 +7643,16 @@
 
         const trackerCard = ui_createElement('div', {
             className: 'tracker-card',
-            styleString: `${UI_STYLES.cards.benefit} border-left: 4px solid ${statusStyle.color};`,
-            props: { 'data-account-token': trackerObj.accountToken || '' },
+            styleString: `${UI_STYLES.cards.benefit} border-left: 4px solid ${statusStyle.color}; padding: 14px 16px 12px;`,
+            props: {
+                'data-account-token': trackerObj.accountToken || '',
+                'data-status': trackerObj.status || '',
+                'data-period-type': groupObj.periodType || ''
+            },
             events: {
                 mouseenter: e => {
-                    e.target.style.transform = 'translateY(-3px)';
-                    e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 5px 12px rgba(0,0,0,0.06)';
                 },
                 mouseleave: e => {
                     e.target.style.transform = 'translateY(0)';
@@ -7024,78 +7671,66 @@
         return trackerCard;
 
         function createCardHeader(tracker, account) {
-            const cardHeader = ui_createElement('div', {
-                styleString: 'display:flex; justify-content:space-between; margin-bottom:16px; align-items:flex-start;'
+            return ui_createElement('div', {
+                styleString: 'display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;',
+                children: [
+                    ui_createElement('div', {
+                        styleString: 'display:flex; align-items:center; gap:10px; flex:1; min-width:0;',
+                        children: [
+                            ui_createElement('div', {
+                                styleString: 'width:32px; height:32px; border-radius:6px; overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center;',
+                                children: [
+                                    ui_returnLogo(
+                                        account?.small_card_art,
+                                        account?.description || `Card ${tracker.cardEnding}`
+                                    )
+                                ]
+                            }),
+
+                            ui_createElement('div', {
+                                styleString: 'display:flex; flex-direction:column; overflow:hidden;',
+                                children: [
+                                    ui_createElement('div', {
+                                        className: 'card-number',
+                                        text: `Card •••• ${tracker.cardEnding}`,
+                                        styleString: 'font-weight:600; color:#444; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'
+                                    }),
+                                    account ? ui_createElement('div', {
+                                        text: account.description || '',
+                                        styleString: 'font-size:13px; color:#777; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:0px;'
+                                    }) : null
+                                ].filter(Boolean)
+                            })
+                        ]
+                    }),
+                    createDateRange(tracker)
+                ]
             });
-
-            const cardInfoContainer = ui_createElement('div', {
-                styleString: 'display:flex; align-items:center; gap:12px;'
-            });
-
-            const logoContainer = ui_createElement('div', {
-                styleString: 'width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center;'
-            });
-
-            const logoElement = ui_returnLogo(
-                account?.small_card_art,
-                account?.description || `Card ${tracker.cardEnding}`
-            );
-
-            logoContainer.appendChild(logoElement);
-
-            const cardDetails = ui_createElement('div', {
-                styleString: 'display:flex; flex-direction:column;'
-            });
-
-            cardDetails.appendChild(ui_createElement('div', {
-                className: 'card-number',
-                text: `Card •••• ${tracker.cardEnding}`,
-                styleString: 'font-weight:600; color:#444; font-size:15px;'
-            }));
-
-            if (account) {
-                cardDetails.appendChild(ui_createElement('div', {
-                    text: account.description || '',
-                    styleString: 'font-size:13px; color:#777;'
-                }));
-            }
-
-            cardInfoContainer.appendChild(logoContainer);
-            cardInfoContainer.appendChild(cardDetails);
-
-            const dateRange = createDateRange(tracker);
-
-            cardHeader.appendChild(cardInfoContainer);
-            cardHeader.appendChild(dateRange);
-
-            return cardHeader;
         }
 
-        // Helper function to create date range badge
         function createDateRange(tracker) {
-            const dateRange = ui_createElement('div', {
-                styleString: 'color:#888; font-size:13px; background-color:rgba(0,0,0,0.03); padding:4px 10px; border-radius:8px;'
-            });
-
-            // Format date range with the util_formatDate function
+            const now = new Date();
+            const startDate = new Date(tracker.periodStartDate);
+            const endDate = new Date(tracker.periodEndDate);
             const startDateStr = util_formatDate(tracker.periodStartDate);
             const endDateStr = util_formatDate(tracker.periodEndDate);
 
-            // Parse raw dates for comparison and calculations
-            const startDate = new Date(tracker.periodStartDate);
-            const endDate = new Date(tracker.periodEndDate);
+            const dateRange = ui_createElement('div', {
+                styleString: 'color:#888; font-size:12px; background-color:rgba(0,0,0,0.03); padding:4px 8px; border-radius:6px; flex-shrink:0; text-align:center;'
+            });
 
             let dateRangeText = 'No period available';
+
             if (startDateStr !== 'N/A' && endDateStr !== 'N/A' && !isNaN(startDate) && !isNaN(endDate)) {
                 dateRangeText = `${startDateStr} - ${endDateStr}`;
 
-                // Add days remaining
-                const now = new Date();
                 if (now <= endDate) {
                     const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+                    const remainingColor = daysRemaining <= 7 ? 'var(--ios-orange)' : '#888';
+
                     dateRange.appendChild(ui_createElement('div', {
                         text: `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} left`,
-                        styleString: 'font-size:12px; text-align:center; margin-top:4px;'
+                        styleString: `font-size:11px; text-align:center; margin-top:2px; font-weight:${daysRemaining <= 7 ? '600' : '400'}; color:${remainingColor};`
                     }));
                 }
             }
@@ -7104,63 +7739,56 @@
             return dateRange;
         }
 
-        // Helper function to create progress section
         function createProgressSection(tracker, statusColor) {
-            // Format values
             const currencySymbol = tracker.tracker?.targetCurrencySymbol || '$';
             const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
             const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
-
-            // Calculate percentage
             const percent = targetAmount > 0 ? Math.min(100, (spentAmount / targetAmount) * 100) : 0;
 
-            const progressContainer = ui_createElement('div', {
-                styleString: UI_STYLES.progress.container
+            return ui_createElement('div', {
+                styleString: 'margin:9px 0;',
+                children: [
+                    ui_createElement('div', {
+                        styleString: 'display:flex; justify-content:space-between; margin-bottom:6px; align-items:center;',
+                        children: [
+                            ui_createElement('div', {
+                                props: {
+                                    innerHTML: `<span style="color:#999; font-weight:normal;">Progress:</span> ${currencySymbol}${spentAmount.toFixed(2)} of ${currencySymbol}${targetAmount.toFixed(2)}`
+                                },
+                                styleString: 'font-size:13px; color:#555; font-weight:500;'
+                            }),
+
+                            ui_createElement('div', {
+                                text: `${percent.toFixed(0)}%`,
+                                styleString: `font-size:13px; font-weight:600; color:${percent >= 100 ? 'var(--ios-green)' : percent >= 50 ? 'var(--ios-blue)' : '#555'};`
+                            })
+                        ]
+                    }),
+
+                    benefit_createProgressBar({
+                        current: spentAmount,
+                        max: targetAmount,
+                        barColor: statusColor,
+                        height: '10px',
+                        animate: true
+                    })
+                ]
             });
-
-            // Progress header with amounts and percentage
-            const progressHeader = ui_createElement('div', {
-                styleString: 'display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;'
-            });
-
-            // Amount label
-            progressHeader.appendChild(ui_createElement('div', {
-                props: {
-                    innerHTML: `<span style="color:#999; font-weight:normal;">Progress:</span> ${currencySymbol}${spentAmount.toFixed(2)} of ${currencySymbol}${targetAmount.toFixed(2)}`
-                },
-                styleString: 'font-size:14px; color:#555; font-weight:500;'
-            }));
-
-            // Percentage
-            progressHeader.appendChild(ui_createElement('div', {
-                text: `${percent.toFixed(0)}%`,
-                styleString: `font-size:14px; font-weight:600; color:${percent >= 100 ? 'var(--ios-green)' : 'var(--ios-blue)'};`
-            }));
-
-            progressContainer.appendChild(progressHeader);
-
-            // Progress bar
-            progressContainer.appendChild(benefit_createProgressBar({
-                current: spentAmount,
-                max: targetAmount,
-                barColor: statusColor,
-                height: '12px',
-                animate: true
-            }));
-
-            return progressContainer;
         }
 
-        // Helper function to create message section
         function createMessageSection(tracker, statusColor) {
+            const cleanMessage = tracker.progress.message
+                .replace(/\*\*/g, '')
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, ' ');
+
             return ui_createElement('div', {
-                props: {
-                    innerHTML: tracker.progress.message
-                        .replace(/\*\*/g, '')  // Remove ** formatting
-                        .replace(/\n\n/g, '<br><br>')  // Keep paragraph breaks
-                        .replace(/\n/g, ' ')  // Replace single newlines with spaces
-                },
-                styleString: `margin-top:16px;padding:12px 16px;background-color:rgba(0,0,0,0.02);border-radius:12px;color:#333;font-size:14px;line-height:1.5;border-left:3px solid ${statusColor}40;`
+                props: { innerHTML: cleanMessage },
+                styleString: `
+                    margin-top:10px;
+                    color:#333;
+                    font-size:13px;
+                    line-height:1.3;`
             });
         }
     }
@@ -7175,63 +7803,77 @@
             showPercentage = false
         } = options;
 
-        // Calculate percentage
         const percent = max > 0 ? Math.min(100, (current / max) * 100) : 0;
+        const uniqueId = `progress-${Math.random().toString(36).substring(2, 9)}`;
 
-        // Create wrapper
         const progressBarWrapper = ui_createElement('div', {
+            className: `progress-bar-wrapper ${uniqueId}`,
             styleString: `
-            height: ${height};
-            border-radius: 8px;
-            background-color: #f0f0f0;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid #ddd;
-            width: 100%;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);  `
+                height: ${height};
+                border-radius: 8px;
+                background-color: #f0f0f0;
+                position: relative;
+                overflow: hidden;
+                border: 1px solid #ddd;
+                width: 100%;
+                box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+            `
         });
 
-        // Create fill
         const progressFill = ui_createElement('div', {
+            className: 'progress-fill',
             styleString: `
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: ${animate ? '0' : `${percent}%`};
-            background-color: ${barColor};
-            transition: width ${animate ? '1s cubic-bezier(0.22, 1, 0.36, 1)' : '0s'};  `
+                height: 100%;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 0%;
+                background-color: ${barColor};
+                transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+            `
         });
 
-        // Add percentage label if needed
         if (showPercentage) {
-            const percentLabel = ui_createElement('div', {
+            progressBarWrapper.appendChild(ui_createElement('div', {
                 text: `${Math.round(percent)}%`,
                 styleString: `
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                font-size: 10px;
-                font-weight: 600;
-                color: ${percent > 50 ? 'white' : '#333'};
-                z-index: 2;
-            `
-            });
-            progressBarWrapper.appendChild(percentLabel);
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: ${percent > 50 ? 'white' : '#333'};
+                    z-index: 2;
+                    text-shadow: 0 0 2px rgba(0,0,0,0.1);
+                `
+            }));
         }
 
         progressBarWrapper.appendChild(progressFill);
 
-        // Animate progress bar after a short delay if animation is enabled
+        // Use requestAnimationFrame for smoother animation
         if (animate) {
-            setTimeout(() => {
-                progressFill.style.width = `${percent}%`;
-            }, 100);
+            // Remove any existing animation handler
+            window.requestAnimationFrame(() => {
+                progressFill.style.width = '0%';
+
+                // Force a reflow to ensure the animation runs every time
+                progressFill.offsetWidth;
+
+                // Set a timeout to give a slight delay for better visual effect
+                setTimeout(() => {
+                    progressFill.style.width = `${percent}%`;
+                }, 50);
+            });
+        } else {
+            progressFill.style.width = `${percent}%`;
+            progressFill.style.transition = 'none';
         }
 
         return progressBarWrapper;
     }
+
 
 
     // =========================================================================
@@ -7240,7 +7882,7 @@
 
     async function auth_init() {
         try {
-            const expirationDate = new Date("2025-03-20T05:00:00Z");
+            const expirationDate = new Date(expiry_date);
 
             if (new Date() >= expirationDate) {
                 ui_showNotification("Code expired on " + expirationDate.toLocaleString(), 'error');
@@ -7308,54 +7950,65 @@
 
     }
 
-
     async function initialize() {
-        const authStatus = await auth_init();
-        if (!authStatus) {
-            return 0;
-        }
-        const uiElements = ui_createMain();
-        renderEngine.initialize(uiElements.content);
-
-        const kickoffStatus = util_antiKickOff.initialize(90000, true);
-        if (!kickoffStatus) {
-            console.warn("Anti-kickoff initialization failed");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading accounts...";
-        const accounts = await API.fetchAccounts(true);
-        if (!accounts || accounts.length === 0) {
-            throw new Error("No accounts found");
-        }
-
-        uiElements.refreshStatusEl.textContent = "Loading saved data...";
-        storageOP.setToken(accounts[0].account_token);
-        const loadedFromStorage = storageOP.loadAll();
-
-        if (!loadedFromStorage) {
-            uiElements.refreshStatusEl.textContent = "Refreshing data...";
-            const refreshResult = await API.refreshAllData(progress => {
-                uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
-            });
-
-            if (!refreshResult.success) {
-                throw new Error(`Failed to refresh data: ${refreshResult.error}`);
+        try {
+            const authStatus = await auth_init();
+            if (!authStatus) {
+                return 0;
             }
 
-            if (refreshResult.newOffers > 0) {
-                ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
+            const uiElements = ui_createMain();
+            renderEngine.initialize(uiElements.content);
+
+            const kickoffStatus = util_antiKickOff.initialize(90000, true);
+            if (!kickoffStatus) {
+                console.warn("Anti-kickoff initialization failed");
             }
+
+            statsOP.initializeListeners();
+            uiElements.refreshStatusEl.textContent = "Loading accounts...";
+
+            const accounts = await API.fetchAccounts(true);
+            if (!accounts || accounts.length === 0) {
+                throw new Error("No accounts found");
+            }
+
+            uiElements.refreshStatusEl.textContent = "Loading saved data...";
+            storageOP.setToken(accounts[0].account_token);
+            const loadedFromStorage = storageOP.loadAll();
+
+            if (!loadedFromStorage) {
+                uiElements.refreshStatusEl.textContent = "Refreshing data...";
+
+                const refreshResult = await API.refreshAllData(progress => {
+                    uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
+                });
+
+                if (!refreshResult.success) {
+                    throw new Error(`Failed to refresh data: ${refreshResult.error}`);
+                }
+
+                if (refreshResult.newOffers > 0) {
+                    ui_showNotification(`Found ${refreshResult.newOffers} new offers`, 'success');
+                }
+            }
+
+            uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
+            renderEngine.changeView('MEMBER');
+
+            const date = new Date(glbVer.get('lastUpdate'));
+            uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
+
+            util_antiKickOff.forceExtend();
+
+            offer_sortTable_keyUpd('favorite');
+
+            return true;
+        } catch (error) {
+            console.error("Initialization error:", error);
+            ui_showNotification(`Failed to initialize: ${error.message}`, 'error');
+            return false;
         }
-
-        uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
-        renderEngine.changeView('MEMBER');
-
-        const date = new Date(glbVer.get('lastUpdate'));
-        uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
-
-        util_antiKickOff.forceExtend();
-
-        return true;
     }
 
     document.addEventListener('DOMContentLoaded', initialize);

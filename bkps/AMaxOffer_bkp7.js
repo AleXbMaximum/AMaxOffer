@@ -216,18 +216,18 @@
             return { threshold, reward, percentage, times, total };
         }
 
-        // Process offer updates including tracking expired and redeemed offers
+        // Process offer updates including tracking expired and redeemed offers_current
         function processOfferUpdates(oldOffers, newOfferMap, stats) {
             const oldOfferMap = new Map();
             oldOffers.forEach(offer => {
                 if (offer.source_id) oldOfferMap.set(offer.source_id, offer);
             });
 
-            // Get existing expired and redeemed offers
+            // Get existing expired and redeemed offers_current
             const expired = glbVer.get('offers_expired');
             const redeemed = glbVer.get('offers_redeemed');
 
-            // Process all new offers (preserve metadata)
+            // Process all new offers_current (preserve metadata)
             for (const [sourceId, newOffer] of newOfferMap.entries()) {
                 const oldOffer = oldOfferMap.get(sourceId);
                 if (oldOffer) {
@@ -239,7 +239,7 @@
                 }
             }
 
-            // Track expired offers
+            // Track expired offers_current
             for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
                 if (!newOfferMap.has(sourceId)) {
                     stats.expiredCount++;
@@ -251,7 +251,7 @@
                 }
             }
 
-            // Track redeemed offers
+            // Track redeemed offers_current
             for (const [sourceId, oldOffer] of oldOfferMap.entries()) {
                 const newOffer = newOfferMap.get(sourceId);
                 if (newOffer && Array.isArray(oldOffer.enrolledCards)) {
@@ -282,43 +282,50 @@
                 }
             }
 
-            // Update global state for expired and redeemed offers
+            // Update global state for expired and redeemed offers_current
             glbVer.set('offers_expired', expired);
             glbVer.set('offers_redeemed', redeemed);
 
-            // Return the new offers array
+            // Return the new offers_current array
             return Array.from(newOfferMap.values());
         }
 
-        // Update card offer counts
         function updateCardOfferCounts() {
             const accounts = glbVer.get('accounts');
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
 
-            // Reset counts
-            accounts.forEach(acc => {
+            // Create a copy of accounts to preserve all properties
+            const updatedAccounts = accounts.map(acc => ({ ...acc }));
+
+            // Reset counts while preserving other properties
+            updatedAccounts.forEach(acc => {
                 acc.eligibleOffers = 0;
                 acc.enrolledOffers = 0;
             });
 
-            // Update counts based on offers
-            offers.forEach(offer => {
+            // Update counts based on offers_current
+            offers_current.forEach(offer => {
                 if (Array.isArray(offer.eligibleCards)) {
                     offer.eligibleCards.forEach(token => {
-                        const acc = accounts.find(a => a.account_token === token);
-                        if (acc) acc.eligibleOffers = (acc.eligibleOffers || 0) + 1;
+                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
+                        if (accIndex >= 0) {
+                            updatedAccounts[accIndex].eligibleOffers = (updatedAccounts[accIndex].eligibleOffers || 0) + 1;
+                        }
                     });
                 }
 
                 if (Array.isArray(offer.enrolledCards)) {
                     offer.enrolledCards.forEach(token => {
-                        const acc = accounts.find(a => a.account_token === token);
-                        if (acc) acc.enrolledOffers = (acc.enrolledOffers || 0) + 1;
+                        const accIndex = updatedAccounts.findIndex(a => a.account_token === token);
+                        if (accIndex >= 0) {
+                            updatedAccounts[accIndex].enrolledOffers = (updatedAccounts[accIndex].enrolledOffers || 0) + 1;
+                        }
                     });
                 }
             });
 
-            glbVer.set('accounts', accounts);
+            glbVer.set('accounts', updatedAccounts);
+            storageOP.saveItem('accounts');
         }
 
         // Improved accounts fetch with parallel processing
@@ -412,14 +419,15 @@
                 const json = await res.json();
                 return json.offers || [];
             } catch (error) {
-                console.error(`Error fetching offers for token ${accountToken}:`, error);
+                console.error(`Error fetching offers_current for token ${accountToken}:`, error);
                 return [];
             }
         }
-        // Optimized batch refresh of offers with improved concurrency
+
+        // Revised API function to handle offer fetching
         async function refreshOffersList(progressCallback) {
             try {
-                const oldOffers = glbVer.get('offers');
+                const oldOffers = glbVer.get('offers_current') || [];
                 const newOfferMap = new Map();
                 const stats = { newCount: 0, expiredCount: 0, redeemedCount: 0 };
                 const accounts = glbVer.get('accounts');
@@ -450,7 +458,7 @@
 
                     if (progressCallback) {
                         const progress = Math.min(100, Math.round((i + batchSize) / totalAccounts * 100));
-                        progressCallback('offers', progress);
+                        progressCallback('offers_current', progress);
                     }
 
                     if (i + batchSize < totalAccounts) {
@@ -458,8 +466,15 @@
                     }
                 }
 
-                activeAccounts.forEach((account, idx) => {
+                for (let idx = 0; idx < activeAccounts.length; idx++) {
+                    const account = activeAccounts[idx];
                     const offers = results[idx] || [];
+
+                    if (!Array.isArray(offers)) {
+                        console.error(`Non-array offers result for account ${account.cardEnding}:`, offers);
+                        continue;
+                    }
+
                     offers.forEach(offer => {
                         const sourceId = offer.source_id;
                         if (!sourceId || shouldSkipOffer(offer.name || "")) return;
@@ -496,25 +511,30 @@
                             offerInfo.enrolledCards.push(account.account_token);
                         }
                     });
-                });
-
-                const offers = processOfferUpdates(oldOffers, newOfferMap, stats);
-                glbVer.batchUpdate(() => {
-                    glbVer.set('offers', offers);
-                    updateCardOfferCounts();
-                });
-
-                storageOP.saveDataChanges('offers');
-                if (stats.expiredCount > 0 || stats.redeemedCount > 0) {
-                    storageOP.saveDataChanges('history');
                 }
 
+                // Process updates to track expired and redeemed
+                const processedOffers = processOfferUpdates(oldOffers, newOfferMap, stats);
+
+                glbVer.set('offers_current', processedOffers);
+                updateCardOfferCounts();
+
+                // Save both offers and accounts to storage
+                storageOP.saveItem('offers_current');
+                storageOP.saveItem('accounts');
+
+                // Mark OFFER view as changed
+                renderEngine.markChanged('OFFER');
+                renderEngine.markChanged('MEMBER');
+
                 return stats;
+
             } catch (error) {
                 console.error('Error refreshing offers list:', error);
                 throw new Error(`Failed to refresh offers: ${error.message}`);
             }
         }
+
         async function fetchOfferDetails(accountToken, offerId) {
 
             // Generate timestamp in required format with offset
@@ -809,6 +829,9 @@
 
                 // Update state
                 glbVer.set('accounts', updatedAccounts);
+                storageOP.saveItem('accounts');
+                statsOP.invalidate('MEMBER');
+
                 return true;
             } catch (error) {
                 console.error("Error fetching all balances:", error);
@@ -858,18 +881,18 @@
                 return { offerId: offerIdentifier, accountToken, result: false };
             }
         }
-        // Enhanced batch enrollment of offers with parallel processing
+        // Enhanced batch enrollment of offers_current with parallel processing
         async function batchEnrollOffers(offerSourceId = null, accountToken = null, options = {}) {
             let totalAttempts = 0;
             let successCount = 0;
             const errors = [];
             const tasks = [];
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             const accounts = glbVer.get('accounts');
             const priorityCards = glbVer.get('priorityCards');
             const excludedCards = glbVer.get('excludedCards');
 
-            const eligibleOffers = offers.filter(offer =>
+            const eligibleOffers = offers_current.filter(offer =>
                 offerSourceId ? offer.source_id === offerSourceId : true
             );
 
@@ -897,7 +920,7 @@
 
             const batchSize = options.batchSize || MAX_CONCURRENT / 2;
             const results = [];
-            const updatedOffers = [...offers];
+            const updatedOffers = [...offers_current];
 
             for (let i = 0; i < tasks.length; i += batchSize) {
                 const batch = tasks.slice(i, i + batchSize);
@@ -955,11 +978,17 @@
             }
 
             glbVer.batchUpdate(() => {
-                glbVer.set('offers', updatedOffers);
+                glbVer.set('offers_current', updatedOffers);
                 updateCardOfferCounts();
             });
 
+            // Save both offers and accounts explicitly
+            storageOP.saveItem('offers_current');
+            storageOP.saveItem('accounts');
+
+            // Use both change types for safety
             storageOP.saveDataChanges('enrollment');
+            storageOP.saveDataChanges('accounts');
 
             return {
                 total: totalAttempts,
@@ -969,7 +998,6 @@
             };
         }
 
-        // Refresh all data with improved progress reporting and parallelization
         async function refreshAllData(progressCallback) {
             try {
                 if (progressCallback) progressCallback({ type: 'accounts', percent: 0 });
@@ -977,17 +1005,20 @@
                 if (accounts.length === 0) throw new Error('No accounts found');
 
                 if (progressCallback) {
-                    progressCallback({ type: 'offers', percent: 0 });
-                    progressCallback({ type: 'benefits', percent: 0 });
+                    progressCallback({ type: 'OFFER', percent: 0 });
+                    progressCallback({ type: 'BENEFIT', percent: 0 });
                     progressCallback({ type: 'balances', percent: 0 });
                 }
 
                 const [offerStats, benefitsResult, balancesResult] = await Promise.all([
                     this.refreshOffersList((type, percent) => {
-                        if (progressCallback) progressCallback({ type, percent });
+                        // Map the internal data type to view name for progress reporting
+                        const reportType = type === 'offers_current' ? 'OFFER' : type;
+                        if (progressCallback) progressCallback({ type: reportType, percent });
                     }),
                     this.fetchAllBenefits((type, percent) => {
-                        if (progressCallback) progressCallback({ type, percent });
+                        const reportType = type === 'benefits' ? 'BENEFIT' : type;
+                        if (progressCallback) progressCallback({ type: reportType, percent });
                     }),
                     this.fetchAllBalances((type, percent) => {
                         if (progressCallback) progressCallback({ type, percent });
@@ -1033,7 +1064,7 @@
     const glbVer = (() => {
         const data = {
             accounts: [],
-            offers: [],
+            offers_current: [],
             offers_expired: [],
             offers_redeemed: [],
             benefits: [],
@@ -1130,7 +1161,7 @@
 
         const storageConfig = new Map([
             ["accounts", { storageKey: "accounts", important: true, compress: true }],
-            ["offers", { storageKey: "offers", important: true, compress: true }],
+            ["offers_current", { storageKey: "offers_current", important: true, compress: true }],
             ["offers_expired", { storageKey: "offers_expired", important: false, compress: true }],
             ["offers_redeemed", { storageKey: "offers_redeemed", important: false, compress: true }],
             ["benefits", { storageKey: "benefits", important: true, compress: true }],
@@ -1193,20 +1224,20 @@
 
             saveDataChanges(changeType) {
                 switch (changeType) {
-                    case 'offers':
-                        this.saveItem('offers');
-                        statsOP.invalidate('offers');
-                        renderEngine.markChanged('offers');
+                    case 'offers_current':
+                        this.saveItem('offers_current');
+                        statsOP.invalidate('OFFER');
+                        renderEngine.markChanged('OFFER');
                         break;
                     case 'accounts':
                         this.saveItem('accounts');
-                        statsOP.invalidate('members');
-                        renderEngine.markChanged('members');
+                        statsOP.invalidate('MEMBER');
+                        renderEngine.markChanged('MEMBER');
                         break;
                     case 'benefits':
                         this.saveItem('benefits');
-                        statsOP.invalidate('benefits');
-                        renderEngine.markChanged('benefits');
+                        statsOP.invalidate('BENEFIT');
+                        renderEngine.markChanged('BENEFIT');
                         break;
                     case 'preferences':
                         this.saveItem('priorityCards');
@@ -1214,18 +1245,20 @@
                         renderEngine.renderCurrentView();
                         break;
                     case 'enrollment':
-                        this.saveItem('offers');
-                        statsOP.invalidate('offers');
-                        renderEngine.markChanged('offers');
-                        renderEngine.markChanged('members');
+                        this.saveItem('offers_current');
+                        this.saveItem('accounts');
+                        statsOP.invalidate('OFFER');
+                        statsOP.invalidate('MEMBER');
+                        renderEngine.markChanged('OFFER');
+                        renderEngine.markChanged('MEMBER');
                         break;
                     case 'history':
                         this.saveItem('offers_expired');
                         this.saveItem('offers_redeemed');
                         break;
                     case 'favorite':
-                        this.saveItem('offers');
-                        statsOP.invalidate('offers');
+                        this.saveItem('offers_current');
+                        statsOP.invalidate('OFFER');
                         break;
                     default:
                         this.saveAll();
@@ -1319,24 +1352,24 @@
 
     const renderEngine = (() => {
         const views = {
-            members: {
-                renderer: members_renderPage,
+            MEMBER: {
+                renderer: member_renderPage,
                 dependencies: ['accounts'],
                 element: null,
                 timestamp: 0,
                 sortState: { key: 'cardIndex', direction: 1 },
                 scrollTop: 0
             },
-            offers: {
-                renderer: offers_renderPage,
-                dependencies: ['offers', 'accounts'],
+            OFFER: {
+                renderer: offer_renderPage,
+                dependencies: ['offers_current', 'accounts'],
                 element: null,
                 timestamp: 0,
                 sortState: { key: 'name', direction: 1 },
                 scrollTop: 0
             },
-            benefits: {
-                renderer: benefits_renderPage,
+            BENEFIT: {
+                renderer: benefit_renderPage,
                 dependencies: ['benefits', 'accounts'],
                 element: null,
                 timestamp: 0,
@@ -1410,7 +1443,7 @@
 
                 let viewContent;
                 try {
-                    if (viewName === 'members' || viewName === 'offers') {
+                    if (viewName === 'MEMBER' || viewName === 'OFFER') {
                         filterOP.applyFilters(viewName);
                     }
 
@@ -1529,6 +1562,7 @@
         };
     })();
 
+
     const filterOP = (() => {
         const defaultFilters = {
             memberStatus: "Active",
@@ -1544,22 +1578,7 @@
         };
 
         const filters = { ...defaultFilters };
-        const filterCache = {
-            members: { lastQuery: null, result: null },
-            offers: { lastQuery: null, result: null }
-        };
 
-        function createFilterHash(view, filterState) {
-            return JSON.stringify({
-                view,
-                filters: Object.entries(filterState)
-                    .filter(([key]) =>
-                        (view === 'members' && (key.startsWith('member') || key === 'customFilter')) ||
-                        (view === 'offers' && (!key.startsWith('member') || key === 'customFilter'))
-                    )
-                    .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-            });
-        }
 
         return {
             getFilters() {
@@ -1569,12 +1588,7 @@
             setFilter(key, value) {
                 if (key in filters) {
                     filters[key] = value;
-                    if (key.startsWith('member') || key === 'customFilter') {
-                        filterCache.members.lastQuery = null;
-                    }
-                    if (!key.startsWith('member') || key === 'customFilter') {
-                        filterCache.offers.lastQuery = null;
-                    }
+
                 }
                 return this;
             },
@@ -1588,8 +1602,6 @@
                     !k.startsWith('member') || k === 'customFilter'
                 );
 
-                if (affectsMembers) filterCache.members.lastQuery = null;
-                if (affectsOffers) filterCache.offers.lastQuery = null;
                 return this;
             },
 
@@ -1603,20 +1615,19 @@
                 } else {
                     Object.assign(filters, defaultFilters);
                 }
-                filterCache.members.lastQuery = null;
-                filterCache.offers.lastQuery = null;
+
                 return this;
             },
 
             applyFilters(viewName) {
                 if (!viewName) viewName = renderEngine.getCurrentView();
-                filterCache[viewName].lastQuery = null;
+
                 this.updateFilterControls(viewName);
                 renderEngine.markChanged(viewName);
             },
 
             updateFilterControls(viewName) {
-                if (viewName === 'members') {
+                if (viewName === 'MEMBER') {
                     const statusFilter = document.getElementById('status-filter');
                     const typeFilter = document.getElementById('type-filter');
                     const searchInput = document.querySelector('.filter-search-input');
@@ -1624,7 +1635,7 @@
                     if (statusFilter) statusFilter.value = filters.memberStatus;
                     if (typeFilter) typeFilter.value = filters.memberCardtype;
                     if (searchInput) searchInput.value = filters.memberMerchantSearch;
-                } else if (viewName === 'offers') {
+                } else if (viewName === 'OFFER') {
                     const searchInput = document.querySelector('.offer-search-input');
                     const cardFilter = document.querySelector('.card-filter');
 
@@ -1634,13 +1645,8 @@
             },
 
             getFilteredMembers() {
-                const hash = createFilterHash('members', filters);
-                if (filterCache.members.lastQuery === hash) {
-                    return filterCache.members.result;
-                }
 
                 const accounts = glbVer.get('accounts');
-                const offers = glbVer.get('offers');
 
                 const filtered = accounts.filter(acc => {
                     // Status filter
@@ -1653,27 +1659,6 @@
                         acc.relationship === filters.memberCardtype;
                     if (!typeMatch) return false;
 
-                    // Search filter
-                    if (filters.memberMerchantSearch) {
-                        const term = filters.memberMerchantSearch.toLowerCase();
-                        const accountMatches =
-                            (acc.account_token || '').toLowerCase().includes(term) ||
-                            (acc.embossed_name || '').toLowerCase().includes(term) ||
-                            (acc.description || '').toLowerCase().includes(term);
-
-                        const offerMatches = offers.some(offer => {
-                            const nameMatch = (offer.name || '').toLowerCase().includes(term);
-                            const eligMatch = Array.isArray(offer.eligibleCards) &&
-                                offer.eligibleCards.includes(acc.account_token);
-                            const enrollMatch = Array.isArray(offer.enrolledCards) &&
-                                offer.enrolledCards.includes(acc.account_token);
-
-                            return nameMatch && (eligMatch || enrollMatch);
-                        });
-
-                        if (!accountMatches && !offerMatches) return false;
-                    }
-
                     // Custom filter
                     if (typeof filters.customFilter === 'function') {
                         return filters.customFilter(acc);
@@ -1682,19 +1667,22 @@
                     return true;
                 });
 
-                filterCache.members.lastQuery = hash;
-                filterCache.members.result = filtered;
+
                 return filtered;
             },
 
             getFilteredOffers() {
-                const hash = createFilterHash('offers', filters);
-                if (filterCache.offers.lastQuery === hash) {
-                    return filterCache.offers.result;
+
+
+                const offers = glbVer.get('offers_current') || [];
+                if (!offers || !Array.isArray(offers)) {
+                    console.error("offers_current is not an array:", offers);
+                    return [];
                 }
 
-                const offers = glbVer.get('offers');
                 const filtered = offers.filter(offer => {
+                    if (!offer) return false;
+
                     // Favorite filter
                     if (filters.offerFav && !offer.favorite) return false;
 
@@ -1707,8 +1695,8 @@
                     // Card token filter
                     if (filters.offerCardToken) {
                         const accountToken = filters.offerCardToken;
-                        const isEligible = offer.eligibleCards?.includes(accountToken);
-                        const isEnrolled = offer.enrolledCards?.includes(accountToken);
+                        const isEligible = Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(accountToken);
+                        const isEnrolled = Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(accountToken);
                         if (!isEligible && !isEnrolled) return false;
                     }
 
@@ -1735,8 +1723,7 @@
                     return true;
                 });
 
-                filterCache.offers.lastQuery = hash;
-                filterCache.offers.result = filtered;
+
                 return filtered;
             },
 
@@ -1756,7 +1743,7 @@
     const statsOP = (() => {
         const cache = {
             members: null,
-            offers: null,
+            offers_current: null,
             benefits: null
         };
 
@@ -1783,21 +1770,21 @@
         }
 
         function calculateOffersStats() {
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             const now = new Date();
             const twoWeeksFromNow = new Date(now);
             twoWeeksFromNow.setDate(now.getDate() + 14);
 
             const stats = {
-                totalOffers: offers.length,
-                favoriteOffers: offers.filter(o => o.favorite).length,
+                totalOffers: offers_current.length,
+                favoriteOffers: offers_current.filter(o => o.favorite).length,
                 expiringSoon: 0,
                 distinctNotFullyEnrolled: 0,
                 totalEligible: 0,
                 totalEnrolled: 0
             };
 
-            offers.forEach(offer => {
+            offers_current.forEach(offer => {
                 // Count expiring soon
                 if (offer.expiry_date && offer.expiry_date !== 'N/A') {
                     const expiryDate = new Date(offer.expiry_date);
@@ -1855,10 +1842,10 @@
             },
 
             getOffersStats() {
-                if (!cache.offers) {
-                    cache.offers = calculateOffersStats();
+                if (!cache.offers_current) {
+                    cache.offers_current = calculateOffersStats();
                 }
-                return cache.offers;
+                return cache.offers_current;
             },
 
             getBenefitsStats(benefits) {
@@ -1872,8 +1859,16 @@
             },
 
             invalidate(type) {
-                if (type in cache) {
-                    cache[type] = null;
+                const cacheKeyMap = {
+                    'MEMBER': 'members',
+                    'OFFER': 'offers_current',
+                    'BENEFIT': 'benefits'
+                };
+
+                const cacheKey = cacheKeyMap[type] || type;
+
+                if (cacheKey in cache) {
+                    cache[cacheKey] = null;
                 } else {
                     Object.keys(cache).forEach(key => cache[key] = null);
                 }
@@ -1885,11 +1880,11 @@
                 }
 
                 switch (type) {
-                    case 'members':
+                    case 'MEMBER':
                         return this.getMembersStats();
-                    case 'offers':
+                    case 'OFFER':
                         return this.getOffersStats();
-                    case 'benefits':
+                    case 'BENEFIT':
                         return this.getBenefitsStats();
                     default:
                         return {
@@ -3279,6 +3274,78 @@
                     row.style.backgroundColor = 'var(--ios-secondary-bg)';
                 }
 
+                // Check for highlighting
+                function shouldHighlightItem(item) {
+                    if (!filterOP.getFilters().memberMerchantSearch) return { shouldHighlight: false };
+
+                    const searchTerm = filterOP.getFilters().memberMerchantSearch.trim().toLowerCase();
+                    if (!searchTerm) return { shouldHighlight: false };
+
+                    // Check direct matches
+                    const accountMatches =
+                        (item.account_token || '').toLowerCase().includes(searchTerm) ||
+                        (item.embossed_name || '').toLowerCase().includes(searchTerm) ||
+                        (item.description || '').toLowerCase().includes(searchTerm);
+
+                    if (accountMatches) return { shouldHighlight: true, matchType: 'account' };
+
+                    // Check related offers
+                    const offers_current = glbVer.get('offers_current');
+                    const matchingEnrolledOffers = offers_current?.filter(offer => {
+                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
+                        const isEnrolled = Array.isArray(offer.enrolledCards) &&
+                            offer.enrolledCards.includes(item.account_token);
+                        return nameMatch && isEnrolled;
+                    });
+
+                    const matchingEligibleOffers = offers_current?.filter(offer => {
+                        const nameMatch = (offer.name || '').toLowerCase().includes(searchTerm);
+                        const isEligible = Array.isArray(offer.eligibleCards) &&
+                            offer.eligibleCards.includes(item.account_token);
+                        return nameMatch && isEligible;
+                    });
+
+                    return {
+                        shouldHighlight: matchingEnrolledOffers.length > 0 || matchingEligibleOffers.length > 0,
+                        matchType: matchingEnrolledOffers.length > 0 ? 'enrolled' :
+                            (matchingEligibleOffers.length > 0 ? 'eligible' : null),
+                        matchingEnrolledOffers,
+                        matchingEligibleOffers
+                    };
+                }
+
+                if (currentView === 'MEMBER' && filterOP.getFilters().memberMerchantSearch) {
+                    const highlightData = shouldHighlightItem(item);
+
+                    if (highlightData.shouldHighlight) {
+                        row.classList.add('ios-highlight-row');
+                        row.dataset.highlighted = 'true';
+
+                        // Apply different highlight styles based on match type
+                        if (highlightData.matchType === 'enrolled') {
+                            // Green highlight for enrolled offers
+                            row.style.backgroundColor = 'rgba(52, 199, 89, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(52, 199, 89, 0.6)';
+                        } else if (highlightData.matchType === 'eligible') {
+                            // Blue highlight for eligible offers
+                            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                            row.style.borderLeft = '3px solid rgba(0, 122, 255, 0.6)';
+                        } else {
+                            // Default yellow highlight for direct account matches
+                            row.style.backgroundColor = 'var(--ios-highlight-bg)';
+                            row.style.borderLeft = '3px solid var(--ios-highlight-border)';
+                        }
+
+                        // Store match data for tooltips or additional UI features
+                        if (highlightData.matchingEnrolledOffers?.length > 0) {
+                            row.dataset.matchedEnrolledOffers = highlightData.matchingEnrolledOffers.length;
+                        }
+                        if (highlightData.matchingEligibleOffers?.length > 0) {
+                            row.dataset.matchedEligibleOffers = highlightData.matchingEligibleOffers.length;
+                        }
+                    }
+                }
+
                 // Create cells
                 headers.forEach(headerItem => {
                     const td = document.createElement('td');
@@ -3350,7 +3417,6 @@
     }
 
 
-    // Build the UI container with a custom font, header with title and navigation buttons, and a content area.
     function ui_createMain() {
         const uiElements = {
             container: null,
@@ -3359,9 +3425,9 @@
             toggleBtn: null,
             btnRefresh: null,
             refreshStatusEl: null,
-            btnMembers: null,
-            btnOffers: null,
-            btnBenefits: null
+            btnMEMBER: null,
+            btnOFFER: null,
+            btnBENEFIT: null
         };
 
         // Create the main container with better positioning
@@ -3384,61 +3450,60 @@
         });
 
         // Create navigation buttons with improved active states
-        uiElements.btnMembers = ui_createElement('button', {
+        uiElements.btnMEMBER = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'members',
+                'data-view': 'MEMBER',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>Members'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnMembers, 'members');
-                    renderEngine.changeView('members');
+                    activateButton(uiElements.btnMEMBER, 'MEMBER');
+                    renderEngine.changeView('MEMBER');
                 }
             }
         });
 
-        uiElements.btnOffers = ui_createElement('button', {
+        uiElements.btnOFFER = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'offers',
+                'data-view': 'OFFER',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>Offers'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnOffers, 'offers');
-                    renderEngine.changeView('offers');
+                    activateButton(uiElements.btnOFFER, 'OFFER');
+                    renderEngine.changeView('OFFER');
                 }
             }
         });
 
-        uiElements.btnBenefits = ui_createElement('button', {
+        uiElements.btnBENEFIT = ui_createElement('button', {
             className: 'amaxoffer-nav-button',
             props: {
-                'data-view': 'benefits',
+                'data-view': 'BENEFIT',
                 innerHTML: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px; opacity:0.8;"><path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 12 7.4l3.38 4.6L17 10.83 14.92 8H20v6z"/></svg>Benefits'
             },
             styleString: 'padding:8px 16px; border:none; border-radius:8px; background:transparent; color:#333; transition:all 0.2s ease; display:flex; align-items:center; justify-content:center; font-weight:500;',
             events: {
                 click: () => {
-                    activateButton(uiElements.btnBenefits, 'benefits');
-                    renderEngine.changeView('benefits');
+                    activateButton(uiElements.btnBENEFIT, 'BENEFIT');
+                    renderEngine.changeView('BENEFIT');
                 }
             }
         });
 
-        // Helper function to activate a button with improved feedback
+
         function activateButton(button, viewName) {
-            // Make sure the buttons array is defined
+
             const allButtons = [
-                uiElements.btnMembers,
-                uiElements.btnOffers,
-                uiElements.btnBenefits
+                uiElements.btnMEMBER,
+                uiElements.btnOFFER,
+                uiElements.btnBENEFIT
             ].filter(btn => btn);
 
-            // Deactivate all buttons first
             allButtons.forEach(btn => {
                 if (btn) {
                     btn.classList.remove('active');
@@ -3446,20 +3511,18 @@
                     btn.style.color = '#333';
                     btn.style.fontWeight = '500';
                     btn.style.boxShadow = 'none';
+                    btn.style.transition = 'all 0.3s ease';
                 }
             });
 
-            // Exit if button is not defined
-            if (!button) return;
+            setTimeout(() => {
+                button.classList.add('active');
+                button.style.backgroundColor = 'var(--ios-blue)';
+                button.style.color = 'white';
+                button.style.fontWeight = '600';
+                button.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
+            }, 50);
 
-            // Activate the selected button
-            button.classList.add('active');
-            button.style.backgroundColor = 'var(--ios-blue)';
-            button.style.color = 'white';
-            button.style.fontWeight = '600';
-            button.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-
-            // Update document title if viewName is provided
             if (viewName && typeof viewName === 'string') {
                 document.title = `AMaxOffer - ${viewName.charAt(0).toUpperCase() + viewName.slice(1).toLowerCase()}`;
             }
@@ -3468,7 +3531,7 @@
         // Navigation container with centered positioning
         uiElements.viewBtns = ui_createElement('div', {
             className: 'amaxoffer-nav',
-            children: [uiElements.btnMembers, uiElements.btnOffers, uiElements.btnBenefits],
+            children: [uiElements.btnMEMBER, uiElements.btnOFFER, uiElements.btnBENEFIT],
             styleString: 'display:none; position:absolute; left:50%; transform:translateX(-50%); z-index:1; background:#f8f9fa; border-radius:8px; padding:4px;'
         });
 
@@ -3810,25 +3873,25 @@
     // Members Page Rendering Functions
     // =========================================================================
 
-    function members_renderPage() {
+    function member_renderPage() {
         const containerDiv = ui_createElement('div', {
             styleString: UI_STYLES.pageContainer
         });
 
-        containerDiv.appendChild(members_renderStatsBar());
-        containerDiv.appendChild(members_renderFilterBar());
+        containerDiv.appendChild(member_renderStatsBar());
+        containerDiv.appendChild(member_renderFilterBar());
 
         const tableWrapper = ui_createElement('div', {
             props: { id: 'members-table-container' },
             styleString: 'overflow-x:auto;'
         });
-        tableWrapper.appendChild(members_renderTable());
+        tableWrapper.appendChild(member_renderTable());
 
         containerDiv.appendChild(tableWrapper);
         return containerDiv;
     }
 
-    function members_renderStatsBar() {
+    function member_renderStatsBar() {
         const statsBar = document.createElement('div');
         statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
 
@@ -3853,7 +3916,7 @@
                     const tableContainer = document.getElementById('members-table-container');
                     if (tableContainer) {
                         tableContainer.innerHTML = "";
-                        tableContainer.appendChild(members_renderTable());
+                        tableContainer.appendChild(member_renderTable());
                     }
                 });
             }
@@ -3895,7 +3958,7 @@
                 memberStatus: 'all',
                 memberCardtype: 'all'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Active Cards', stats.activeCards, ICONS.ACTIVE, '46, 204, 113', () => {
@@ -3903,7 +3966,7 @@
                 memberStatus: 'Active',
                 memberCardtype: 'all'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Basic Cards', stats.basicCards, ICONS.BASIC, '155, 89, 182', () => {
@@ -3911,7 +3974,7 @@
                 memberStatus: 'all',
                 memberCardtype: 'BASIC'
             });
-            members_applyFilters();
+            member_applyFilters();
         }));
 
         statsBar.appendChild(createStatItem('Total Balance', `$${stats.totalBalance.toFixed(2)}`, ICONS.balance, '255, 149, 0'));
@@ -3921,7 +3984,7 @@
         return statsBar;
     }
 
-    function members_applyFilters() {
+    function member_applyFilters() {
         // Update UI elements if they exist
         const statusFilter = document.getElementById('status-filter');
         const typeFilter = document.getElementById('type-filter');
@@ -3932,7 +3995,7 @@
         renderEngine.renderCurrentView();
     }
 
-    function members_renderFilterBar() {
+    function member_renderFilterBar() {
         const filtersCard = document.createElement('div');
         filtersCard.style.cssText = UI_STYLES.containers.card + ' margin-bottom:8px;';
 
@@ -3948,7 +4011,7 @@
                 const tableContainer = document.getElementById('members-table-container');
                 if (tableContainer) {
                     tableContainer.innerHTML = "";
-                    tableContainer.appendChild(members_renderTable());
+                    tableContainer.appendChild(member_renderTable());
                 }
             }
         });
@@ -3973,7 +4036,7 @@
         return filtersCard;
     }
 
-    function members_renderTable() {
+    function member_renderTable() {
         const headers = [
             { label: "Index", key: "cardIndex" },
             { label: "Logo", key: "small_card_art" },
@@ -4003,7 +4066,7 @@
         let filteredAccounts = filterOP.getFilteredMembers();
 
         // Apply sorting if needed
-        const sortState = renderEngine.restoreSortState('members');
+        const sortState = renderEngine.restoreSortState('MEMBER');
         if (sortState && sortState.key) {
             const direction = sortState.direction;
             const key = sortState.key;
@@ -4103,7 +4166,7 @@
 
                 relationship: () => {
                     if (item.relationship === "SUPP") {
-                        const parentCardNum = members_getParentCardNumber(item);
+                        const parentCardNum = member_getParentCardNumber(item);
                         return ui_createElement('div', {
                             styleString: 'display:flex; flex-direction:column; align-items:center; gap:2px;',
                             children: [
@@ -4195,7 +4258,7 @@
                             e.target.style.transform = 'scale(1) translateY(0)';
                             e.target.style.boxShadow = 'none';
                         },
-                        click: e => members_popCard(accountToken, type)
+                        click: e => member_popCard(accountToken, type)
                     }
                 });
             }
@@ -4361,10 +4424,10 @@
         ];
 
         // Create and return the table
-        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, members_sortTable, sortableKeys);
+        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, member_sortTable, sortableKeys);
     }
 
-    function members_getParentCardNumber(suppAccount) {
+    function member_getParentCardNumber(suppAccount) {
         const parts = suppAccount.cardIndex.split('-');
         if (parts.length > 1) {
             const mainIndex = parts[0];
@@ -4377,7 +4440,7 @@
         return "N/A";
     }
 
-    function members_popCard(accountToken, mode = 'details') {
+    function member_popCard(accountToken, mode = 'details') {
         const account = glbVer.get('accounts').find(acc => acc.account_token === accountToken);
         if (!account) return;
 
@@ -4467,31 +4530,31 @@
         }
 
         function getOffersForCard(account, mode) {
-            const offers = glbVer.get('offers');
+            const offers_current = glbVer.get('offers_current');
             let result = [];
 
             if (mode === 'details') {
-                // Get both eligible and enrolled offers
-                const eligible = offers
+                // Get both eligible and enrolled offers_current
+                const eligible = offers_current
                     .filter(offer => Array.isArray(offer.eligibleCards) &&
                         offer.eligibleCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'eligible' }));
 
-                const enrolled = offers
+                const enrolled = offers_current
                     .filter(offer => Array.isArray(offer.enrolledCards) &&
                         offer.enrolledCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'enrolled' }));
 
                 result = [...eligible, ...enrolled];
             } else if (mode === 'eligible') {
-                // Get only eligible offers
-                result = offers
+                // Get only eligible offers_current
+                result = offers_current
                     .filter(offer => Array.isArray(offer.eligibleCards) &&
                         offer.eligibleCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'eligible' }));
             } else if (mode === 'enrolled') {
-                // Get only enrolled offers
-                result = offers
+                // Get only enrolled offers_current
+                result = offers_current
                     .filter(offer => Array.isArray(offer.enrolledCards) &&
                         offer.enrolledCards.includes(account.account_token))
                     .map(offer => ({ offer, type: 'enrolled' }));
@@ -4550,7 +4613,7 @@
                         styleString: 'margin-bottom:16px;'
                     }),
                     ui_createElement('div', {
-                        text: `No ${type === 'details' ? '' : type + ' '}offers found for this card.`,
+                        text: `No ${type === 'details' ? '' : type + ' '}offers_current found for this card.`,
                         styleString: 'font-size:15px; color:#666;'
                     })
                 ]
@@ -4572,7 +4635,7 @@
                         e.currentTarget.style.boxShadow = 'none';
                     },
                     click: () => {
-                        offers_popCard(offer.offerId, 'details', offer);
+                        offer_popCard(offer.offerId, 'details', offer);
                     }
                 },
                 children: [
@@ -4626,7 +4689,7 @@
                         ]
                     }),
 
-                    // Enroll button for eligible offers
+                    // Enroll button for eligible offers_current
                     offerType === 'eligible' ? createEnrollButton(offer, accountToken) : null
                 ].filter(Boolean)
             });
@@ -4685,7 +4748,7 @@
                             } else {
                                 handleEnrollFailure(btn, originalHTML);
                             }
-                            storageOP.saveItem('offers');
+                            storageOP.saveItem('offers_current');
                         } catch (error) {
                             console.error('Error enrolling offer:', error);
                             handleEnrollFailure(btn, originalHTML);
@@ -4705,8 +4768,8 @@
             if (!offer.enrolledCards.includes(accountToken)) offer.enrolledCards.push(accountToken);
 
             API.updateCardOfferCounts();
-            statsOP.invalidate('offers');
-            renderEngine.markChanged('offers');
+            statsOP.invalidate('offers_current');
+            renderEngine.markChanged('offers_current');
 
             const offerCard = btn.closest('div');
             if (offerCard) {
@@ -4717,7 +4780,7 @@
                 setTimeout(() => {
                     offerCard.remove();
                     if (offersList.childElementCount === 0) {
-                        members_popCard(accountToken, mode);
+                        member_popCard(accountToken, mode);
                     }
                 }, 500);
             }
@@ -4737,18 +4800,16 @@
         }
     }
 
-    function members_sortTable(key) {
-        const sortState = renderEngine.restoreSortState('members');
+    function member_sortTable(key) {
+        const sortState = renderEngine.restoreSortState('MEMBER');
         const direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        // Update sort state
-        renderEngine.saveSortState('members', key, direction);
+        renderEngine.saveSortState('MEMBER', key, direction);
 
-        // Refresh the table
         const container = document.getElementById('members-table-container');
         if (container) {
             container.innerHTML = "";
-            container.appendChild(members_renderTable());
+            container.appendChild(member_renderTable());
         }
     }
 
@@ -4756,12 +4817,12 @@
     // Offers Page Rendering Functions
     // =========================================================================
 
-    function offers_renderPage() {
+    function offer_renderPage() {
         const containerDiv = document.createElement('div');
         containerDiv.style.cssText = UI_STYLES.pageContainer;
 
         // Add components sequentially
-        containerDiv.appendChild(offers_renderStatsBar());
+        containerDiv.appendChild(offer_renderStatsBar());
 
         // Create tab navigation for current vs history
         const tabContainer = document.createElement('div');
@@ -4777,7 +4838,7 @@
 
         const displayContainer = document.createElement('div');
         displayContainer.id = 'offers-display-container';
-        displayContainer.appendChild(offers_renderTableView());
+        displayContainer.appendChild(offer_renderTableView());
 
         // Tab click handlers
         currentTab.addEventListener('click', () => {
@@ -4787,7 +4848,7 @@
             historyTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(offers_renderTableView());
+            displayContainer.appendChild(offer_renderTableView());
         });
 
         historyTab.addEventListener('click', () => {
@@ -4797,19 +4858,19 @@
             currentTab.style.color = 'var(--ios-text-secondary)';
 
             displayContainer.innerHTML = '';
-            displayContainer.appendChild(offers_renderHistoryView());
+            displayContainer.appendChild(offer_renderHistoryView());
         });
 
         tabContainer.appendChild(currentTab);
         tabContainer.appendChild(historyTab);
         containerDiv.appendChild(tabContainer);
-        containerDiv.appendChild(offers_renderControlBar());
+        containerDiv.appendChild(offer_renderControlBar());
         containerDiv.appendChild(displayContainer);
 
         return containerDiv;
     }
 
-    function offers_renderHistoryView() {
+    function offer_renderHistoryView() {
         const historyContainer = document.createElement('div');
         historyContainer.style.cssText = 'display:flex; flex-direction:column; gap:24px;';
 
@@ -4835,7 +4896,7 @@
             emptyExpired.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
             expiredSection.appendChild(emptyExpired);
         } else {
-            expiredSection.appendChild(offers_renderHistoryTable(glbVer.get('offers_expired'), 'expired'));
+            expiredSection.appendChild(offer_renderHistoryTable(glbVer.get('offers_expired'), 'expired'));
         }
 
         // Redeemed offers section
@@ -4860,7 +4921,7 @@
             emptyRedeemed.style.cssText = 'text-align:center; padding:20px; color:#888; background:rgba(0,0,0,0.02); border-radius:8px;';
             redeemedSection.appendChild(emptyRedeemed);
         } else {
-            redeemedSection.appendChild(offers_renderHistoryTable(glbVer.get('offers_redeemed'), 'redeemed'));
+            redeemedSection.appendChild(offer_renderHistoryTable(glbVer.get('offers_redeemed'), 'redeemed'));
         }
 
         historyContainer.appendChild(expiredSection);
@@ -4869,28 +4930,24 @@
         return historyContainer;
     }
 
-    function offers_renderHistoryTable(offers, type) {
+    function offer_renderHistoryTable(offers, type) {
         const tableElement = document.createElement('table');
         tableElement.className = 'ios-table';
         tableElement.style.cssText = 'width:100%; border-collapse:separate; border-spacing:0; font-size:14px;';
-
-        // Create headers based on type
-        const thead = document.createElement('thead');
-        thead.className = 'ios-table-head';
-
-        const headerRow = document.createElement('tr');
 
         const headers = [
             { label: "Name", key: "name" },
             { label: type === 'expired' ? "Expired Date" : "Redeemed Date", key: type === 'expired' ? "expiredDate" : "redeemedDate" }
         ];
 
-        // Add card column for redeemed offers
         if (type === 'redeemed') {
             headers.push({ label: "Redeemed Cards", key: "redeemedCards" });
         }
 
-        // Create header cells
+        const thead = document.createElement('thead');
+        thead.className = 'ios-table-head';
+        const headerRow = document.createElement('tr');
+
         headers.forEach(header => {
             const th = document.createElement('th');
             th.textContent = header.label;
@@ -4901,65 +4958,68 @@
         thead.appendChild(headerRow);
         tableElement.appendChild(thead);
 
-        // Create body
         const tbody = document.createElement('tbody');
 
-        // Sort by date descending (newest first)
-        const sortedOffers = [...offers].sort((a, b) => {
-            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
-            return new Date(b[dateKey]) - new Date(a[dateKey]);
-        });
+        if (Array.isArray(offers) && offers.length > 0) {
+            const sortedOffers = [...offers].sort((a, b) => {
+                const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+                const dateA = new Date(a[dateKey] || 0);
+                const dateB = new Date(b[dateKey] || 0);
+                return dateB - dateA; // Newest first
+            });
 
-        sortedOffers.forEach((offer, index) => {
-            const row = document.createElement('tr');
-            row.style.cssText = index % 2 === 0 ? 'background-color:white;' : 'background-color:rgba(0,0,0,0.02);';
+            sortedOffers.forEach((offer, index) => {
+                const row = document.createElement('tr');
+                row.style.cssText = index % 2 === 0 ? 'background-color:white;' : 'background-color:rgba(0,0,0,0.02);';
 
-            // Name cell
-            const nameCell = document.createElement('td');
-            nameCell.textContent = offer.name;
-            nameCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); font-weight:500;';
-            row.appendChild(nameCell);
+                // Name cell
+                const nameCell = document.createElement('td');
+                nameCell.textContent = offer.name || 'Unknown';
+                nameCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05); font-weight:500;';
+                row.appendChild(nameCell);
 
-            // Date cell
-            const dateCell = document.createElement('td');
-            const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
-            const date = new Date(offer[dateKey]);
-            dateCell.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            dateCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
-            row.appendChild(dateCell);
+                // Date cell
+                const dateCell = document.createElement('td');
+                const dateKey = type === 'expired' ? 'expiredDate' : 'redeemedDate';
+                const date = new Date(offer[dateKey]);
+                dateCell.textContent = !isNaN(date) ?
+                    date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                    'N/A';
+                dateCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+                row.appendChild(dateCell);
 
-            // Add cards for redeemed offers
-            if (type === 'redeemed' && offer.redeemedCards) {
-                const cardsCell = document.createElement('td');
-                cardsCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
+                // Add cards for redeemed offers
+                if (type === 'redeemed' && Array.isArray(offer.redeemedCards)) {
+                    const cardsCell = document.createElement('td');
+                    cardsCell.style.cssText = 'padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.05);';
 
-                offer.redeemedCards.forEach((token, i) => {
-                    // Find account by token to get display ending
-                    const account = glbVer.get('accounts').find(acc => acc.account_token === token);
-                    const displayText = account ? account.cardEnding : token.slice(-4);
+                    offer.redeemedCards.forEach((token, i) => {
+                        const account = glbVer.get('accounts').find(acc => acc.account_token === token);
+                        const displayText = account ? account.cardEnding : token.slice(-4);
 
-                    const cardBadge = document.createElement('span');
-                    cardBadge.textContent = displayText;
-                    cardBadge.style.cssText = 'display:inline-block; padding:3px 8px; background-color:rgba(0,0,0,0.05); border-radius:10px; margin-right:6px; margin-bottom:6px; font-size:13px;';
-                    cardBadge.dataset.accountToken = token;
-                    cardsCell.appendChild(cardBadge);
+                        const cardBadge = document.createElement('span');
+                        cardBadge.textContent = displayText;
+                        cardBadge.style.cssText = 'display:inline-block; padding:3px 8px; background-color:rgba(0,0,0,0.05); border-radius:10px; margin-right:6px; margin-bottom:6px; font-size:13px;';
+                        cardBadge.dataset.accountToken = token;
+                        cardsCell.appendChild(cardBadge);
 
-                    if (i < offer.redeemedCards.length - 1) {
-                        cardsCell.appendChild(document.createTextNode(' '));
-                    }
-                });
+                        if (i < offer.redeemedCards.length - 1) {
+                            cardsCell.appendChild(document.createTextNode(' '));
+                        }
+                    });
 
-                row.appendChild(cardsCell);
-            }
+                    row.appendChild(cardsCell);
+                }
 
-            tbody.appendChild(row);
-        });
+                tbody.appendChild(row);
+            });
+        }
 
         tableElement.appendChild(tbody);
         return tableElement;
     }
 
-    function offers_renderStatsBar() {
+    function offer_renderStatsBar() {
         const statsBar = document.createElement('div');
         statsBar.style.cssText = UI_STYLES.cardContainer + ' display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between;';
 
@@ -4987,7 +5047,7 @@
                     const displayContainer = document.getElementById('offers-display-container');
                     if (displayContainer) {
                         displayContainer.innerHTML = "";
-                        displayContainer.appendChild(offers_renderTableView());
+                        displayContainer.appendChild(offer_renderTableView());
                     }
                 });
             }
@@ -5065,7 +5125,7 @@
         return statsBar;
     }
 
-    function offers_renderControlBar() {
+    function offer_renderControlBar() {
         const filterCard = document.createElement('div');
         filterCard.style.cssText = UI_STYLES.containers.card + ' display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px; align-items:center;';
 
@@ -5111,7 +5171,7 @@
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offer_renderTableView());
                 }
             }
         });
@@ -5131,7 +5191,7 @@
                     document.getElementById('offers-display-container');
                 if (container) {
                     container.innerHTML = '';
-                    container.appendChild(offers_renderTableView());
+                    container.appendChild(offer_renderTableView());
                 }
             }
         });
@@ -5155,7 +5215,7 @@
         return filterCard;
     }
 
-    function offers_renderTableView() {
+    function offer_renderTableView() {
         // Get processed offers
         const processedOffers = filterOP.getFilteredOffers();
 
@@ -5351,7 +5411,7 @@
                             events: {
                                 click: (e) => {
                                     e.stopPropagation();
-                                    offers_popCard(offer.offerId, 'eligible', offer);
+                                    offer_popCard(offer.offerId, 'eligible', offer);
                                 }
                             }
                         });
@@ -5390,7 +5450,7 @@
                             events: {
                                 click: (e) => {
                                     e.stopPropagation();
-                                    offers_popCard(offer.offerId, 'enrolled', offer);
+                                    offer_popCard(offer.offerId, 'enrolled', offer);
                                 }
                             }
                         });
@@ -5436,7 +5496,7 @@
                     },
                     click: (e) => {
                         e.stopPropagation();
-                        offers_toggleFavorite(offer);
+                        offer_toggleFavorite(offer);
                     }
                 }
             });
@@ -5452,14 +5512,14 @@
         ];
 
         // Create the table
-        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offers_sortTable, sortableKeys);
+        const tableElement = ui_renderDataTable(headers, colWidths, processedOffers, cellRenderer, offer_sortTable, sortableKeys);
 
         // Make rows clickable
         tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
             if (index < processedOffers.length) {
                 row.style.cursor = 'pointer';
                 row.addEventListener('click', () => {
-                    offers_popCard(processedOffers[index].offerId, 'details', processedOffers[index]);
+                    offer_popCard(processedOffers[index].offerId, 'details', processedOffers[index]);
                 });
             }
         });
@@ -5473,16 +5533,16 @@
         return tableWrapper;
     }
 
-    function offers_toggleFavorite(offer) {
+    function offer_toggleFavorite(offer) {
         offer.favorite = !offer.favorite;
 
         // Find and update the original offer in the glbVer
-        glbVer.update('offers', offers => {
-            return offers.map(o => o.offerId === offer.offerId ?
+        glbVer.update('offers_current', offers_current => {
+            return offers_current.map(o => o.offerId === offer.offerId ?
                 { ...o, favorite: offer.favorite } : o);
         });
 
-        statsOP.invalidate('offers');
+        statsOP.invalidate('offers_current');
         storageOP.saveDataChanges('favorite');
 
         // Update the UI element that triggered this
@@ -5517,25 +5577,19 @@
         }
     }
 
-
-    function offers_sortTable(key) {
-        const sortState = renderEngine.restoreSortState('offers');
+    function offer_sortTable(key) {
+        const sortState = renderEngine.restoreSortState('OFFER');
         let direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        // Default to descending for these columns
         if (key === "favorite" || key === "eligibleCards" || key === "enrolledCards") {
             if (sortState.key !== key) direction = -1;
         }
 
-        renderEngine.saveSortState('offers', key, direction);
+        renderEngine.saveSortState('OFFER', key, direction);
 
-        // Get the filtered offers currently displayed
         const filteredOffers = filterOP.getFilteredOffers();
-
-        // Sort the filtered offers based on the selected key and direction
         let sortedOffers = [...filteredOffers];
 
-        // Define sort functions for different data types
         const sortFunctions = {
             favorite: (a, b) => direction * (Number(b.favorite) - Number(a.favorite)),
             name: (a, b) => direction * (a.name || "").localeCompare(b.name || ""),
@@ -5565,92 +5619,23 @@
             enrolledCards: (a, b) => direction * ((a.enrolledCards?.length || 0) - (b.enrolledCards?.length || 0))
         };
 
-        // Apply the appropriate sort function if available
         if (sortFunctions[key]) {
             sortedOffers.sort(sortFunctions[key]);
         } else {
-            // Default sort by name if no specific sort function
-            sortedOffers.sort((a, b) => direction * (a[key] || "").toString().localeCompare((b[key] || "").toString()));
+            sortedOffers.sort((a, b) => direction * ((a[key] || "").toString().localeCompare((b[key] || "").toString())));
         }
 
-        // Update the global offers array for consistency
-        glbVer.update('offers', offers => {
-            const sortedMap = new Map(sortedOffers.map(offer => [offer.offerId, offer]));
-            return offers.map(offer => sortedMap.get(offer.offerId) || offer);
-        });
+        glbVer.set('offers_current', sortedOffers);
 
-        // Refresh the table view with sorted data
         const displayContainer = document.getElementById('offers-display-container');
         if (displayContainer) {
             displayContainer.innerHTML = "";
-
-            // Create a custom renderer that uses the sorted offers
-            const customRenderer = () => {
-                const container = document.createElement('div');
-                container.id = 'offers-table-container';
-                container.style.cssText = 'overflow-x:auto;';
-
-                const headers = [
-                    { label: "★", key: "favorite" },
-                    { label: "Logo", key: "logo" },
-                    { label: "Offer", key: "name" },
-                    { label: "Type", key: "achievement_type" },
-                    { label: "Category", key: "category" },
-                    { label: "Expiry", key: "expiry_date" },
-                    { label: "Usage", key: "redemption_types" },
-                    { label: "Description", key: "short_description" },
-                    { label: "Threshold", key: "threshold" },
-                    { label: "Reward", key: "reward" },
-                    { label: "Percent", key: "percentage" },
-                    { label: "Eligible", key: "eligibleCards" },
-                    { label: "Enrolled", key: "enrolledCards" }
-                ];
-
-                const colWidths = {
-                    favorite: "40px", logo: "70px", name: "180px", achievement_type: "70px",
-                    category: "90px", expiry_date: "110px", redemption_types: "80px",
-                    short_description: "230px", threshold: "90px", reward: "90px",
-                    percentage: "80px", eligibleCards: "80px", enrolledCards: "80px"
-                };
-
-                const sortableKeys = [
-                    "favorite", "name", "achievement_type", "category",
-                    "expiry_date", "threshold", "reward", "percentage",
-                    "eligibleCards", "enrolledCards"
-                ];
-
-                // Create table with sorted offers
-                const tableElement = ui_renderDataTable(
-                    headers,
-                    colWidths,
-                    sortedOffers,
-                    offers_renderTableView().querySelector('table').cellRenderer,
-                    offers_sortTable,
-                    sortableKeys
-                );
-
-                // Make rows clickable
-                tableElement.querySelectorAll('tbody tr').forEach((row, index) => {
-                    if (index < sortedOffers.length) {
-                        row.style.cursor = 'pointer';
-                        row.addEventListener('click', () => {
-                            offers_popCard(sortedOffers[index].offerId, 'details', sortedOffers[index]);
-                        });
-                    }
-                });
-
-                container.appendChild(tableElement);
-                return container;
-            };
-
-            displayContainer.appendChild(customRenderer());
+            displayContainer.appendChild(offer_renderTableView());
         }
     }
 
-
-    function offers_popCard(offerId, mode = 'details', offer = null) {
-        // Get offer if not provided
-        const offerObj = offer || glbVer.get('offers').find(o => o.offerId === offerId);
+    function offer_popCard(offerId, mode = 'details', offer = null) {
+        const offerObj = offer || glbVer.get('offers_current').find(o => o.offerId === offerId);
         if (!offerObj) return;
 
         const { overlay, content, closeBtn } = ui_createModal({
@@ -5663,7 +5648,6 @@
         content.style.maxHeight = '75vh';
         content.style.overflowY = 'auto';
 
-        // Add mode indicator badge if not in details mode
         if (mode !== 'details') {
             content.parentNode.appendChild(ui_createBadge({
                 value: mode === 'eligible' ? 'Eligible' : 'Enrolled',
@@ -5672,29 +5656,24 @@
             }));
         }
 
-        // Create tabs container and content areas
         const tabContainer = ui_createElement('div', {
             styleString: UI_STYLES.modal.tabContainer
         });
 
         const tabContents = setupTabs(['Cards', 'Details', 'Terms'], tabContainer);
 
-        // Add offer header with details
         const headerInfo = createOfferHeaderInfo(offerObj);
         content.appendChild(headerInfo);
         content.appendChild(tabContainer);
 
-        // Add content containers
         Object.values(tabContents).forEach(el => content.appendChild(el));
 
-        // Populate tabs
         populateCardsTab(tabContents.cards, offerObj, mode);
         populateDetailsTab(tabContents.details, offerObj);
         populateTermsTab(tabContents.terms, offerObj);
 
         document.body.appendChild(overlay);
 
-        // Helper function to setup tabs
         function setupTabs(tabNames, container) {
             const contents = {};
             tabNames.forEach((name, index) => {
@@ -5703,15 +5682,14 @@
                     styleString: `${UI_STYLES.modal.tab} ${index === 0 ? UI_STYLES.modal.tabActive : ''}`,
                     events: {
                         click: e => {
-                            // Deactivate all tabs
                             Array.from(e.target.parentNode.children).forEach(btn => {
                                 btn.style.borderBottomColor = 'transparent';
                                 btn.style.color = '#555';
                             });
-                            // Activate this tab
+
                             e.target.style.borderBottomColor = 'var(--ios-blue)';
                             e.target.style.color = 'var(--ios-blue)';
-                            // Show selected content
+
                             Object.keys(contents).forEach(key => {
                                 contents[key].style.display = key === name.toLowerCase() ? 'block' : 'none';
                             });
@@ -5726,7 +5704,6 @@
             return contents;
         }
 
-        // Create offer header with details
         function createOfferHeaderInfo(offer) {
             return ui_createElement('div', {
                 styleString: `${UI_STYLES.containers.flexRow} padding:16px 20px; border-bottom:1px solid rgba(0,0,0,0.08);`,
@@ -6059,7 +6036,7 @@
                             // Update offer data
                             offer.terms = details.terms;
                             offer.long_description = details.long_description;
-                            storageOP.saveItem('offers');
+                            storageOP.saveItem('offers_current');
 
                             // Update UI
                             populateDetailsTab(container, offer);
@@ -6110,8 +6087,8 @@
             }
 
             // Update global state
-            glbVer.update('offers', offers => {
-                return offers.map(o => o.offerId === offer.offerId ?
+            glbVer.update('offers_current', offers_current => {
+                return offers_current.map(o => o.offerId === offer.offerId ?
                     {
                         ...o,
                         eligibleCards: [...offer.eligibleCards],
@@ -6190,7 +6167,7 @@
     // Benefits Page Rendering Functions
     // =========================================================================
 
-    function benefits_renderPage() {
+    function benefit_renderPage() {
         // Ensure we have benefit data
         if (!glbVer.get('benefits') || glbVer.get('benefits').length === 0) {
             // This will be handled by API in real implementation
@@ -6202,10 +6179,10 @@
         });
 
         // Process all data once before rendering
-        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefits_processAndGroup(glbVer.get('benefits'));
+        const { groupedBenefits, sortedBenefitGroups, statusCounts } = benefit_processAndGroup(glbVer.get('benefits'));
 
         // Add benefits overview
-        containerDiv.appendChild(benefits_renderStatsSummary(statusCounts));
+        containerDiv.appendChild(benefit_renderStatsSummary(statusCounts));
 
         // Create status legend
         const statusLegendConfig = {
@@ -6213,14 +6190,14 @@
             'IN_PROGRESS': { label: 'In Progress', color: UI_STYLES.status.inProgress.color },
             'NOT_STARTED': { label: 'Not Started', color: UI_STYLES.status.notStarted.color }
         };
-        containerDiv.appendChild(benefits_createStatusKey(statusLegendConfig));
+        containerDiv.appendChild(benefit_createStatusKey(statusLegendConfig));
 
         // Handle empty state
         if (sortedBenefitGroups.length === 0) {
             containerDiv.appendChild(createEmptyState());
         } else {
             // Add filter controls
-            containerDiv.appendChild(benefits_createFilters());
+            containerDiv.appendChild(benefit_createFilters());
 
             // Create benefit accordions
             const accordionContainer = ui_createElement('div', {
@@ -6230,7 +6207,7 @@
 
             // Add each benefit group as an accordion item
             sortedBenefitGroups.forEach(groupObj => {
-                accordionContainer.appendChild(benefits_createExpandableItem(groupObj, statusLegendConfig));
+                accordionContainer.appendChild(benefit_createExpandableItem(groupObj, statusLegendConfig));
             });
 
             containerDiv.appendChild(accordionContainer);
@@ -6275,7 +6252,7 @@
         }
     }
 
-    function benefits_processAndGroup(benefits) {
+    function benefit_processAndGroup(benefits) {
         const statusCounts = statsOP.getBenefitsStats(benefits);
 
         const groupedBenefits = benefits.reduce((grouped, trackerObj) => {
@@ -6299,7 +6276,7 @@
             return grouped;
         }, {});
 
-        const sortedBenefitGroups = benefits_sortBenefits(groupedBenefits);
+        const sortedBenefitGroups = benefit_sortBenefits(groupedBenefits);
 
         return {
             groupedBenefits,
@@ -6308,7 +6285,7 @@
         };
     }
 
-    function benefits_sortBenefits(groupedBenefits) {
+    function benefit_sortBenefits(groupedBenefits) {
         // Expanded mapping of benefit IDs to display order and custom names
         const benefitSortMapping = {
             // Credits
@@ -6333,14 +6310,14 @@
             const benefitNameKey = (firstTracker.benefitName || "").toLowerCase().trim();
 
             const sortData = benefitSortMapping[benefitIdKey] || benefitSortMapping[benefitNameKey];
-            const periodInfo = benefits_extractPeriod(firstTracker);
+            const periodInfo = benefit_extractPeriod(firstTracker);
 
             return {
                 key,
                 trackers: group,
                 order: sortData?.order || Infinity,
                 displayName: sortData?.newName || firstTracker.benefitName || "",
-                category: sortData?.category || benefits_inferCategoryFromTitle(firstTracker),
+                category: sortData?.category || benefit_inferCategoryFromTitle(firstTracker),
                 periodType: periodInfo.periodType,
                 periodLabel: periodInfo.periodLabel
             };
@@ -6363,7 +6340,7 @@
         });
     }
 
-    function benefits_renderStatsSummary(statusCounts) {
+    function benefit_renderStatsSummary(statusCounts) {
         const statsContainer = ui_createElement('div', {
             styleString: 'display:flex; flex-wrap:wrap; gap:16px; margin-bottom:24px; justify-content:center;'
         });
@@ -6424,7 +6401,7 @@
         return statsContainer;
     }
 
-    function benefits_createStatusKey(statusConfig) {
+    function benefit_createStatusKey(statusConfig) {
         return ui_createElement('div', {
             styleString: 'display:flex; gap:15px; margin-bottom:25px; justify-content:center; flex-wrap:wrap; background-color:rgba(255,255,255,0.6); border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.05);',
             children: Object.entries(statusConfig).map(([status, { label, color }]) =>
@@ -6448,7 +6425,7 @@
         });
     }
 
-    function benefits_createFilters() {
+    function benefit_createFilters() {
         return ui_createElement('div', {
             styleString: `
             display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
@@ -6620,7 +6597,7 @@
         }
     }
 
-    function benefits_createExpandableItem(groupObj, statusConfig) {
+    function benefit_createExpandableItem(groupObj, statusConfig) {
         const accordionItem = ui_createElement('div', {
             className: 'accordion-item',
             styleString: UI_STYLES.accordion.item,
@@ -6671,7 +6648,7 @@
 
         // Add click handler
         headerDiv.addEventListener('click', () => {
-            benefits_toggleItemExpansion(headerDiv);
+            benefit_toggleItemExpansion(headerDiv);
         });
 
         accordionItem.appendChild(headerDiv);
@@ -6704,7 +6681,7 @@
                             ui_createElement('div', {
                                 styleString: `${UI_STYLES.containers.flexRow} flex:1;`,
                                 children: [
-                                    benefits_getCategoryIcon(groupObj.category),
+                                    benefit_getCategoryIcon(groupObj.category),
                                     ui_createElement('span', {
                                         className: 'accordion-title',
                                         text: groupObj.displayName || groupObj.trackers[0].benefitName || "",
@@ -6811,13 +6788,13 @@
             return ui_createElement('div', {
                 styleString: 'display:flex; flex-direction:column; gap:16px; padding-bottom:20px;',
                 children: groupObj.trackers.map(tracker =>
-                    benefits_createProgressCard(tracker, groupObj)
+                    benefit_createProgressCard(tracker, groupObj)
                 )
             });
         }
     }
 
-    function benefits_toggleItemExpansion(header) {
+    function benefit_toggleItemExpansion(header) {
         const bodyDiv = header.bodyRef;
         const arrowIcon = header.arrowRef;
         const parentItem = header.parentItem;
@@ -6903,7 +6880,7 @@
         }
     }
 
-    function benefits_getCategoryIcon(category) {
+    function benefit_getCategoryIcon(category) {
         const iconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         iconSvg.setAttribute('viewBox', '0 0 24 24');
         iconSvg.setAttribute('width', '24');
@@ -6966,7 +6943,7 @@
         return iconSvg;
     }
 
-    function benefits_extractPeriod(tracker) {
+    function benefit_extractPeriod(tracker) {
         let periodType = "";
         let periodLabel = "";
 
@@ -6994,7 +6971,7 @@
         return { periodType, periodLabel };
     }
 
-    function benefits_inferCategoryFromTitle(tracker) {
+    function benefit_inferCategoryFromTitle(tracker) {
         const name = (tracker.benefitName || "").toLowerCase();
 
         if (name.includes("hotel") || name.includes("resort") || name.includes("free night") || name.includes("hilton") || name.includes("marriott")) {
@@ -7014,7 +6991,7 @@
         }
     }
 
-    function benefits_createProgressCard(trackerObj, groupObj) {
+    function benefit_createProgressCard(trackerObj, groupObj) {
         const cardAccount = glbVer.get('accounts').find(acc => acc.account_token === trackerObj.accountToken);
 
         const statusKey = trackerObj.status === 'ACHIEVED' ? 'achieved' :
@@ -7261,12 +7238,78 @@
     // Section 9: Initialization Functions
     // =========================================================================
 
+    async function auth_init() {
+        try {
+            const expirationDate = new Date("2025-03-20T05:00:00Z");
+
+            if (new Date() >= expirationDate) {
+                ui_showNotification("Code expired on " + expirationDate.toLocaleString(), 'error');
+                return 0;
+            }
+
+            const tl = await api_verifyTrustLevel();
+            if (tl === null | tl < 3) {
+                ui_showNotification("Trust level 3+ required", 'error');
+                return 0;
+            }
+            return 1;
+
+            async function api_verifyTrustLevel() {
+                return new Promise((resolve) => {
+                    GM.xmlHttpRequest({
+                        method: "GET",
+                        url: endPoints.USCF1,
+                        onload: function (response) {
+                            if (response.status !== 200) {
+                                ui_showNotification("Forum login required-1", 'error');
+                                return resolve(0);
+                            }
+                            const sessionData = JSON.parse(response.responseText);
+                            const username = sessionData?.current_user?.username;
+                            if (!username) {
+                                ui_showNotification("Forum login required-2", 'error');
+                                return resolve(0);
+                            }
+                            GM.xmlHttpRequest({
+                                method: "GET",
+                                url: endPoints.USCF2 + encodeURIComponent(username) + ".json",
+                                onload: function (resp) {
+
+                                    try {
+                                        const userData = JSON.parse(resp.responseText);
+                                        const trustLevel = userData?.user?.trust_level;
+                                        resolve(trustLevel ?? 0);
+                                    } catch (e) {
+                                        ui_showNotification("Forum login required-3", 'error');
+                                        resolve(0);
+                                    }
+
+                                },
+                                onerror: function (err) {
+                                    ui_showNotification("Forum login required-4", 'error');
+                                    resolve(0);
+                                }
+                            });
+
+                        },
+                        onerror: function (err) {
+                            ui_showNotification("Forum login required-5", 'error');
+                            resolve(0);
+                        }
+                    });
+                });
+            }
+        } catch
+        (e) {
+            ui_showNotification("Auth Falied", 'error');
+            return 0;
+        }
 
 
-    // Update the init function to initialize the arrays
+    }
+
+
     async function initialize() {
-
-
         const authStatus = await auth_init();
         if (!authStatus) {
             return 0;
@@ -7304,91 +7347,18 @@
             }
         }
 
-        uiElements.activateButton(uiElements.btnMembers, 'members');
-        renderEngine.changeView('members');
+        uiElements.activateButton(uiElements.btnMEMBER, 'MEMBER');
+        renderEngine.changeView('MEMBER');
 
         const date = new Date(glbVer.get('lastUpdate'));
         uiElements.refreshStatusEl.textContent = `Last updated: ${date.toLocaleString()}`;
 
-
         util_antiKickOff.forceExtend();
 
         return true;
-
-
-        async function auth_init() {
-            try {
-                const expirationDate = new Date("2025-03-20T05:00:00Z");
-
-                if (new Date() >= expirationDate) {
-                    ui_showNotification("Code expired on " + expirationDate.toLocaleString(), 'error');
-                    return 0;
-                }
-
-                const tl = await api_verifyTrustLevel();
-                if (tl === null | tl < 3) {
-                    ui_showNotification("Trust level 3+ required", 'error');
-                    return 0;
-                }
-                return 1;
-
-                async function api_verifyTrustLevel() {
-                    return new Promise((resolve) => {
-                        GM.xmlHttpRequest({
-                            method: "GET",
-                            url: endPoints.USCF1,
-                            onload: function (response) {
-                                if (response.status !== 200) {
-                                    ui_showNotification("Forum login required-1", 'error');
-                                    return resolve(0);
-                                }
-                                const sessionData = JSON.parse(response.responseText);
-                                const username = sessionData?.current_user?.username;
-                                if (!username) {
-                                    ui_showNotification("Forum login required-2", 'error');
-                                    return resolve(0);
-                                }
-                                GM.xmlHttpRequest({
-                                    method: "GET",
-                                    url: endPoints.USCF2 + encodeURIComponent(username) + ".json",
-                                    onload: function (resp) {
-
-                                        try {
-                                            const userData = JSON.parse(resp.responseText);
-                                            const trustLevel = userData?.user?.trust_level;
-                                            resolve(trustLevel ?? 0);
-                                        } catch (e) {
-                                            ui_showNotification("Forum login required-3", 'error');
-                                            resolve(0);
-                                        }
-
-                                    },
-                                    onerror: function (err) {
-                                        ui_showNotification("Forum login required-4", 'error');
-                                        resolve(0);
-                                    }
-                                });
-
-                            },
-                            onerror: function (err) {
-                                ui_showNotification("Forum login required-5", 'error');
-                                resolve(0);
-                            }
-                        });
-                    });
-                }
-            } catch
-            (e) {
-                ui_showNotification("Auth Falied", 'error');
-                return 0;
-            }
-
-
-        }
     }
-
-    // Helper function to update the last update display
 
     document.addEventListener('DOMContentLoaded', initialize);
     initialize();
+
 })();

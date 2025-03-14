@@ -1,8 +1,9 @@
  
 // ==UserScript== 
 // @name         AMaxOffer 
-// @version      3.9.4 
+// @version      3.9.6 
 // @description  AMaxOffer Offers and Account Management Tool for American Express Site 
+// @description  Expiry Date is 2025-03-23T04:59:59Z 
 // @match        https://global.americanexpress.com/* 
 // @connect      uscardforum.com 
 // @updateURL    https://raw.githubusercontent.com/AleXbMaximum/AMaxOffer/master/raw/dist/AMaxOffer.user.js 

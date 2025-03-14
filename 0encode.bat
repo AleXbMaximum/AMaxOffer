@@ -6,21 +6,30 @@ echo. > "2minifiy\header.txt"
 
 setlocal enabledelayedexpansion
 set "inHeader=true"
+set "expiryDate="
+
+REM Find the expiry date in AMaxOffer.js
+for /f "tokens=*" %%a in ('findstr /C:"let expiry_date" AMaxOffer.js') do (
+    for /f "tokens=3 delims== " %%b in ("%%a") do set "expiryDate=%%~b"
+)
 
 REM Minify the script using terser
 call terser AMaxOffer.js -o "2minifiy\AMaxOffer_released0.min.js" ^
   --compress "drop_console=true" ^
   --comments "/@name|@license|@version|@description|@match|@connect|@grant|==/"
 
-
 set "inHeader=true"
 
+REM Process header and add the expiry date description after the original description
 for /f "delims=" %%a in (AMaxOffer.js) do (
-
     if "%%a"=="// @license    CC BY-NC-ND 4.0" set inHeader=false
 
     if !inHeader! == true (
         echo %%a >> 2minifiy\header.txt
+        echo %%a | findstr /C:"// @description  AMaxOffer Offers and Account Management Tool for American Express Site" > nul
+        if not errorlevel 1 (
+            echo // @description  Expiry Date is !expiryDate! >> 2minifiy\header.txt
+        )
     )
 )
 
