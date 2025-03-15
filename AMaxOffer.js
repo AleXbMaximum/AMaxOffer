@@ -32,6 +32,8 @@
 
     let expiry_date = "2025-03-23T04:59:59Z"
     let offer_sortOrder = []
+    let member_sortOrder = []
+
     const endPoints = {
         member: "https://global.americanexpress.com/api/servicing/v1/member",
         offfer_list: "https://functions.americanexpress.com/ReadCardAccountOffersList.v1",
@@ -293,58 +295,44 @@
         }
 
         function updateCardOfferCounts() {
-            try {
-                const accounts = glbVer.get('accounts');
-                const offers = glbVer.get('offers_current');
+            const accounts = glbVer.get('accounts');
+            const offers = glbVer.get('offers_current');
 
-                if (!accounts || !Array.isArray(accounts) || !offers || !Array.isArray(offers)) {
-                    throw new Error("Invalid data for updating offer counts");
-                }
+            if (!accounts || !Array.isArray(accounts) || !offers || !Array.isArray(offers)) {
+                return false;
+            }
 
-                // Create account lookup map for faster access
-                const accountMap = new Map();
+            // Use batch update for better performance
+            glbVer.batchUpdate(() => {
+                // Reset counters first to avoid stale data
                 accounts.forEach(acc => {
-                    accountMap.set(acc.account_token, {
-                        ...acc,
-                        eligibleOffers: 0,
-                        enrolledOffers: 0
-                    });
+                    acc.eligibleOffers = 0;
+                    acc.enrolledOffers = 0;
                 });
 
                 // Process all offers in a single pass
-                for (const offer of offers) {
+                offers.forEach(offer => {
                     // Update eligible counts
                     if (Array.isArray(offer.eligibleCards)) {
-                        for (const token of offer.eligibleCards) {
-                            const account = accountMap.get(token);
-                            if (account) {
-                                account.eligibleOffers += 1;
-                            }
-                        }
+                        offer.eligibleCards.forEach(token => {
+                            const account = accounts.find(acc => acc.account_token === token);
+                            if (account) account.eligibleOffers += 1;
+                        });
                     }
 
                     // Update enrolled counts
                     if (Array.isArray(offer.enrolledCards)) {
-                        for (const token of offer.enrolledCards) {
-                            const account = accountMap.get(token);
-                            if (account) {
-                                account.enrolledOffers += 1;
-                            }
-                        }
+                        offer.enrolledCards.forEach(token => {
+                            const account = accounts.find(acc => acc.account_token === token);
+                            if (account) account.enrolledOffers += 1;
+                        });
                     }
-                }
+                });
 
-                // Convert map back to array and update global state
-                const updatedAccounts = Array.from(accountMap.values());
-                glbVer.set('accounts', updatedAccounts);
+                glbVer.set('accounts', accounts, { skipNotification: true });
+            });
 
-                // No need to call saveItem here as the calling function should decide when to save
-
-                return true;
-            } catch (error) {
-                console.error("Error updating card offer counts:", error);
-                return false;
-            }
+            return true;
         }
 
         async function fetchAccounts(readonly = false) {
@@ -414,10 +402,10 @@
 
                     // Use the first account token for storage identification
                     const storageToken = accounts[0].account_token;
-                    storageOP.setToken(storageToken);
+                    glbVer.setToken(storageToken);
 
                     // Save accounts to storage
-                    storageOP.saveItem('accounts');
+                    glbVer.saveItem('accounts');
 
                     // Invalidate member stats
                     statsOP.invalidate('MEMBER');
@@ -560,14 +548,9 @@
 
                 glbVer.batchUpdate(() => {
                     const processedOffers = processOfferUpdates(oldOffers, newOfferMap, stats);
-
                     glbVer.set('offers_current', processedOffers);
-
                     this.updateCardOfferCounts();
                 });
-
-                storageOP.saveItem('offers_current');
-                storageOP.saveItem('accounts');
 
                 renderEngine.markChanged('OFFER');
                 renderEngine.markChanged('MEMBER');
@@ -875,7 +858,7 @@
 
                 // Update state
                 glbVer.set('accounts', updatedAccounts);
-                storageOP.saveItem('accounts');
+                glbVer.saveItem('accounts');
                 statsOP.invalidate('MEMBER');
 
                 return true;
@@ -1183,13 +1166,8 @@
                 const now = new Date().toISOString();
                 glbVer.set('lastUpdate', now);
 
-                // Save all data
-                storageOP.saveAll();
-
-                // Invalidate all stats
                 statsOP.invalidate();
 
-                // Report completion
                 reportProgress('complete', 100);
 
                 return {
@@ -1226,60 +1204,378 @@
     })();
 
     const glbVer = (() => {
-        const data = {
+        const PREFIX = "AMaxOffer";
+        const storageVersion = "3.0";
+        let storageToken = "";
+        let storageErrors = [];
+
+        // Debounce timers for localStorage writes with improved garbage collection
+        const saveTimers = new Map();
+        const SAVE_DELAY = 300; // ms
+
+        // Application state with predefined structure for consistency
+        let appState = {
             accounts: [],
             offers_current: [],
             offers_expired: [],
             offers_redeemed: [],
             benefits: [],
-            balances: {},
             priorityCards: [],
             excludedCards: [],
             lastUpdate: ""
         };
 
+        // Enhanced event management
         const listeners = new Map();
-        const cache = new Map();
+        let batchUpdateActive = false;
         const pendingNotifications = new Set();
-        let batchMode = false;
+        const pendingChanges = new Map();
 
+        // Storage configuration with metadata
+        const storageConfig = new Map([
+            ["accounts", { storageKey: "accounts", important: true, compress: true, autoSave: true }],
+            ["offers_current", { storageKey: "offers_current", important: true, compress: true, autoSave: true }],
+            ["offers_expired", { storageKey: "offers_expired", important: false, compress: true, autoSave: true }],
+            ["offers_redeemed", { storageKey: "offers_redeemed", important: false, compress: true, autoSave: true }],
+            ["benefits", { storageKey: "benefits", important: true, compress: true, autoSave: true }],
+            ["priorityCards", { storageKey: "priorityCards", important: true, compress: false, autoSave: true }],
+            ["excludedCards", { storageKey: "excludedCards", important: true, compress: false, autoSave: true }],
+            ["lastUpdate", { storageKey: "lastUpdate", important: true, compress: false, autoSave: true }]
+        ]);
+
+        // Storage key cache for performance
+        const keyCache = new Map();
+        function getStorageKey(key) {
+            if (!key || !storageToken) return null;
+            if (keyCache.has(key)) return keyCache.get(key);
+
+            if (!storageConfig.has(key)) return null;
+            const config = storageConfig.get(key);
+            const storageKey = `${PREFIX}_${config.storageKey}_${storageToken}`;
+            keyCache.set(key, storageKey);
+            return storageKey;
+        }
+
+        // Optimized compression with error handling
+        function compressData(data) {
+            try {
+                return JSON.stringify(data);
+            } catch (error) {
+                logError('compression', error, { dataType: typeof data });
+                return null;
+            }
+        }
+
+        function decompressData(compressed) {
+            try {
+                return JSON.parse(compressed);
+            } catch (error) {
+                logError('decompression', error, { dataLength: compressed?.length });
+                return null;
+            }
+        }
+
+        // Enhanced error logging with retention management
+        function logError(type, error, extraInfo = {}) {
+            const errorMsg = `Storage error (${type}): ${error.message}`;
+            const errorObj = {
+                type,
+                message: error.message,
+                timestamp: Date.now(),
+                ...extraInfo
+            };
+
+            storageErrors.push(errorObj);
+            console.error(errorMsg, error, extraInfo);
+
+            // Retain only most recent errors
+            if (storageErrors.length > 20) {
+                storageErrors = storageErrors.slice(-20);
+            }
+
+            return errorObj;
+        }
+
+        // Deep equality check with optimizations
+        function areEqual(a, b) {
+            // Fast path for reference equality
+            if (a === b) return true;
+            if (typeof a !== typeof b) return false;
+            if (a === null || b === null) return false;
+            if (typeof a !== 'object') return false;
+
+            const isArray = Array.isArray(a);
+            if (isArray !== Array.isArray(b)) return false;
+
+            if (isArray) {
+                if (a.length !== b.length) return false;
+                return a.every((val, idx) => areEqual(val, b[idx]));
+            }
+
+            const keysA = Object.keys(a);
+            const keysB = Object.keys(b);
+
+            if (keysA.length !== keysB.length) return false;
+            return keysA.every(key => keysB.includes(key) && areEqual(a[key], b[key]));
+        }
+
+        // Optimized notification system
+        function notifyListeners(key) {
+            if (!key) return;
+
+            if (batchUpdateActive) {
+                pendingNotifications.add(key);
+                return;
+            }
+
+            // Process specific listeners first
+            if (listeners.has(key)) {
+                const callbacks = [...listeners.get(key)];
+                for (const callback of callbacks) {
+                    try {
+                        callback(appState[key]);
+                    } catch (error) {
+                        console.error(`Error in listener for ${key}:`, error);
+                    }
+                }
+            }
+
+            // Then process global listeners
+            if (listeners.has('*')) {
+                const callbacks = [...listeners.get('*')];
+                for (const callback of callbacks) {
+                    try {
+                        callback(appState);
+                    } catch (error) {
+                        console.error('Error in global listener:', error);
+                    }
+                }
+            }
+        }
+
+        // Improved debounced save with better timer management
+        function debouncedSave(key) {
+            if (!storageToken || !key || !storageConfig.has(key)) return false;
+
+            // Clear existing timer if present
+            if (saveTimers.has(key)) {
+                clearTimeout(saveTimers.get(key));
+            }
+
+            // Set new timer
+            const timer = setTimeout(() => {
+                saveTimers.delete(key);
+                internalSaveItem(key);
+            }, SAVE_DELAY);
+
+            saveTimers.set(key, timer);
+            return true;
+        }
+
+        // Core storage function with better error handling
+        function internalSaveItem(key) {
+            if (!storageToken || !key || !storageConfig.has(key)) {
+                console.log(`Storage skipped: "${key}": Invalid parameters`);
+                return false;
+            }
+
+            try {
+                const value = appState[key];
+                if (value === undefined) {
+                    console.log(`Storage skipped: "${key}": Value is undefined`);
+                    return true;
+                }
+
+                const keyConfig = storageConfig.get(key);
+                const dataToStore = keyConfig.compress ? compressData(value) : JSON.stringify(value);
+
+                if (dataToStore === null) {
+                    console.error(`Storage failed: "${key}": Compression error`);
+                    return false;
+                }
+
+                const storageKey = getStorageKey(key);
+                if (!storageKey) return false;
+
+                // Handle batch updates
+                if (batchUpdateActive) {
+                    pendingChanges.set(key, { storageKey, data: dataToStore });
+                } else {
+                    try {
+                        localStorage.setItem(storageKey, dataToStore);
+                    } catch (e) {
+                        // Handle quota errors
+                        if (e.name === 'QuotaExceededError') {
+                            logError('quota-exceeded', e, { key, size: dataToStore.length });
+                            return false;
+                        }
+                        throw e;
+                    }
+                }
+
+                return true;
+            } catch (error) {
+                logError('save', error, { key });
+                return false;
+            }
+        }
+
+        // Process all queued changes with improved error handling
+        function processChanges() {
+            // First, notify all pending listeners
+            try {
+                pendingNotifications.forEach(key => notifyListeners(key));
+                pendingNotifications.clear();
+            } catch (e) {
+                console.error('Error processing notification queue:', e);
+            }
+
+            // Then, process all pending localStorage writes
+            if (storageToken) {
+                let failures = 0;
+                pendingChanges.forEach((value, key) => {
+                    try {
+                        localStorage.setItem(value.storageKey, value.data);
+                    } catch (e) {
+                        failures++;
+                        if (e.name === 'QuotaExceededError') {
+                            logError('batch-quota-exceeded', e, { key });
+                        } else {
+                            logError('batch-save', e, { key });
+                        }
+                    }
+                });
+
+                pendingChanges.clear();
+
+                if (failures > 0) {
+                    console.error(`Failed to save ${failures} items during batch update`);
+                }
+            }
+        }
+
+        // Check storage health and quotas
+        function checkStorageQuota() {
+            try {
+                let totalSize = 0;
+                let prefixSize = 0;
+
+                for (const key in localStorage) {
+                    const size = localStorage[key].length;
+                    totalSize += size;
+
+                    if (key.startsWith(PREFIX)) {
+                        prefixSize += size;
+                    }
+                }
+
+                // Most browsers have ~5MB localStorage limit
+                const estimatedLimit = 5 * 1024 * 1024;
+                const usage = {
+                    total: {
+                        bytes: totalSize,
+                        percent: (totalSize / estimatedLimit) * 100
+                    },
+                    app: {
+                        bytes: prefixSize,
+                        percent: (prefixSize / estimatedLimit) * 100
+                    }
+                };
+
+                if (usage.total.percent > 80) {
+                    console.warn(`LocalStorage usage critical: ${usage.total.percent.toFixed(1)}%`);
+                }
+
+                return usage;
+            } catch (e) {
+                console.error('Error checking storage quota:', e);
+                return null;
+            }
+        }
+
+        // Public API
         return {
+            setToken(token) {
+                if (!token) throw new Error("Invalid storage token");
+                storageToken = token;
+                keyCache.clear();
+                return this;
+            },
+
+            getToken() {
+                return storageToken;
+            },
+
+            getLastError() {
+                return storageErrors.length > 0 ? storageErrors[storageErrors.length - 1] : null;
+            },
+
+            getErrors() {
+                return [...storageErrors];
+            },
+
+            clearErrors() {
+                storageErrors = [];
+                return this;
+            },
+
             get(key) {
-                if (!key || !(key in data)) return undefined;
-                return Array.isArray(data[key]) ? [...data[key]] : data[key];
+                if (!key || !(key in appState)) return undefined;
+                // Return a deep copy for arrays to prevent accidental mutation
+                return Array.isArray(appState[key]) ? [...appState[key]] : appState[key];
             },
 
             set(key, value, options = {}) {
-                if (!key || !(key in data)) return this;
+                if (!key || !(key in appState)) return this;
 
-                const prevValue = data[key];
-                data[key] = value;
+                const prevValue = appState[key];
+                // Skip update if value is unchanged
+                if (areEqual(prevValue, value)) return this;
 
-                if (JSON.stringify(prevValue) !== JSON.stringify(value)) {
-                    cache.clear();
-                    if (!options.silent) {
-                        if (batchMode) {
-                            pendingNotifications.add(key);
-                        } else {
-                            this.notify(key);
+                appState[key] = value;
+
+                if (!options.silent) {
+                    notifyListeners(key);
+
+                    if (storageToken && !options.skipStorage) {
+                        const config = storageConfig.get(key);
+                        if (config && config.autoSave !== false) {
+                            if (!batchUpdateActive && !options.immediate) {
+                                debouncedSave(key);
+                            } else {
+                                internalSaveItem(key);
+                            }
                         }
                     }
                 }
                 return this;
             },
 
-            update(key, updater) {
-                if (!key || !(key in data) || typeof updater !== 'function') return this;
+            update(key, updater, options = {}) {
+                if (!key || !(key in appState) || typeof updater !== 'function') return this;
 
-                const prevValue = data[key];
-                data[key] = updater(prevValue);
+                const prevValue = Array.isArray(appState[key]) ?
+                    [...appState[key]] : (typeof appState[key] === 'object' && appState[key] !== null) ?
+                        { ...appState[key] } : appState[key];
 
-                if (JSON.stringify(prevValue) !== JSON.stringify(data[key])) {
-                    cache.clear();
-                    if (batchMode) {
-                        pendingNotifications.add(key);
-                    } else {
-                        this.notify(key);
+                const newValue = updater(prevValue);
+
+                if (areEqual(appState[key], newValue)) return this;
+
+                appState[key] = newValue;
+
+                if (!options.silent) {
+                    notifyListeners(key);
+
+                    if (storageToken && !options.skipStorage) {
+                        const config = storageConfig.get(key);
+                        if (config && config.autoSave !== false) {
+                            if (!batchUpdateActive && !options.immediate) {
+                                debouncedSave(key);
+                            } else {
+                                internalSaveItem(key);
+                            }
+                        }
                     }
                 }
                 return this;
@@ -1303,271 +1599,109 @@
                 };
             },
 
-            notify(key) {
-                if (!key) return;
-
-                if (listeners.has(key)) {
-                    const callbacks = [...listeners.get(key)];
-                    callbacks.forEach(callback => {
-                        try {
-                            callback(data[key]);
-                        } catch (error) {
-                            console.error(`Error in listener for ${key}:`, error);
-                        }
-                    });
-                }
-
-                if (listeners.has('*')) {
-                    const callbacks = [...listeners.get('*')];
-                    callbacks.forEach(callback => {
-                        try {
-                            callback(data);
-                        } catch (error) {
-                            console.error('Error in global listener:', error);
-                        }
-                    });
-                }
-
-                // Automatically trigger storage updates
-                if (key !== 'lastUpdate' && storageOP.getToken()) {
-                    storageOP.saveItem(key);
-                }
-            },
-
-            computeWithCache(key, computeFn) {
-                if (!key || typeof computeFn !== 'function') return undefined;
-
-                if (!cache.has(key)) {
-                    try {
-                        cache.set(key, computeFn(data));
-                    } catch (error) {
-                        console.error(`Error computing cached value for ${key}:`, error);
-                        return undefined;
-                    }
-                }
-                return cache.get(key);
-            },
-
-            invalidateCache() {
-                cache.clear();
-            },
-
             batchUpdate(updateFn) {
-                if (batchMode || typeof updateFn !== 'function') return;
+                if (batchUpdateActive || typeof updateFn !== 'function') return this;
 
-                batchMode = true;
+                // Cancel any pending saves
+                for (const timer of saveTimers.values()) {
+                    clearTimeout(timer);
+                }
+                saveTimers.clear();
+
+                batchUpdateActive = true;
                 pendingNotifications.clear();
+                pendingChanges.clear();
 
                 try {
                     updateFn();
                 } catch (error) {
                     console.error('Error in batch update:', error);
                 } finally {
-                    batchMode = false;
-
-                    // Process all pending notifications
-                    pendingNotifications.forEach(key => this.notify(key));
-                    pendingNotifications.clear();
-
-                    // Notify global listeners only once
-                    if (pendingNotifications.size > 0 && listeners.has('*')) {
-                        this.notify('*');
-                    }
-
-                    this.invalidateCache();
+                    batchUpdateActive = false;
+                    processChanges();
                 }
-            },
 
-            // Call this when application data should be saved
-            saveToStorage() {
-                return storageOP.saveAll();
-            },
-
-            // Call this when application data should be loaded
-            loadFromStorage() {
-                return storageOP.loadAll();
-            }
-        };
-    })();
-
-
-    const storageOP = (() => {
-        const PREFIX = "AMaxOffer";
-        const storageOpVersion = "3.0";
-        let storageToken = "";
-        let storageErrors = [];
-
-        const storageConfig = new Map([
-            ["accounts", { storageKey: "accounts", important: true, compress: true }],
-            ["offers_current", { storageKey: "offers_current", important: true, compress: true }],
-            ["offers_expired", { storageKey: "offers_expired", important: false, compress: true }],
-            ["offers_redeemed", { storageKey: "offers_redeemed", important: false, compress: true }],
-            ["benefits", { storageKey: "benefits", important: true, compress: true }],
-            ["priorityCards", { storageKey: "priorityCards", important: true, compress: false }],
-            ["excludedCards", { storageKey: "excludedCards", important: true, compress: false }],
-            ["lastUpdate", { storageKey: "lastUpdate", important: true, compress: false }]
-        ]);
-
-        function getStorageKey(key) {
-            if (!key || !storageConfig.has(key)) return null;
-            const config = storageConfig.get(key);
-            return `${PREFIX}_${config.storageKey}_${storageToken}`;
-        }
-
-        function compressData(data) {
-            try {
-                return JSON.stringify(data);
-            } catch (error) {
-                storageErrors.push(`Compression error for data: ${error.message}`);
-                console.error(`Storage compression error:`, error);
-                return null;
-            }
-        }
-
-        function decompressData(compressed) {
-            try {
-                return JSON.parse(compressed);
-            } catch (error) {
-                storageErrors.push(`Decompression error: ${error.message}`);
-                console.error(`Storage decompression error:`, error);
-                return null;
-            }
-        }
-
-        function logStorageError(operation, key, error) {
-            const errorMsg = `Storage error (${operation} - ${key}): ${error.message}`;
-            storageErrors.push(errorMsg);
-            console.error(errorMsg);
-
-            if (storageErrors.length > 20) {
-                storageErrors = storageErrors.slice(-20);
-            }
-        }
-
-        return {
-            setToken(token) {
-                if (!token) throw new Error("Invalid storage token");
-                storageToken = token;
-                console.log(`Storage token set: ${token}`);
                 return this;
             },
 
-            getToken() {
-                return storageToken;
-            },
-
-            getLastError() {
-                return storageErrors.length > 0 ? storageErrors[storageErrors.length - 1] : null;
-            },
-
-            clearErrors() {
-                storageErrors = [];
-            },
-
             saveItem(key) {
-                if (!storageToken || !key || !storageConfig.has(key)) {
-                    console.log(`StorageOP skipped:"${key}": Invalid parameters`);
-                    return false;
-                }
-
-                try {
-                    const value = glbVer.get(key);
-                    if (value === undefined) {
-                        console.log(`StorageOP skipped:"${key}": Value is undefined`);
-                        return true;
-                    }
-
-                    const keyConfig = storageConfig.get(key);
-                    const dataSize = typeof value === 'object' ?
-                        Array.isArray(value) ? value.length : Object.keys(value).length :
-                        String(value).length;
-
-                    const dataToStore = keyConfig.compress ? compressData(value) : JSON.stringify(value);
-
-                    if (dataToStore === null) {
-                        console.error(`Storage OP failed:"${key}": Compression error`);
-                        return false;
-                    }
-
-                    localStorage.setItem(getStorageKey(key), dataToStore);
-                    console.log(`StorageOP successful: "${key}" (${dataSize} items, ${Math.round(dataToStore.length / 1024)}KB)`);
-                    return true;
-                } catch (error) {
-                    logStorageError('save', key, error);
-                    return false;
-                }
+                return internalSaveItem(key);
             },
 
             saveDataChanges(changeType) {
-
                 try {
-                    let result = true;
                     switch (changeType) {
                         case 'offers_current':
-                            result = this.saveItem('offers_current');
-                            statsOP.invalidate('OFFER');
-                            renderEngine.markChanged('OFFER');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('offers_current');
+                                statsOP?.invalidate('OFFER');
+                                renderEngine?.markChanged('OFFER');
+                            });
 
                         case 'accounts':
-                            result = this.saveItem('accounts');
-                            statsOP.invalidate('MEMBER');
-                            renderEngine.markChanged('MEMBER');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('accounts');
+                                statsOP?.invalidate('MEMBER');
+                                renderEngine?.markChanged('MEMBER');
+                            });
 
                         case 'benefits':
-                            result = this.saveItem('benefits');
-                            statsOP.invalidate('BENEFIT');
-                            renderEngine.markChanged('BENEFIT');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('benefits');
+                                statsOP?.invalidate('BENEFIT');
+                                renderEngine?.markChanged('BENEFIT');
+                            });
 
                         case 'preferences':
-                            result = this.saveItem('priorityCards') &&
-                                this.saveItem('excludedCards');
-                            renderEngine.renderCurrentView();
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('priorityCards');
+                                internalSaveItem('excludedCards');
+                                renderEngine?.renderCurrentView();
+                            });
 
                         case 'enrollment':
-                            result = this.saveItem('offers_current') &&
-                                this.saveItem('accounts');
-                            statsOP.invalidate('OFFER');
-                            statsOP.invalidate('MEMBER');
-                            renderEngine.markChanged('OFFER');
-                            renderEngine.markChanged('MEMBER');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('offers_current');
+                                internalSaveItem('accounts');
+                                statsOP?.invalidate('OFFER');
+                                statsOP?.invalidate('MEMBER');
+                                renderEngine?.markChanged('OFFER');
+                                renderEngine?.markChanged('MEMBER');
+                            });
 
                         case 'history':
-                            result = this.saveItem('offers_expired') &&
-                                this.saveItem('offers_redeemed');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('offers_expired');
+                                internalSaveItem('offers_redeemed');
+                            });
 
                         case 'favorite':
-                            result = this.saveItem('offers_current');
-                            statsOP.invalidate('OFFER');
-                            break;
+                            return this.batchUpdate(() => {
+                                internalSaveItem('offers_current');
+                                statsOP?.invalidate('OFFER');
+                            });
 
                         default:
-                            result = this.saveAll();
+                            return this.saveAll();
                     }
-
-                    return result;
                 } catch (error) {
-                    logStorageError('Storage OP saveChanges', changeType, error);
+                    logError('saveChanges', error, { changeType });
                     return false;
                 }
             },
 
             loadItem(key) {
                 if (!storageToken || !key || !storageConfig.has(key)) {
-                    console.log(`Storage load skipped:"${key}": Invalid parameters`);
+                    console.log(`Load skipped: "${key}": Invalid parameters`);
                     return false;
                 }
 
                 try {
-                    const storedValue = localStorage.getItem(getStorageKey(key));
+                    const storageKey = getStorageKey(key);
+                    const storedValue = localStorage.getItem(storageKey);
 
                     if (!storedValue) {
-                        console.log(`Storage load:"${key}": No data found`);
+                        console.log(`Load: "${key}": No data found`);
                         return false;
                     }
 
@@ -1575,136 +1709,127 @@
                     const parsedValue = keyConfig.compress ? decompressData(storedValue) : JSON.parse(storedValue);
 
                     if (parsedValue !== null) {
-                        const dataSize = typeof parsedValue === 'object' ?
-                            Array.isArray(parsedValue) ? parsedValue.length : Object.keys(parsedValue).length :
-                            String(parsedValue).length;
-
-                        glbVer.set(key, parsedValue, { silent: true });
-                        console.log(`Storage load successful: "${key}" (${dataSize} items, ${Math.round(storedValue.length / 1024)}KB)`);
+                        appState[key] = parsedValue;
                         return true;
                     }
 
-                    console.error(`Storage load failed:"${key}": Parsing error`);
+                    console.error(`Load failed: "${key}": Parsing error`);
                     return false;
                 } catch (error) {
-                    logStorageError('load', key, error);
+                    logError('load', error, { key });
                     return false;
                 }
             },
 
             saveAll() {
                 if (!storageToken) {
-                    console.log(`Storage saveAll skipped: No token`);
+                    console.log(`SaveAll skipped: No token`);
                     return false;
                 }
 
-                console.log(`Saving all data to storage...`);
                 try {
-                    localStorage.setItem(getStorageKey("storageOpVersion"), storageOpVersion);
-                    let success = true;
-                    let failedKeys = [];
+                    return this.batchUpdate(() => {
+                        localStorage.setItem(getStorageKey("storageVersion"), storageVersion);
+                        let success = true;
 
-                    for (const [key, config] of storageConfig.entries()) {
-                        const itemSaved = this.saveItem(key);
-                        if (!itemSaved && config.important) {
-                            success = false;
-                            failedKeys.push(key);
+                        for (const [key, config] of storageConfig.entries()) {
+                            const itemSaved = internalSaveItem(key);
+                            if (!itemSaved && config.important) {
+                                success = false;
+                            }
                         }
-                    }
 
-                    if (!success) {
-                        console.warn("Failed to save important keys:", failedKeys);
-                    }
-
-                    console.log(`Save all operation completed: ${success ? 'Success' : 'Partial failure'}`);
-                    return success;
+                        return success;
+                    });
                 } catch (error) {
-                    logStorageError('saveAll', 'all', error);
+                    logError('saveAll', error);
                     return false;
                 }
             },
 
             loadAll() {
                 if (!storageToken) {
-                    console.log(`Storage loadAll skipped: No token`);
+                    console.log(`LoadAll skipped: No token`);
                     return false;
                 }
 
-                console.log(`Loading all data from storage...`);
                 try {
-                    const storedVersion = localStorage.getItem(getStorageKey("storageOpVersion"));
-                    if (storedVersion !== storageOpVersion) {
-                        console.log(`Storage version mismatch: Found ${storedVersion}, expected ${storageOpVersion}`);
+                    const storedVersion = localStorage.getItem(getStorageKey("storageVersion"));
+                    if (storedVersion !== storageVersion) {
+                        console.log(`Version mismatch: Found ${storedVersion}, expected ${storageVersion}`);
                         return false;
                     }
 
-                    // Check data freshness
-                    const lastUpdateKey = getStorageKey("lastUpdate");
-                    const lastUpdate = localStorage.getItem(lastUpdateKey);
-                    if (lastUpdate) {
-                        const updateDate = new Date(JSON.parse(lastUpdate));
-                        const now = new Date();
-                        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-                        const ageHours = Math.round((now - updateDate) / (60 * 60 * 1000));
+                    const lastUpdateStr = localStorage.getItem(getStorageKey("lastUpdate"));
+                    if (lastUpdateStr) {
+                        try {
+                            const lastUpdate = JSON.parse(lastUpdateStr);
+                            const updateDate = new Date(lastUpdate);
+                            const now = new Date();
+                            const maxAge = 24 * 60 * 60 * 1000; // 24 hours
 
-                        if ((now - updateDate) > maxAge) {
-                            console.log(`Stored data is over 24 hours old (${ageHours} hours)`);
-                            return false;
+                            if ((now - updateDate) > maxAge) {
+                                console.log(`Data over 24 hours old`);
+                                return false;
+                            }
+                        } catch (e) {
+                            console.warn("Invalid lastUpdate format", e);
                         }
-
-                        console.log(`Data age: ${ageHours} hours`);
                     }
 
                     let success = true;
-                    let failedKeys = [];
-                    let loadedItems = 0;
 
-                    glbVer.batchUpdate(() => {
+                    this.batchUpdate(() => {
                         for (const [key, config] of storageConfig.entries()) {
                             const loaded = this.loadItem(key);
-                            if (loaded) loadedItems++;
-
                             if (!loaded && config.important) {
                                 success = false;
-                                failedKeys.push(key);
                             }
                         }
                     });
 
-                    if (!success) {
-                        console.warn("Failed to load important keys:", failedKeys);
-                    }
-
-                    console.log(`Load all operation completed: ${success ? 'Success' : 'Partial failure'} (${loadedItems}/${storageConfig.size} items loaded)`);
                     return success;
                 } catch (error) {
-                    logStorageError('loadAll', 'all', error);
+                    logError('loadAll', error);
                     return false;
                 }
             },
 
             clearStorage() {
                 if (!storageToken) {
-                    console.log(`Storage clear skipped: No token`);
+                    console.log(`Clear skipped: No token`);
                     return false;
                 }
 
-                console.log(`Clearing all storage data...`);
                 try {
+                    for (const timer of saveTimers.values()) {
+                        clearTimeout(timer);
+                    }
+                    saveTimers.clear();
+
                     for (const key of storageConfig.keys()) {
                         const storageKey = getStorageKey(key);
                         if (storageKey) {
                             localStorage.removeItem(storageKey);
                         }
                     }
-                    localStorage.removeItem(getStorageKey("storageOpVersion"));
-                    console.log(`Storage cleared successfully`);
+                    localStorage.removeItem(getStorageKey("storageVersion"));
                     return true;
                 } catch (error) {
-                    logStorageError('clearStorage', 'all', error);
+                    logError('clearStorage', error);
                     return false;
                 }
-            }
+            },
+
+            resetState() {
+                return this.batchUpdate(() => {
+                    for (const key in appState) {
+                        appState[key] = Array.isArray(appState[key]) ? [] : "";
+                    }
+                });
+            },
+
+            checkStorageQuota
         };
     })();
 
@@ -1937,6 +2062,23 @@
 
         const filters = { ...defaultFilters };
 
+        const cache = {
+            memberKey: '',
+            offerKey: '',
+            memberResult: null,
+            offerResult: null
+        };
+
+        function invalidateCache() {
+            cache.memberKey = '';
+            cache.offerKey = '';
+            cache.memberResult = null;
+            cache.offerResult = null;
+        }
+
+        function getFilterCacheKey() {
+            return JSON.stringify(filters);
+        }
 
         return {
             getFilters() {
@@ -1944,42 +2086,48 @@
             },
 
             setFilter(key, value) {
-                if (key in filters) {
+                if (key in filters && filters[key] !== value) {
                     filters[key] = value;
-
+                    invalidateCache();
                 }
                 return this;
             },
 
             setFilters(updates) {
-                Object.assign(filters, updates);
-                const affectsMembers = Object.keys(updates).some(k =>
-                    k.startsWith('member') || k === 'customFilter'
-                );
-                const affectsOffers = Object.keys(updates).some(k =>
-                    !k.startsWith('member') || k === 'customFilter'
+                const hasChanges = Object.entries(updates).some(([k, v]) =>
+                    k in filters && filters[k] !== v
                 );
 
+                if (hasChanges) {
+                    Object.assign(filters, updates);
+                    invalidateCache();
+                }
                 return this;
             },
 
             resetFilters(specificFilters = null) {
+                let hasChanges = false;
+
                 if (specificFilters) {
                     specificFilters.forEach(key => {
-                        if (key in defaultFilters) {
+                        if (key in defaultFilters && filters[key] !== defaultFilters[key]) {
                             filters[key] = defaultFilters[key];
+                            hasChanges = true;
                         }
                     });
                 } else {
+                    hasChanges = !Object.entries(defaultFilters).every(([k, v]) => filters[k] === v);
                     Object.assign(filters, defaultFilters);
                 }
 
+                if (hasChanges) {
+                    invalidateCache();
+                }
                 return this;
             },
 
             applyFilters(viewName) {
                 if (!viewName) viewName = renderEngine.getCurrentView();
-
                 this.updateFilterControls(viewName);
                 renderEngine.markChanged(viewName);
             },
@@ -2003,21 +2151,42 @@
             },
 
             getFilteredMembers() {
+                const currentKey = getFilterCacheKey();
+
+                if (currentKey === cache.memberKey && cache.memberResult) {
+                    return cache.memberResult;
+                }
 
                 const accounts = glbVer.get('accounts');
+                const searchTerm = filters.memberMerchantSearch.toLowerCase();
 
                 const filtered = accounts.filter(acc => {
-                    // Status filter
-                    const statusMatch = filters.memberStatus === 'all' ||
-                        acc.account_status?.trim().toLowerCase() === filters.memberStatus.toLowerCase();
-                    if (!statusMatch) return false;
+                    if (filters.memberStatus !== 'all' &&
+                        acc.account_status?.trim().toLowerCase() !== filters.memberStatus.toLowerCase()) {
+                        return false;
+                    }
 
-                    // Type filter
-                    const typeMatch = filters.memberCardtype === 'all' ||
-                        acc.relationship === filters.memberCardtype;
-                    if (!typeMatch) return false;
+                    if (filters.memberCardtype !== 'all' &&
+                        acc.relationship !== filters.memberCardtype) {
+                        return false;
+                    }
 
-                    // Custom filter
+                    if (searchTerm) {
+                        if (!(acc.account_token || '').toLowerCase().includes(searchTerm) &&
+                            !(acc.embossed_name || '').toLowerCase().includes(searchTerm) &&
+                            !(acc.description || '').toLowerCase().includes(searchTerm)) {
+
+                            const offers_current = glbVer.get('offers_current');
+                            const hasMatchingOffer = offers_current.some(offer =>
+                                (offer.name || '').toLowerCase().includes(searchTerm) &&
+                                ((Array.isArray(offer.enrolledCards) && offer.enrolledCards.includes(acc.account_token)) ||
+                                    (Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(acc.account_token)))
+                            );
+
+                            if (!hasMatchingOffer) return false;
+                        }
+                    }
+
                     if (typeof filters.customFilter === 'function') {
                         return filters.customFilter(acc);
                     }
@@ -2025,12 +2194,18 @@
                     return true;
                 });
 
+                cache.memberKey = currentKey;
+                cache.memberResult = filtered;
 
                 return filtered;
             },
 
             getFilteredOffers() {
+                const currentKey = getFilterCacheKey();
 
+                if (currentKey === cache.offerKey && cache.offerResult) {
+                    return cache.offerResult;
+                }
 
                 const offers = glbVer.get('offers_current') || [];
                 if (!offers || !Array.isArray(offers)) {
@@ -2038,19 +2213,13 @@
                     return [];
                 }
 
+                const searchTerm = filters.offerMerchantSearch.toLowerCase();
+
                 const filtered = offers.filter(offer => {
                     if (!offer) return false;
 
-                    // Favorite filter
                     if (filters.offerFav && !offer.favorite) return false;
 
-                    // Search filter
-                    if (filters.offerMerchantSearch) {
-                        const term = filters.offerMerchantSearch.toLowerCase();
-                        if (!(offer.name || '').toLowerCase().includes(term)) return false;
-                    }
-
-                    // Card token filter
                     if (filters.offerCardToken) {
                         const accountToken = filters.offerCardToken;
                         const isEligible = Array.isArray(offer.eligibleCards) && offer.eligibleCards.includes(accountToken);
@@ -2058,7 +2227,6 @@
                         if (!isEligible && !isEnrolled) return false;
                     }
 
-                    // Enrollment status filter
                     if (filters.enrollmentStatus === 'fully') {
                         const eligible = offer.eligibleCards?.length || 0;
                         const enrolled = offer.enrolledCards?.length || 0;
@@ -2069,11 +2237,11 @@
                         if (eligible + enrolled === 0 || enrolled === eligible + enrolled) return false;
                     }
 
-                    // Eligibility filters
                     if (filters.eligibleOnly && (offer.eligibleCards?.length || 0) === 0) return false;
                     if (filters.enrolledOnly && (offer.enrolledCards?.length || 0) === 0) return false;
 
-                    // Custom filter
+                    if (searchTerm && !(offer.name || '').toLowerCase().includes(searchTerm)) return false;
+
                     if (typeof filters.customFilter === 'function') {
                         return filters.customFilter(offer);
                     }
@@ -2081,6 +2249,8 @@
                     return true;
                 });
 
+                cache.offerKey = currentKey;
+                cache.offerResult = filtered;
 
                 return filtered;
             },
@@ -2098,30 +2268,40 @@
         };
     })();
 
+
+
     const statsOP = (() => {
         const cache = new Map();
         let lastUpdateTime = 0;
+
+        // Track dependencies for efficient cache invalidation
+        const dependencies = {
+            'members': ['accounts'],
+            'offers': ['offers_current'],
+            'benefits': ['benefits']
+        };
+
+        // Subscribe to data changes once during initialization
+        function initializeListeners() {
+            // Create a map of which caches to invalidate when data changes
+            Object.entries(dependencies).forEach(([cacheKey, deps]) => {
+                deps.forEach(dep => {
+                    glbVer.subscribe(dep, () => invalidate(cacheKey));
+                });
+            });
+        }
 
         function calculateMembersStats() {
             const accounts = glbVer.get('accounts');
             if (!accounts || !Array.isArray(accounts)) return null;
 
-            const stats = {
-                totalCards: accounts.length,
-                activeCards: 0,
-                basicCards: 0,
-                totalBalance: 0,
-                totalPending: 0,
-                totalRemaining: 0
-            };
-
-            for (const acc of accounts) {
+            return accounts.reduce((stats, acc) => {
                 // Count active cards
                 if (acc.account_status?.trim().toLowerCase() === "active") {
                     stats.activeCards++;
                 }
 
-                // Count basic cards
+                // Count basic cards and financial data
                 if (acc.relationship === "BASIC") {
                     stats.basicCards++;
 
@@ -2132,9 +2312,16 @@
                         stats.totalRemaining += parseFloat(acc.financialData.remaining_statement_balance_amount || 0);
                     }
                 }
-            }
 
-            return stats;
+                return stats;
+            }, {
+                totalCards: accounts.length,
+                activeCards: 0,
+                basicCards: 0,
+                totalBalance: 0,
+                totalPending: 0,
+                totalRemaining: 0
+            });
         }
 
         function calculateOffersStats() {
@@ -2145,17 +2332,8 @@
             const twoWeeksFromNow = new Date(now);
             twoWeeksFromNow.setDate(now.getDate() + 14);
 
-            const stats = {
-                totalOffers: offers.length,
-                favoriteOffers: 0,
-                expiringSoon: 0,
-                distinctNotFullyEnrolled: 0,
-                totalEligible: 0,
-                totalEnrolled: 0
-            };
-
-            for (const offer of offers) {
-                // Count favorite offers
+            return offers.reduce((stats, offer) => {
+                // Count favorites
                 if (offer.favorite) {
                     stats.favoriteOffers++;
                 }
@@ -2179,42 +2357,21 @@
                 if (eligibleCount > 0) {
                     stats.distinctNotFullyEnrolled++;
                 }
-            }
 
-            return stats;
+                return stats;
+            }, {
+                totalOffers: offers.length,
+                favoriteOffers: 0,
+                expiringSoon: 0,
+                distinctNotFullyEnrolled: 0,
+                totalEligible: 0,
+                totalEnrolled: 0
+            });
         }
 
-        function calculateBenefitsStats(benefits) {
-            const benefitsArray = benefits || glbVer.get('benefits');
-            if (!benefitsArray || !Array.isArray(benefitsArray)) return null;
-
-            const counts = {
-                total: benefitsArray.length,
-                achieved: 0,
-                inProgress: 0,
-                notStarted: 0
-            };
-
-            for (const tracker of benefitsArray) {
-                const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
-                const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
-
-                if (spentAmount >= targetAmount && targetAmount > 0) {
-                    counts.achieved++;
-                } else if (spentAmount > 0) {
-                    counts.inProgress++;
-                } else {
-                    counts.notStarted++;
-                }
-            }
-
-            return counts;
-        }
-
-        // Checks if cache should be updated
+        // Check if cache should be updated
         function shouldUpdateCache() {
             const now = Date.now();
-            // Update at most once per second unless forced
             return (now - lastUpdateTime) > 1000;
         }
 
@@ -2244,10 +2401,12 @@
             },
 
             getBenefitsStats(benefits, forceRefresh = false) {
+                // Direct calculation for provided benefits array
                 if (benefits) {
                     return calculateBenefitsStats(benefits);
                 }
 
+                // Cache-based calculation for global benefits
                 if (forceRefresh || !cache.has('benefits') || shouldUpdateCache()) {
                     const stats = calculateBenefitsStats();
                     if (stats) {
@@ -2273,7 +2432,7 @@
                 };
 
                 const cacheKey = cacheKeyMap[type] || type;
-                if (cacheKey && cache.has(cacheKey)) {
+                if (cache.has(cacheKey)) {
                     cache.delete(cacheKey);
                 }
             },
@@ -2300,12 +2459,7 @@
                 return this.getStats();
             },
 
-            // Subscribe to data changes to auto-update stats
-            initializeListeners() {
-                glbVer.subscribe('accounts', () => this.invalidate('MEMBER'));
-                glbVer.subscribe('offers_current', () => this.invalidate('OFFER'));
-                glbVer.subscribe('benefits', () => this.invalidate('BENEFIT'));
-            }
+            initializeListeners
         };
     })();
 
@@ -3961,7 +4115,7 @@
 
                     const lastUpdate = new Date().toLocaleString();
                     glbVer.set('lastUpdate', lastUpdate);
-                    storageOP.saveItem('lastUpdate');
+                    glbVer.saveItem('lastUpdate');
 
                     uiElements.refreshStatusEl.textContent = "Refresh complete.";
                     setTimeout(() => {
@@ -4547,39 +4701,57 @@
         // Apply filters
         let filteredAccounts = filterOP.getFilteredMembers();
 
-        // Apply sorting if needed
-        const sortState = renderEngine.restoreSortState('MEMBER');
-        if (sortState && sortState.key) {
-            const direction = sortState.direction;
-            const key = sortState.key;
-            const numericColumns = ['StatementBalance', 'pending', 'remainingStaBal', 'days_past_due',
-                'eligibleOffers', 'enrolledOffers'];
-
-            filteredAccounts = [...filteredAccounts].sort((a, b) => {
-                if (key === 'cardIndex') {
-                    const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
-                    const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
-                    if (aMain === bMain) {
-                        return direction * (aSub - bSub);
-                    }
-                    return direction * (aMain - bMain);
-                }
-                else if (numericColumns.includes(key)) {
-                    const numA = util_parseNumber(a[key]);
-                    const numB = util_parseNumber(b[key]);
-                    return direction * (numA - numB);
-                }
-                else if (key === 'account_setup_date') {
-                    const dateA = a[key] ? new Date(a[key]) : new Date(0);
-                    const dateB = b[key] ? new Date(b[key]) : new Date(0);
-                    return direction * (dateA - dateB);
-                }
-                else {
-                    const valA = a[key] || "";
-                    const valB = b[key] || "";
-                    return direction * valA.toString().localeCompare(valB.toString());
-                }
+        // Apply custom sort order if available
+        if (member_sortOrder && member_sortOrder.length > 0) {
+            const accountIndexMap = new Map();
+            member_sortOrder.forEach((token, index) => {
+                accountIndexMap.set(token, index);
             });
+
+            filteredAccounts.sort((a, b) => {
+                const indexA = accountIndexMap.has(a.account_token) ? accountIndexMap.get(a.account_token) : -1;
+                const indexB = accountIndexMap.has(b.account_token) ? accountIndexMap.get(b.account_token) : -1;
+
+                if (indexA === -1 && indexB === -1) return 0;
+                if (indexA === -1) return 1;
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+            });
+        } else {
+            // Apply sorting if member_sortOrder isn't available
+            const sortState = renderEngine.restoreSortState('MEMBER');
+            if (sortState && sortState.key) {
+                const direction = sortState.direction;
+                const key = sortState.key;
+                const numericColumns = ['StatementBalance', 'pending', 'remainingStaBal', 'days_past_due',
+                    'eligibleOffers', 'enrolledOffers'];
+
+                filteredAccounts = [...filteredAccounts].sort((a, b) => {
+                    if (key === 'cardIndex') {
+                        const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
+                        const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
+                        if (aMain === bMain) {
+                            return direction * (aSub - bSub);
+                        }
+                        return direction * (aMain - bMain);
+                    }
+                    else if (numericColumns.includes(key)) {
+                        const numA = util_parseNumber(a[key]);
+                        const numB = util_parseNumber(b[key]);
+                        return direction * (numA - numB);
+                    }
+                    else if (key === 'account_setup_date') {
+                        const dateA = a[key] ? new Date(a[key]) : new Date(0);
+                        const dateB = b[key] ? new Date(b[key]) : new Date(0);
+                        return direction * (dateA - dateB);
+                    }
+                    else {
+                        const valA = a[key] || "";
+                        const valB = b[key] || "";
+                        return direction * valA.toString().localeCompare(valB.toString());
+                    }
+                });
+            }
         }
 
         // Cell renderer with organized handlers for each column type
@@ -4843,7 +5015,7 @@
                 }
 
                 // Save changes to storage
-                storageOP.saveDataChanges('preferences');
+                glbVer.saveDataChanges('preferences');
 
                 // Add visual feedback
                 toggle.classList.add('ios-sort-animation');
@@ -4869,33 +5041,33 @@
         }
 
         function updatePriorityCards(accountToken, addToList) {
-            const priorityCards = glbVer.get('priorityCards');
-            const currentIndex = priorityCards.indexOf(accountToken);
-
-            if (addToList && currentIndex === -1) {
-                priorityCards.push(accountToken);
-            } else if (!addToList && currentIndex !== -1) {
-                priorityCards.splice(currentIndex, 1);
-            }
-
-            glbVer.set('priorityCards', priorityCards);
+            glbVer.update('priorityCards', priorityCards => {
+                const currentIndex = priorityCards.indexOf(accountToken);
+                if (addToList && currentIndex === -1) {
+                    return [...priorityCards, accountToken];
+                } else if (!addToList && currentIndex !== -1) {
+                    return priorityCards.filter(token => token !== accountToken);
+                }
+                return priorityCards;
+            });
         }
 
         function updateExcludedCards(accountToken, addToList) {
-            const excludedCards = glbVer.get('excludedCards');
-            const currentIndex = excludedCards.indexOf(accountToken);
-
-            if (addToList && currentIndex === -1) {
-                // Cannot be both priority and excluded
-                if (isCardInPreferenceList(accountToken, 'priority')) {
+            glbVer.batchUpdate(() => {
+                if (addToList && isCardInPreferenceList(accountToken, 'priority')) {
                     updatePriorityCards(accountToken, false);
                 }
-                excludedCards.push(accountToken);
-            } else if (!addToList && currentIndex !== -1) {
-                excludedCards.splice(currentIndex, 1);
-            }
 
-            glbVer.set('excludedCards', excludedCards);
+                glbVer.update('excludedCards', excludedCards => {
+                    const currentIndex = excludedCards.indexOf(accountToken);
+                    if (addToList && currentIndex === -1) {
+                        return [...excludedCards, accountToken];
+                    } else if (!addToList && currentIndex !== -1) {
+                        return excludedCards.filter(token => token !== accountToken);
+                    }
+                    return excludedCards;
+                });
+            });
         }
 
         // Define sortable columns
@@ -4906,7 +5078,7 @@
         ];
 
         // Create and return the table
-        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, member_sortTable, sortableKeys);
+        return ui_renderDataTable(headers, colWidths, filteredAccounts, cellRenderer, member_sortTable_keyUpd, sortableKeys);
     }
 
     function member_getParentCardNumber(suppAccount) {
@@ -5230,7 +5402,7 @@
                             } else {
                                 handleEnrollFailure(btn, originalHTML);
                             }
-                            storageOP.saveItem('offers_current');
+                            glbVer.saveItem('offers_current');
                         } catch (error) {
                             console.error('Error enrolling offer:', error);
                             handleEnrollFailure(btn, originalHTML);
@@ -5245,14 +5417,27 @@
             btn.style.backgroundColor = 'var(--ios-green)';
             btn.style.color = 'white';
 
-            const idx = offer.eligibleCards.indexOf(accountToken);
-            if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-            if (!offer.enrolledCards.includes(accountToken)) offer.enrolledCards.push(accountToken);
+            glbVer.batchUpdate(() => {
+                glbVer.update('offers_current', offers =>
+                    offers.map(o => {
+                        if (o.offerId === offer.offerId) {
+                            const eligibleCards = o.eligibleCards.filter(token => token !== accountToken);
+                            const enrolledCards = [...o.enrolledCards];
+                            if (!enrolledCards.includes(accountToken)) {
+                                enrolledCards.push(accountToken);
+                            }
+                            return { ...o, eligibleCards, enrolledCards };
+                        }
+                        return o;
+                    })
+                );
+            });
 
             API.updateCardOfferCounts();
-            statsOP.invalidate('offers_current');
-            renderEngine.markChanged('offers_current');
+            statsOP.invalidate('OFFER');
+            renderEngine.markChanged('OFFER');
 
+            // Animate UI for better user feedback
             const offerCard = btn.closest('div');
             if (offerCard) {
                 offerCard.style.transition = 'transform 0.5s ease, opacity 0.5s ease';
@@ -5261,7 +5446,9 @@
 
                 setTimeout(() => {
                     offerCard.remove();
-                    if (offersList.childElementCount === 0) {
+                    // Check if we need to update UI
+                    const offersList = document.querySelector('.accordion-body');
+                    if (offersList && offersList.childElementCount === 0) {
                         member_popCard(accountToken, mode);
                     }
                 }, 500);
@@ -5282,11 +5469,56 @@
         }
     }
 
-    function member_sortTable(key) {
+    function member_sortTable_keyUpd(key) {
         const sortState = renderEngine.restoreSortState('MEMBER');
         const direction = sortState.key === key ? sortState.direction * -1 : 1;
 
         renderEngine.saveSortState('MEMBER', key, direction);
+
+        const accounts = glbVer.get('accounts') || [];
+
+        const sortFunctions = {
+            cardIndex: (a, b) => {
+                const [aMain, aSub] = util_parseCardIndex(a.cardIndex);
+                const [bMain, bSub] = util_parseCardIndex(b.cardIndex);
+                if (aMain === bMain) {
+                    return direction * (aSub - bSub);
+                }
+                return direction * (aMain - bMain);
+            },
+            embossed_name: (a, b) => direction * (a.embossed_name || "").localeCompare(b.embossed_name || ""),
+            relationship: (a, b) => direction * (a.relationship || "").localeCompare(b.relationship || ""),
+            account_setup_date: (a, b) => {
+                const dateA = a.account_setup_date ? new Date(a.account_setup_date) : new Date(0);
+                const dateB = b.account_setup_date ? new Date(b.account_setup_date) : new Date(0);
+                return direction * (dateA - dateB);
+            },
+            account_status: (a, b) => direction * (a.account_status || "").localeCompare(b.account_status || ""),
+            eligibleOffers: (a, b) => direction * ((a.eligibleOffers || 0) - (b.eligibleOffers || 0)),
+            enrolledOffers: (a, b) => direction * ((a.enrolledOffers || 0) - (b.enrolledOffers || 0)),
+            StatementBalance: (a, b) => {
+                const numA = parseFloat(a.financialData?.statement_balance_amount || 0);
+                const numB = parseFloat(b.financialData?.statement_balance_amount || 0);
+                return direction * (numA - numB);
+            },
+            pending: (a, b) => {
+                const numA = parseFloat(a.financialData?.debits_credits_payments_total_amount || 0);
+                const numB = parseFloat(b.financialData?.debits_credits_payments_total_amount || 0);
+                return direction * (numA - numB);
+            },
+            remainingStaBal: (a, b) => {
+                const numA = parseFloat(a.financialData?.remaining_statement_balance_amount || 0);
+                const numB = parseFloat(b.financialData?.remaining_statement_balance_amount || 0);
+                return direction * (numA - numB);
+            }
+        };
+
+        const sortedAccounts = [...accounts].sort(
+            sortFunctions[key] ||
+            ((a, b) => direction * ((a[key] || "").toString().localeCompare((b[key] || "").toString())))
+        );
+
+        member_sortOrder = sortedAccounts.map(account => account.account_token);
 
         const container = document.getElementById('members-table-container');
         if (container) {
@@ -6023,19 +6255,15 @@
     }
 
     function offer_toggleFavorite(offer) {
-        glbVer.update('offers_current', offers_current => {
-            return offers_current.map(o => {
-                if (o.offerId === offer.offerId) {
-                    return { ...o, favorite: !o.favorite };
-                }
-                return o;
-            });
-        });
+        glbVer.update('offers_current', offers =>
+            offers.map(o => o.offerId === offer.offerId ? { ...o, favorite: !o.favorite } : o)
+        );
 
         const updatedOffer = glbVer.get('offers_current').find(o => o.offerId === offer.offerId);
         const isFavorite = updatedOffer ? updatedOffer.favorite : !offer.favorite;
 
         statsOP.invalidate('OFFER');
+        glbVer.saveItem('offers_current');
 
         const event = window.event;
         if (event && event.target) {
@@ -6050,7 +6278,6 @@
         }
 
         const stats = statsOP.getOffersStats();
-
         const favoritesStatItem = document.querySelector('[data-stat-type="favorites"]');
         if (favoritesStatItem) {
             const countElement = favoritesStatItem.querySelector('[data-stat-value="true"]');
@@ -6070,8 +6297,9 @@
         const sortState = renderEngine.restoreSortState('OFFER');
         let direction = sortState.key === key ? sortState.direction * -1 : 1;
 
-        if ((key === "favorite" || key === "eligibleCards" || key === "enrolledCards") &&
-            sortState.key !== key) {
+        // Need to be reivse as defalut
+        if ((key === "eligibleCards" || key === "enrolledCards"
+            || "threshold" || "reward" || "percentage") && sortState.key !== key) {
             direction = -1;
         }
 
@@ -6428,8 +6656,8 @@
                     if (!offer.enrolledCards.includes(token)) offer.enrolledCards.push(token);
 
                     API.updateCardOfferCounts();
-                    storageOP.saveItem('offers_current');
-                    storageOP.saveItem('accounts');
+                    glbVer.saveItem('offers_current');
+                    glbVer.saveItem('accounts');
                     statsOP.invalidate('OFFER');
                     renderEngine.markChanged('OFFER');
 
@@ -6503,30 +6731,6 @@
             }, 2000);
         }
 
-        function updateOfferEnrollmentStatus(offer, token, isEnrollment) {
-            if (isEnrollment) {
-                const idx = offer.eligibleCards.indexOf(token);
-                if (idx !== -1) offer.eligibleCards.splice(idx, 1);
-                if (!offer.enrolledCards.includes(token)) {
-                    offer.enrolledCards.push(token);
-                }
-            } else {
-                const idx = offer.enrolledCards.indexOf(token);
-                if (idx !== -1) offer.enrolledCards.splice(idx, 1);
-            }
-
-            glbVer.update('offers_current', offers_current => {
-                return offers_current.map(o => o.offerId === offer.offerId ?
-                    {
-                        ...o,
-                        eligibleCards: [...offer.eligibleCards],
-                        enrolledCards: [...offer.enrolledCards]
-                    } : o);
-            });
-
-            API.updateCardOfferCounts();
-        }
-
         function populateDetailsTab(container, offer) {
             if (!offer.long_description && !offer.terms) {
                 container.appendChild(ui_createBtn({
@@ -6550,7 +6754,7 @@
                                 if (details && (details.terms || details.long_description)) {
                                     offer.terms = details.terms;
                                     offer.long_description = details.long_description;
-                                    storageOP.saveItem('offers_current');
+                                    glbVer.saveItem('offers_current');
 
                                     populateDetailsTab(container, offer);
                                     populateTermsTab(tabContents.terms, offer);
@@ -6701,25 +6905,20 @@
     }
 
     function benefit_processAndGroup(benefits) {
-        // Calculate status counts once and efficiently
-        const statusCounts = {
-            total: benefits.length || 0,
-            achieved: 0,
-            inProgress: 0,
-            notStarted: 0
-        };
-
-        // Pre-fetch accounts to avoid repeated lookups
+        // Pre-fetch accounts once for the entire operation
         const accountsMap = new Map();
-        glbVer.get('accounts').forEach(acc => {
+        const accounts = glbVer.get('accounts');
+        accounts.forEach(acc => {
             accountsMap.set(acc.account_token, acc);
         });
 
-        // Group benefits with enhanced status tracking
+        const statusCounts = { total: benefits.length, achieved: 0, inProgress: 0, notStarted: 0 };
+
+        // Process benefits in a single pass
         const groupedBenefits = benefits.reduce((grouped, tracker) => {
             const key = tracker.benefitId;
 
-            // Determine status efficiently
+            // Determine status once
             const spentAmount = parseFloat(tracker.tracker?.spentAmount) || 0;
             const targetAmount = parseFloat(tracker.tracker?.targetAmount) || 0;
 
@@ -6734,7 +6933,7 @@
                 statusCounts.notStarted++;
             }
 
-            // Link card info if missing
+            // Link card info efficiently
             if (!tracker.cardEnding && tracker.accountToken) {
                 const account = accountsMap.get(tracker.accountToken);
                 if (account) {
@@ -6744,7 +6943,7 @@
                 }
             }
 
-            // Add to grouped collection
+            // Group by benefit ID
             grouped[key] = grouped[key] || [];
             grouped[key].push(tracker);
 
@@ -6753,11 +6952,7 @@
 
         const sortedBenefitGroups = benefit_sortBenefits(groupedBenefits);
 
-        return {
-            groupedBenefits,
-            sortedBenefitGroups,
-            statusCounts
-        };
+        return { groupedBenefits, sortedBenefitGroups, statusCounts };
     }
 
     function benefit_sortBenefits(groupedBenefits) {
@@ -7953,33 +8148,28 @@
     async function initialize() {
         try {
             const authStatus = await auth_init();
-            if (!authStatus) {
-                return 0;
-            }
+            if (!authStatus) return 0;
 
             const uiElements = ui_createMain();
             renderEngine.initialize(uiElements.content);
 
-            const kickoffStatus = util_antiKickOff.initialize(90000, true);
-            if (!kickoffStatus) {
-                console.warn("Anti-kickoff initialization failed");
-            }
-
+            util_antiKickOff.initialize(90000, true);
             statsOP.initializeListeners();
-            uiElements.refreshStatusEl.textContent = "Loading accounts...";
 
+            uiElements.refreshStatusEl.textContent = "Loading accounts...";
             const accounts = await API.fetchAccounts(true);
+
             if (!accounts || accounts.length === 0) {
                 throw new Error("No accounts found");
             }
 
             uiElements.refreshStatusEl.textContent = "Loading saved data...";
-            storageOP.setToken(accounts[0].account_token);
-            const loadedFromStorage = storageOP.loadAll();
+
+            glbVer.setToken(accounts[0].account_token);
+            const loadedFromStorage = glbVer.loadAll();
 
             if (!loadedFromStorage) {
                 uiElements.refreshStatusEl.textContent = "Refreshing data...";
-
                 const refreshResult = await API.refreshAllData(progress => {
                     uiElements.refreshStatusEl.textContent = `Refreshing ${progress.type}: ${progress.percent}%`;
                 });
@@ -8002,6 +8192,7 @@
             util_antiKickOff.forceExtend();
 
             offer_sortTable_keyUpd('favorite');
+            member_sortTable_keyUpd('cardIndex');
 
             return true;
         } catch (error) {

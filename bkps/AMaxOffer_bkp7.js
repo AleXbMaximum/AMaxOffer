@@ -1464,16 +1464,7 @@
             }
         }
 
-        function createLoader() {
-            const loader = document.createElement('div');
-            loader.style.cssText = 'display:flex; justify-content:center; align-items:center; height:200px;';
 
-            const spinner = document.createElement('div');
-            spinner.style.cssText = 'width:40px; height:40px; border:3px solid rgba(0,122,255,0.2); border-top:3px solid var(--ios-blue); border-radius:50%; animation:spin 1s linear infinite;';
-
-            loader.appendChild(spinner);
-            return loader;
-        }
 
         function createErrorView(error) {
             const errorDiv = document.createElement('div');
