@@ -1,21 +1,37 @@
 {
-  "versions": {
-    "4.0.2": {
-      "expiry": "2025-12-31T23:59:59Z",
-      "description": "Enhanced UI and stability updates"
+    "versions": {
+        "4.0.2": {
+            "expiry": "2025-08-31T23:59:59Z",
+            "description": "Enhanced UI and stability updates"
+        },
+        "4.0.3": {
+            "expiry": "2025-09-30T23:59:59Z",
+            "description": "New features and security enhancements"
+        },
+        "4.1.0": {
+            "expiry": "2025-09-31T23:59:59Z",
+            "description": "Fix bug: 429 too many requests"
+        },
+        "4.2.0": {
+            "expiry": "2025-09-30T23:59:59Z",
+            "description": "Bug fixes and performance improvements"
+        },
+        "4.3.0": {
+            "expiry": "2025-10-30T23:59:59Z",
+            "description": "UI and logic improvements\n• Loading performance enhancements\n• Optional batch request handling update available—enable if needed.\n• pop notification UI test5"
+        },
+        "4.3.1": {
+            "expiry": "2025-10-31T23:59:59Z",
+            "description": "UI and logic improvements\n• Loading performance enhancements\n• Optional batch request handling update available—enable if needed."
+        },
+        "4.3.2": {
+            "expiry": "2025-11-05T23:59:59Z",
+            "description": "UI and logic improvements\n• Loading performance enhancements\n• Optional batch request handling update available—enable if needed."
+        },
+        "4.3.3": {
+            "expiry": "2025-11-30T23:59:59Z",
+            "description": "UI and logic improvements\n• Loading performance enhancements\n• Optional batch request handling update available—enable if needed."
+        }
     },
-    "4.0.3": {
-      "expiry": "2025-10-31T23:59:59Z",
-      "description": "New features and security enhancements"
-    },
-    "4.1.0": {
-      "expiry": "2025-10-31T23:59:59Z",
-      "description": "Fix bug: 429 too many requests"
-    },
-    "4.2.0": {
-      "expiry": "2025-10-30T23:59:59Z",
-      "description": "Bug fixes and performance improvements"
-    }
-  },
-  "default_expiry": "2025-10-30T23:59:59Z"
+    "default_expiry": "2025-10-01T23:59:59Z"
 }
